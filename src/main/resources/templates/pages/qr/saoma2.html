@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>扫描二维码</title>
+    <script type="text/javascript" src="/js/http_unpkg.com_html5-qrcode.js" charset="utf-8"></script>
+    <script type="text/javascript" src="/js/jquery-2.1.0.js" charset="utf-8"></script>
+    <script type="text/javascript" src="/js/jquery.qrcode.js" charset="utf-8"></script>
+</head>
+<body>
+
+<h2>生成二维码</h2>
+<div id="qrcode"></div>
+<button onclick="generateQRCode()">生成二维码</button>
+
+<h2>扫描二维码</h2>
+<div id="qr-reader" style="width:500px"></div>
+<div id="qr-reader-results"></div>
+
+<script>
+    function generateQRCode() {
+        // 清除之前的二维码
+        document.getElementById("qrcode").innerHTML = "";
+
+        // 发起 AJAX 请求以获取所有数据
+        fetch('/bearings/all')
+            .then(response => response.json())
+            .then(dataArray => {
+                dataArray.forEach(data => {
+                    var qrData = JSON.stringify(data);
+                    try {
+                        // 为二维码创建一个容器
+                        var qrContainer = $('<div></div>').css({
+                            margin: '10px', // 添加外边距
+                        });
+
+                        // 在容器中生成二维码
+                        qrContainer.qrcode({
+                            text: qrData,
+                            render: 'canvas',
+                            width: 150,
+                            height: 150,
+                            quietZone: 10
+                        });
+
+                        // 将容器添加到页面
+                        $('#qrcode').append(qrContainer);
+                    } catch(e) {
+                        console.error('生成二维码时发生错误：', e);
+                    }
+                });
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
+    var currentOperation = null;
+    // 扫描二维码的功能
+    var resultContainer = document.getElementById('qr-reader-results');
+    var lastResult, countResults = 0;
+    function onScanSuccess(decodedText, decodedResult) {
+        try {
+            // 假设扫描到的是Base64编码的数据
+            var base64DecodedData = atob(decodedText); // 解码Base64
+            var decodedData = decodeURIComponent(escape(base64DecodedData)); // 解码为UTF-8字符串
+            // 尝试解析为JSON
+            var jsonData = JSON.parse(decodedData);
+            // 如果是JSON，展示格式化后的字符串
+            displayScanResult(jsonData);
+        } catch (e) {
+            // 如果不是Base64或JSON，直接展示扫描结果
+            displayScanResult(decodedText);
+        }
+    }
+
+    function displayScanResult(result) {
+        ++countResults;
+
+        // 确保result是一个对象
+        var parsedResult = (typeof result === 'string') ? JSON.parse(result) : result;
+
+        // 提取所需的属性
+        var boxNumber = parsedResult.boxNumber || '未知';
+        var productId = parsedResult.productId || '未知';
+        var quantity = parsedResult.quantity || 0;
+
+        // 构建HTML
+        var resultHtml = `<div>扫描结果 [${countResults}]: ${JSON.stringify(parsedResult)}`;
+        resultHtml += `<button onclick='stockIn("${boxNumber}", "${productId}", ${quantity})'>入库</button>`;
+        resultHtml += `<button onclick='stockOut("${boxNumber}", "${productId}", ${quantity})'>出库</button></div>`;
+
+        resultContainer.innerHTML = resultHtml + resultContainer.innerHTML;
+    }
+
+
+    function stockIn(boxNumber, productId, quantity) {
+        // 发送入库请求到后端
+        var inventoryDto = { boxNumber: boxNumber, productId: productId, quantityInStock: quantity };
+        fetch('/bearingInventory/stockIn', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(inventoryDto),
+        }).then(response => {
+            console.log('入库成功');
+        }).catch(error => {
+            console.error('入库失败:', error);
+        });
+    }
+
+    function stockOut(boxNumber, productId, quantity) {
+        // 发送出库请求到后端
+        var inventoryDto = { boxNumber: boxNumber, productId: productId, quantityInStock: quantity };
+        fetch('/bearingInventory/stockOut', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(inventoryDto),
+        }).then(response => {
+            console.log('出库成功');
+        }).catch(error => {
+            console.error('出库失败:', error);
+        });
+    }
+
+
+    var html5QrcodeScanner = new Html5QrcodeScanner(
+        "qr-reader", { fps: 60, qrbox: 250 });
+    html5QrcodeScanner.render(onScanSuccess);
+</script>
+
+</body>
+</html>

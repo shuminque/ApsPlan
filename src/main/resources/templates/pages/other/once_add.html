@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <link rel="stylesheet" href="/static/css/public.css" media="all">
+    <title>OnceFill Records</title>
+</head>
+<body>
+
+<div class="layui-container">
+    <h2>添加一次性部品</h2>
+    <table class="layui-table" id="onceFillTable">
+        <thead>
+        <tr>
+            <th>品名</th>
+            <th>型号</th>
+            <th>分类</th>
+            <th>单价</th>
+            <th>数量</th>
+<!--            <th>总价</th>-->
+            <th>领用部门</th>
+            <th>日期</th>
+            <th>备注</th>
+            <th>操作</th>
+        </tr>
+        </thead>
+        <tbody>
+        <!-- 初始的一行数据输入 -->
+        <tr data-dropdown-id="1">
+            <td><input type="text" class="layui-input" name="name"></td>
+            <td><input type="text" class="layui-input" name="model"></td>
+            <td>
+                <div class="layui-input-inline" style="width: 100%">
+                    <select lay-search="" name="typeId" class="layui-input"> <!-- 添加 layui-input 类到 select 元素上 -->
+                        <option value=""></option>
+                        <option th:each="type : ${materialTypes}" th:value="${type.id}" th:text="${type.id}+' '+${type.tname}"></option>
+                    </select>
+                </div>
+            </td>
+            <td><input type="text" class="layui-input" name="unitPrice"></td>
+            <td><input type="text" class="layui-input" name="quantity"></td>
+            <td>
+                <button name="applyRemark" class="layui-input custom-input" id="ID-dropdown-demo-complex-1"></button>
+                <input type="hidden" name="applyRemark" id="applyRemarkInput-1" value="">
+            </td>
+            <td><input type="text" class="layui-input storageDate" name="time"></td>
+            <td><input type="text" class="layui-input" name="introduce"></td>
+            <td><button class="layui-btn layui-btn-xs layui-btn-danger delete-row">删除</button></td>
+        </tr>
+        <!-- 服务端渲染的隐藏行 -->
+        <tr id="templateRow" style="display: none;">
+            <td><input type="text" class="layui-input" name="name"></td>
+            <td><input type="text" class="layui-input" name="model"></td>
+            <td>
+                <div class="layui-input-inline" style="width: 100%;">
+                    <select lay-search="" name="typeId" class="layui-input">
+                        <option value=""></option>
+                        <option th:each="type : ${materialTypes}" th:value="${type.id}" th:text="${type.id}+' '+${type.tname}"></option>
+                    </select>
+                </div>
+            </td>
+            <td><input type="text" class="layui-input" name="unitPrice"></td>
+            <td><input type="text" class="layui-input" name="quantity"></td>
+            <td>
+                <button name="applyRemark" class="layui-input custom-input" id="ID-dropdown-demo-complex-template"></button>
+                <input type="hidden" name="applyRemark" id="applyRemarkInput-template" value="">
+            </td>
+            <td><input type="text" class="layui-input storageDate" name="time"></td>
+            <td><input type="text" class="layui-input" name="introduce"></td>
+            <td><button class="layui-btn layui-btn-xs layui-btn-danger delete-row">删除</button></td>
+        </tr>
+        </tbody>
+    </table>
+
+    <button class="layui-btn" id="addRow">添加条目</button>
+    <button class="layui-btn" id="submitAll">提交所有</button>
+</div>
+
+<script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+<script type="text/javascript" src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js" charset="utf-8"></script>
+<script>
+
+    let dropdownCount = 2;
+    let dropDataSAB = [];
+    let dropDataZAB = [];
+    layui.use(['form', 'layer', 'table', 'laydate','upload','jquery'], function() {
+        var form = layui.form;
+        var layer = layui.layer;
+        var laydate = layui.laydate;
+        var $ = layui.jquery;
+        var dropdown = layui.dropdown;
+        var upload = layui.upload;
+
+        function formatData(apiData) {
+            let formattedData = apiData.map(item => {
+                let formattedItem = { title: item.title };
+                if (item.children && item.children.length > 0) {
+                    formattedItem.child = formatData(item.children); // 递归处理子项目
+                }
+                return formattedItem;
+            });
+            return formattedData;
+        }
+        function setParentForChild(data) {
+            for (let i = 0; i < data.length; i++) {
+                if (data[i].child) {
+                    for (let j = 0; j < data[i].child.length; j++) {
+                        data[i].child[j].parent = data[i];
+                    }
+                    setParentForChild(data[i].child);
+                }
+            }
+        }
+        var userDepositoryId;
+        function loadDepositoryDataForElem(elemSelector, dropdownData) {
+            // 使用存储的 userDepositoryId 而不是重新获取
+            setParentForChild(dropdownData);
+            dropdown.render({
+                elem: elemSelector,
+                data: dropdownData,
+                click: function (item) {
+                    let path = item.title;
+                    let currentItem = item;
+                    while (currentItem.parent) {
+                        path = currentItem.parent.title + "-" + path;
+                        currentItem = currentItem.parent;
+                    }
+                    $(elemSelector).text(path);
+                    const remarkInputSelector = elemSelector.replace(/ID-dropdown-demo-complex(-\d+)?$/, "applyRemarkInput$1");
+                    $(remarkInputSelector).val(path);
+                }
+            });
+        }
+        $(document).ready(function() {
+            $.ajax({
+                url: '/get_user_depository',
+                type: 'GET',
+                dataType: 'json',
+                success: function(data) {
+                    userDepositoryId = data.depositoryId;
+
+                    function loadCategoryData(category, callback) {
+                        $.get('/api/categories/' + category, function(response) {
+                            if (response.code === 0) {
+                                callback(formatData(response.data));
+                            } else {
+                                layer.msg(`无法加载${category.toUpperCase()}的分类数据`);
+                            }
+                        }).fail(function() {
+                            layer.msg(`无法加载${category.toUpperCase()}的分类数据`);
+                        });
+                    }
+
+                    if (userDepositoryId === 1) {
+                        loadCategoryData('sab', function(data) {
+                            dropDataSAB = data;
+                            loadDepositoryDataForElem('#ID-dropdown-demo-complex-1', dropDataSAB);
+                        });
+                    } else {
+                        loadCategoryData('zab', function(data) {
+                            dropDataZAB = data;
+                            loadDepositoryDataForElem('#ID-dropdown-demo-complex-1', dropDataZAB);
+                        });
+                    }
+                },
+                error: function() {
+                    layer.msg('无法获取用户的厂区信息');
+                }
+            });
+        });
+
+        $('#addRow').on('click', function() {
+            dropdownCount++;
+            var newRow = $('#templateRow').clone().removeAttr('id').show().appendTo('#onceFillTable tbody');
+            newRow.attr('data-dropdown-id', dropdownCount);
+            newRow.find('#ID-dropdown-demo-complex-template').attr('id', 'ID-dropdown-demo-complex-' + dropdownCount);
+            newRow.find('#applyRemarkInput-template').attr('id', 'applyRemarkInput-' + dropdownCount);
+
+            laydate.render({
+                elem: newRow.find('.storageDate')[0]
+            });
+
+            var dropdownData = userDepositoryId === 1 ? dropDataSAB : dropDataZAB;
+            loadDepositoryDataForElem(`#ID-dropdown-demo-complex-${dropdownCount}`, dropdownData);
+        });
+
+        // 初始化日期选择器
+        laydate.render({
+            elem: '.storageDate',
+        });
+
+        // 删除条目
+        $('#onceFillTable').on('click', '.delete-row', function() {
+            $(this).closest('tr').remove();
+        });
+
+
+        // 提交所有数据
+        $('#submitAll').on('click', function() {
+            var isAllFilled = true;
+            var errorMessage = "请输入以下字段: \n";
+            $('#onceFillTable tbody tr:visible').each(function() {
+                // 检查类型为 text 的输入字段
+                $(this).find('input[type="text"]').each(function() {
+                    var inputName = $(this).attr('name');
+                    // 如果 inputName 是 "model"，跳过检查
+                    if(inputName === "model" || inputName ==="introduce") {
+                        return true; // 继续下一个迭代
+                    }
+                    if ($(this).val().trim() === "") {
+                        isAllFilled = false;
+                        errorMessage += inputName + "\n";
+                    }
+                });
+                // 检查 select 字段
+                $(this).find('select').each(function() {
+                    var inputName = $(this).attr('name');
+
+                    if ($(this).val().trim() === "") {
+                        isAllFilled = false;
+                        errorMessage += inputName + "\n";
+                    }
+                });
+                // 检查领用部门的隐藏输入字段
+                var applyRemarkInput = $(this).find('input[name="applyRemark"]');
+                if (applyRemarkInput.val().trim() === "") {
+                    isAllFilled = false;
+                    errorMessage += "领用部门\n";
+                }
+            });
+
+            if (!isAllFilled) {
+                layer.msg(errorMessage); // 如果有未填写的字段，显示错误消息
+                return; // 并且返回，不进行后续的提交操作
+            }
+            var allData = [];
+            $('[id^="applyRemarkInput"]').each(function() {
+                console.log($(this).attr('id') + ": " + $(this).val());
+            });
+            // 收集所有行数据
+            $('#onceFillTable tbody tr').each(function() {
+                var currentDropdownCount = $(this).data('dropdown-id');
+                var name = ($(this).find('input[name="name"]').val() || "").trim();
+                var model = ($(this).find('input[name="model"]').val() || "").trim();
+                var typeId = ($(this).find('select[name="typeId"]').val() || "").trim();
+                var unitPrice = ($(this).find('input[name="unitPrice"]').val() || "").trim();
+                var quantity = ($(this).find('input[name="quantity"]').val() || "").trim();
+                var applyRemark = ($(this).find('#applyRemarkInput-' + currentDropdownCount).val() || "").trim();
+                var time = ($(this).find('input[name="time"]').val() || "").trim();
+                var introduce = ($(this).find('input[name="introduce"]').val() || "").trim();
+                // 检查数据是否非空
+                if(name || model || typeId || unitPrice || quantity || applyRemark || time || introduce) {
+                    var row = {
+                        name: name,
+                        model: model,
+                        typeId: typeId,
+                        unitPrice: unitPrice,
+                        quantity: quantity,
+                        applyRemark: applyRemark,
+                        time: time,
+                        introduce: introduce,
+                    };
+                    allData.push(row);
+                }
+            });
+
+
+            if (parseFloat(allData[0].unitPrice) <= 0 || parseInt(allData[0].quantity) <= 0) {
+                layer.msg('请输入正确的单价与数量');
+                return;
+            }
+            var loadingIndex = layer.load(1);
+
+            // 发送所有数据到服务器
+            fetch('/api/onceFill/add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(allData)
+            })
+                .then(response => {
+                    // 关闭加载动画
+                    layer.close(loadingIndex);
+                    if (response.ok) {
+                        layer.msg('添加成功！');
+                        // 清除所有输入框的内容
+                        $('#onceFillTable tbody tr').each(function() {
+                            $(this).find('input[type="text"], input[type="date"]').val('');
+                            $(this).find('button[name="applyRemark"]').text('');
+                            $(this).find('input[name="applyRemark"]').val('');
+                            $(this).find('select[name="typeId"]').val('');  // 清除类型ID的选择
+                        });
+                    } else {
+                        layer.msg('Error: ' + response.statusText);
+                    }
+                })
+                .catch(error => {
+                    // 关闭加载动画
+                    layer.close(loadingIndex);
+                    layer.msg('Error: ' + error.message);
+                });
+
+        });
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+@media print {
+    @page  {
+        margin: 0 0 0 0;
+    }
+    /* 隐藏页面上所有非打印内容 */
+    body * {
+        visibility: hidden;
+    }
+
+    /* 仅显示打印容器及其内部的元素 */
+    #printContainer, #printContainer * {
+        visibility: visible;
+    }
+
+    /* 设置打印容器的样式 */
+    #printContainer {
+        position: absolute;
+        margin: 0 0 0 0;
+        left: 0;
+        top: 0;
+        width: 50%;
+        max-height: 1100px; /* 根据需要调整 */
+    }
+
+    /* 设置二维码的大小和位置 */
+    #qrcode {
+        width: 200px;
+        height: 200px; /* 保持与宽度一致 */
+        margin: 0 0 0 0; /* 移除外边距 */
+        position: absolute; /* 绝对定位 */
+        left: 0px; /* 对齐到左边 */
+        top: 350px; /* 对齐到顶部 */
+    }
+    .print-info-row p:first-child {
+        /* 第一个p元素（boxText）的样式 */
+        margin-right: 50px; /* 或者适当的值 */
+        white-space: nowrap; /* 防止自动换行 */
+
+    }
+    .print-info-row p:last-child {
+        /* 第二个p元素（boxNumber）的样式 */
+        margin-left: 1px; /* 增加间距 */
+    }
+    .print-info-row p.box-text {
+        font-size: 140px; /* boxText字体大小 */
+    }
+
+    .print-info-row p.box-number {
+        font-size: 130px; /* boxNumber字体大小 */
+    }
+
+    .print-info-row  p {
+        font-weight: bold;
+        line-height: normal;
+        text-align: left; /* 新增：使得文字居中 */
+    }
+    /* 设置信息容器的样式 */
+    .info-container {
+        position: absolute; /* 绝对定位 */
+        word-wrap: break-word; /* 允许在必要时文字换行 */
+        text-align: left;
+        width: 500px; /* 限制宽度，以适应布局 */
+        left: 0px; /* 对齐页面左侧 */
+        /*padding-left: 200px;*/
+        top: 0; /* 根据需要进行调整 */
+        writing-mode: vertical-rl; /* 设置文本为竖直从右到左排列 */
+        /*transform: rotate(180deg); !* 如有必要，将文本旋转180度以获得所需的方向 *!*/
+    }
+
+    .icon-container-for-print {
+        display: block;
+    }
+}
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    padding: 2px;
+    color: #333;
+}
+
+.layui-input, .layui-btn {
+    margin-bottom: 10px;
+}
+
+#preGenerateModal ,#preGenerateModalForZero{
+    background-color: white;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    display: none; /* 初始状态为隐藏 */
+    position: fixed;
+    width: 98%; /* 宽度为视窗的 50% */
+    height: 45%; /* 高度为视窗的  */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    font-size: 25px; /* 增大字体大小 */
+    display: flex; /* 启用 flex 布局 */
+    flex-direction: column; /* 子元素垂直排列 */
+    align-items: center; /* 子元素在主轴上居中对齐 */
+    justify-content: space-around; /* 子元素之间均匀分布 */
+}
+
+#preGenerateModal p ,#preGenerateModalForZero p{
+    width: 100%; /* <p> 标签宽度占满容器 */
+    text-align: center; /* 文本居中 */
+    margin: 20px 0; /* 上下边距 */
+}
+
+#preGenerateModal button {
+    width: 45%; /* 按钮宽度为容器的 45% */
+    padding: 10px 0; /* 垂直内边距 */
+    margin: 5px 0; /* 垂直外边距，水平方向自动居中 */
+}
+#preGenerateModalForZero button {
+    width: 45%; /* 按钮宽度为容器的 45% */
+    padding: 10px 0; /* 垂直内边距 */
+    margin: 5px 0; /* 垂直外边距，水平方向自动居中 */
+}
+
+#qrcode {
+    margin-top: 1px;
+    padding: 1px;
+    background-color: white;
+    text-align: left;
+    width: 15%;
+    border: 1px solid #ddd;
+}
+button.layui-btn {
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 22px;
+    min-height: 50px;
+    min-width: 40%;
+    cursor: pointer;
+}
+#operation-result {
+    margin-top: 20px;
+}
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+}
+.info-row {
+    display: flex;
+    justify-content: space-between; /* This will space out the <p> tags evenly */
+    margin: 0 0 0 0; /* Keep existing margin */
+    flex: 1; /* Each <p> element takes up equal space */
+    padding: 0 2px; /* Keep existing padding */
+    font-size: 14px; /* Adjust the font size as needed */
+}
+button.inout {
+    background-color: #938f8f;
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 22px;
+    margin: 10px;
+    min-width: 100px;
+    min-height: 70px;
+}
+button.inout:hover {
+    background-color: #0056b3;
+}
+.layui-input {
+    padding: 12px 20px;
+    font-size: 38px;
+    border-radius: 4px;
+    border: 4px solid #ccc;
+    width: 100%;
+    min-height: 60px;
+    text-align: center;
+    box-sizing: border-box;
+    margin-bottom: 30px;
+}
+
+.button-container {
+    display: flex;
+    flex-direction: column;
+}
+
+.button-row {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 10px;
+}
+
+button.inout {
+    padding: 10px 20px;
+    margin-right: 5px;
+    flex: 1;
+    text-align: center;
+}
+
+@media only screen and (max-width: 600px) {
+    button.inout {
+        font-size: 28px;
+    }
+    .layui-input {
+        padding: 15px 20px;
+        font-size: 38px;
+    }
+    .info-row p {
+        font-size: 38px; /* Smaller font size for mobile devices */
+    }
+}
+
+#regenerateButton {
+    margin-left: 250px; /* Space from the QR code */
+    margin-bottom: -50px;
+    padding: 20px 20px;
+    background-color: #4CAF50; /* Green background */
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+}

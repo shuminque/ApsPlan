@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>every_type</title>
+    <link rel="stylesheet" href="/static/lib/layui-v2.6.3/css/layui.css" media="all">
+    <style>
+        /* 基本的表格样式 */
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 14px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px 15px; /* 增加内边距 */
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            position: sticky;
+            top: 0;
+            font-weight: bold;
+        }
+
+        /* 鼠标悬停行高亮 */
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        /* 奇数行和偶数行背景颜色 */
+        tr:nth-child(odd) {
+            background-color: #f9f9f9;
+        }
+
+        /* 表格容器样式，使其可滚动 */
+        .table-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+        }
+
+    </style>
+</head>
+<body>
+<div class="layui-container" style="margin-top: 20px;">
+    <form class="layui-form" action="/api/export/every" method="get">
+        <div class="layui-form-item">
+            <label class="layui-form-label">厂区选择</label>
+            <div class="layui-input-inline">
+                <select name="depository_id" id="depositorySelect" lay-search>
+                    <!-- 初始值，稍后会根据用户信息进行更新 -->
+                </select>
+            </div>
+            <label class="layui-form-label">开始日期</label>
+            <div class="layui-input-inline">
+                <input type="text" class="layui-input" id="startDatePicker" placeholder="选择开始日期">
+            </div>
+            <label class="layui-form-label">结束日期</label>
+            <div class="layui-input-inline">
+                <input type="text" class="layui-input" id="endDatePicker" placeholder="选择结束日期">
+            </div>
+            <div class="layui-input-inline">
+                <button type="button" class="layui-btn" onclick="loadReport()">查看</button>
+                <button type="button" class="layui-btn layui-btn-primary" onclick="exportReport()">导出</button>
+            </div>
+        </div>
+    </form>
+</div>
+<div class="table-container">
+    <table id="reportTable" border="1">
+        <!-- 表格数据由JavaScript动态生成 -->
+    </table>
+</div>
+<script src="/static/lib/layui-v2.6.3/layui.js" charset="utf-8"></script>
+<script>
+    layui.use(['form', 'laydate'], function() {
+        var form = layui.form;  // 添加这行
+        var laydate = layui.laydate;
+
+        // 初始化日期选择器
+        laydate.render({
+            elem: '#startDatePicker'
+        });
+        laydate.render({
+            elem: '#endDatePicker'
+        });
+    });
+
+    document.addEventListener("DOMContentLoaded", function() {
+        fetch('/get_user_depository')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                let depositoryId = data.depositoryId;
+                let selectElem = document.getElementById('depositorySelect');
+
+                if (depositoryId === 1) {
+                    selectElem.innerHTML = '<option value="1">SAB</option>';
+                } else if (depositoryId === 2) {
+                    selectElem.innerHTML = '<option value="2">ZAB</option>';
+                } else if (depositoryId ===0){
+                    selectElem.innerHTML = '<option value="1">SAB</option>' +
+                        '<option value="2">ZAB</option>'
+                }
+                // 如果还有其他的depository_id, 可以继续添加其他分支
+                layui.form.render('select'); // 重新渲染 select 元素
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+            });
+    });
+    function loadReport() {
+        const startDate = document.getElementById('startDatePicker').value;
+        const endDate = document.getElementById('endDatePicker').value;
+        if (!startDate || !endDate) {
+            alert("请确保选择了开始和结束日期!");
+            return;
+        }
+        const depositorySelect = document.querySelector("[name='depository_id']");
+        const depositoryId = depositorySelect.value;
+        fetch(`/api/every?depositoryId=${depositoryId}&startDate=${startDate}&endDate=${endDate}`)
+            .then(response => response.json())
+            .then(data => {
+                let table = document.getElementById('reportTable');
+                table.innerHTML = ''; // 清除旧数据
+                // 创建表头
+                let thead = document.createElement('thead');
+                let headerRow = document.createElement('tr');
+                Object.keys(data[0]).slice(1).forEach(colName => {
+                    let th = document.createElement('th');
+                    th.textContent = colName;
+                    headerRow.appendChild(th);
+                });
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+                // 创建表格主体数据
+                let tbody = document.createElement('tbody');
+                data.forEach(row => {
+                    let tr = document.createElement('tr');
+                    Object.values(row).slice(1).forEach(cellData => {
+                        let td = document.createElement('td');
+                        td.textContent = cellData;
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+                table.appendChild(tbody);
+            })
+            .catch(error => console.error('Error fetching data:', error));
+    }
+    function exportReport() {
+        const startDate = document.getElementById('startDatePicker').value;
+        const endDate = document.getElementById('endDatePicker').value;
+        if (!startDate || !endDate) {
+            alert("请确保选择了开始和结束日期!");
+            return;
+        }
+        const depositorySelect = document.querySelector("[name='depository_id']");
+        const depositoryId = depositorySelect.value;
+        window.location.href = `/api/export/every?depositoryId=${depositoryId}&startDate=${startDate}&endDate=${endDate}`;
+    }
+</script>
+</body>
+</html>

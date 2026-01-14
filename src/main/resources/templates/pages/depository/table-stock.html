@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <title>库存查询</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="/static/lib/layui-v2.6.3/css/layui.css" media="all">
+    <link rel="stylesheet" href="/static/css/public.css" media="all">
+    <link rel="stylesheet" type="text/css" href="/static/css/formSelects-v4.css"/>
+</head>
+<body>
+<div class="layuimini-container">
+    <div class="layuimini-main">
+        <fieldset class="table-search-fieldset">
+            <legend>搜索信息</legend>
+            <div style="margin: 10px 10px 10px 10px">
+                <form class="layui-form layui-form-pane" action="">
+                    <div class="layui-form-item">
+                        <div class="layui-inline">
+                            <label class="layui-form-label">厂区</label>
+                            <div class="layui-input-inline">
+                                <select name="depositoryId" >
+                                    <option value="" selected>全部</option>
+                                    <option th:each="depository,iterStat:${depositories}"
+                                            th:if="${iterStat.index > 0}"
+                                            th:value="${depository?.getId()}"
+                                            th:text="${depository?.getDname()}">外芯仓库</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="atId" autocomplete="off" class="layui-input" placeholder="搜索AT号">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="mname" autocomplete="off" class="layui-input" placeholder="搜索品名">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="model" autocomplete="off" class="layui-input" placeholder="搜索规格">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <button type="submit" class="layui-btn layui-btn-primary" lay-submit
+                                    lay-filter="data-search-btn"><i class="layui-icon"></i> 搜 索
+                            </button>
+                        </div>
+                        <div style="width: 75%">
+                            <label class="layui-form-label">分类</label>
+                            <select name="typeId" xm-select="selectId" >
+                                <option th:each="material_type : ${materialTypes}"
+                                        th:value="${material_type.id}"
+                                        th:text="${material_type.tname}" ></option>
+                            </select>
+                        </div>
+
+                    </div>
+                </form>
+            </div>
+        </fieldset>
+
+        <table class="layui-hide" id="currentTableId" lay-filter="currentTableFilter"></table>
+    </div>
+</div>
+<script type="text/javascript" src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js" charset="utf-8"></script>
+<script src="/static/lib/layui-v2.6.3/layui-by.js" charset="utf-8"></script>
+<script type="text/javascript" src="/static/js/formSelects-v4.js" charset="utf-8"></script>
+<script>
+    var data;
+    layui.use(['form', 'table'], function () {
+        var $ = layui.jquery,
+            form = layui.form,
+            table = layui.table;
+
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                let pp;
+                var userDepositoryId = data.depositoryId;
+                var authority = data.authority; // 假设authority也在返回的数据中
+                // 如果depositoryId为0，则允许访问两个厂区
+                if (userDepositoryId != null) {
+                    pp = '/material';
+                } else {
+                    pp = '/material?depositoryId=' + userDepositoryId;
+                }
+                table.render({
+                    elem: "#currentTableId",
+                    url: pp,
+                        height: "full-50", // 设置表格高度并固定表头
+                    parseData: function (res) { //res 即为原始返回的数据
+                        return {
+                            "status": res.status, //解析接口状态
+                            "message": res.statusInfo.message, //解析提示文本
+                            "count": res.count, //解析数据长度
+                            "data": res.data //解析数据列表
+                        };
+                    },
+                    request: {
+                        pageName: 'page', //页码的参数名称，默认：page
+                        limitName: 'size' //每页数据量的参数名，默认：limit
+                    },
+                    response: {
+                        statusName: 'status' //规定数据状态的字段名称，默认：code
+                        ,statusCode: 200 //规定成功的状态码，默认：0
+                        ,msgName: 'message' //规定状态信息的字段名称，默认：msg
+                        ,countName: 'count' //规定数据总数的字段名称，默认：count
+                        ,dataName: 'data' //规定数据列表的字段名称，默认：data
+                    },
+                    toolbar: ['filter', 'exports', 'print'],
+                    cols: [ [
+                        // {field: 'id', width: '6%', title: '序号'},
+                        {field: 'depositoryName', width: '3%', title: '厂区'},
+                        {field: 'atId', width: '8%', title: 'AT号'},
+                        {field: 'mname', width: '12%', title: '品名'},
+                        {field: 'model', width: '10%', title: '规格'},
+                        {field: 'typeName', width: '18%', title: '分类'},
+                        {field: 'picNum', width: '5%', title: '图号'},
+                        {field: 'enginName',title: '工程', width:'10%' },
+                        {field: 'stateName',title: '状态', width:'8%'},
+                        {field: 'quantity', width: '10%', title: '数量(已审核)'},
+                        {field: 'unitPrice', title: '单价', width: '8%', sort: true, templet: function(d) {
+                                return parseFloat(d.unitPrice).toFixed(2);  // 格式化为两位小数
+                            }},
+                        {field: 'price', title: '金额', width: '8%', sort: true, templet: function(d) {
+                                return parseFloat(d.price).toFixed(2);  // 格式化为两位小数
+                            }},
+                    ]],
+                    limits: [10, 54, 100, 100000],
+                    limit: 10,
+                    page: true,
+                    skin: 'line',
+                    done: function(res, curr, count) {
+                        if (userDepositoryId !==0) {
+                            // 遍历表格的每一行
+                            $(".layui-table-body tr").each(function() {
+                                // 获取当前行的depositoryName值
+                                var depositoryName = $(this).find("td[data-field='depositoryName']").text();
+                                // 当userDepositoryId为2且depositoryName为"SAB"时，隐藏该行的单价和金额列
+                                if (userDepositoryId === 2 && depositoryName === "SAB") {
+                                    $(this).find("td[data-field='unitPrice']").hide();
+                                    $(this).find("td[data-field='price']").hide();
+                                }
+                                // 当userDepositoryId为1且depositoryName为"ZAB"时，隐藏该行的单价和金额列
+                                if (userDepositoryId === 1 && depositoryName === "ZAB") {
+                                    $(this).find("td[data-field='unitPrice']").hide();
+                                    $(this).find("td[data-field='price']").hide();
+                                }
+                            });
+                        }
+                    }
+                });
+                // 监听搜索操作
+                form.on('submit(data-search-btn)', function (data) {
+                    var req={};
+                    data=data.field;
+                    if (data.mname!==''){
+                        req.mname=data.mname;
+                    }
+                    if (data.atId!==''){
+                        req.atId = data.atId;
+                    }
+                    if (data.model!==''){
+                        req.model=data.model;
+                    }
+                    if (data.depositoryId!==''){
+                        req.depositoryId=data.depositoryId;
+                    }
+                    if (data.typeId && data.typeId !== ''){
+                        req.typeId = data.typeId.split(',').map(Number);
+                    }
+                    //执行搜索重载
+                    table.reload('currentTableId', {
+                        url: pp,
+                        page: {
+                            curr: 1
+                        }
+                         , where: req
+                    }, 'data');
+                    return false;
+                });
+            },
+            error: function() {
+                // 处理错误，例如显示一个消息
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+    });
+    formSelects.render('selectId');
+</script>
+
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>工程</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="/static/lib/layui-v2.6.3/css/layui.css" media="all">
+    <link rel="stylesheet" href="/static/css/public.css" media="all">
+</head>
+<body>
+<div class="layuimini-container">
+    <div class="layuimini-main">
+        <button id="addEnginBtn" class="layui-btn">添加工程</button>
+        <table class="layui-hide" id="currentTableId" lay-filter="currentTableFilter"></table>
+
+        <div id="enginAddForm" style="display: none;">
+            <fieldset class="table-search-fieldset">
+                <div class="layui-fluid">
+                    <div class="layui-card">
+                        <div class="layui-card-body" style="padding-top: 40px;">
+                            <div>
+                                <form class="layui-form" lay-filter="form1" style="margin: 0 auto;max-width: 460px;padding-top: 100px; padding-bottom: 200px">
+                                    <div class="layui-form-item">
+                                        <label class="layui-form-label">工程编号:</label>
+                                        <div class="layui-input-block">
+                                            <input type="text" placeholder="请填写工程编号" class="layui-input" name="id"
+                                                   lay-verify="required"/>
+                                        </div>
+                                    </div>
+                                    <div class="layui-form-item">
+                                        <label class="layui-form-label">工程名称:</label>
+                                        <div class="layui-input-block">
+                                            <input type="text" placeholder="请填写工程名称" name="ename" class="layui-input"
+                                                   lay-verify="required" required>
+                                        </div>
+                                    </div>
+
+                                    <div class="layui-form-item">
+                                        <div class="layui-input-block">
+                                            <button class="layui-btn" lay-submit lay-filter="formStep">
+                                                &emsp;增加工程&emsp;
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        <hr>
+                    </div>
+                </div>
+            </fieldset>
+        </div>
+
+        <script type="text/html" id="operation-bar">
+            <!--            <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>-->
+            <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="delete">删除</a>
+        </script>
+    </div>
+</div>
+<script src="/static/lib/layui-v2.6.3/layui.js" charset="utf-8"></script>
+<script>
+    var data;
+    layui.use(['form', 'table','layer'], function () {
+        var $ = layui.jquery,
+            form = layui.form,
+            table = layui.table,
+            layer = layui.layer;
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                var userDepositoryId = data.depositoryId;
+                var authority = data.authority;
+                if (userDepositoryId === 0 || authority === '审核人') {
+                    toolbarTemplate = `
+                        <a class="layui-btn layui-btn-xs layui-btn-danger data-count-delete" lay-event="delete">删除</a>
+                    `;
+                } else {
+                    toolbarTemplate = ` `;
+                }
+                $("#operation-bar").html(toolbarTemplate);
+                table.render({
+                    elem: "#currentTableId",
+                    url: '/materialEngin',
+                    parseData: function (res) { //res 即为原始返回的数据
+                        return {
+                            "status": res.status, //解析接口状态
+                            "message": res.statusInfo.message, //解析提示文本
+                            "count": res.count, //解析数据长度
+                            "data": res.data //解析数据列表
+                        };
+                    },
+                    request: {
+                        pageName: 'page', //页码的参数名称，默认：page
+                        limitName: 'size' //每页数据量的参数名，默认：limit
+                    },
+                    response: {
+                        statusName: 'status' //规定数据状态的字段名称，默认：code
+                        ,statusCode: 200 //规定成功的状态码，默认：0
+                        ,msgName: 'message' //规定状态信息的字段名称，默认：msg
+                        ,countName: 'count' //规定数据总数的字段名称，默认：count
+                        ,dataName: 'data' //规定数据列表的字段名称，默认：data
+                    },
+                    toolbar: ['filter', 'exports', 'print'],
+                    cols: [ [
+                        {field: 'id', title: '编号'},
+                        {field: 'ename', title: '工程名称', sort: true},
+                        {title: ' ',  align: 'center', toolbar: '#operation-bar'}
+                    ]],
+                    limits: [10, 15, 20, 25, 50],
+                    limit: 10,
+                    page: true,
+                    skin: 'line'
+                });
+                $('#addEnginBtn').on('click', function() {
+                    layer.open({
+                        type: 1,  // 页面层
+                        title: '工程增加',  // 标题
+                        area: ['500px', '400px'],  // 宽高
+                        content: $('#enginAddForm'),
+                        success: function(layero, index) {
+                            // 这里可以添加一些弹出层打开后的初始化代码，如果需要的话
+                        }
+                    });
+                });
+                form.on('submit(formStep)', function (data) {
+                    $.ajax({
+                        url:"/materialEngin",
+                        type:'post',
+                        dataType:'json',
+                        contentType: "application/json;charset=utf-8",
+                        data:JSON.stringify(data.field),
+                        beforeSend:function () {
+                            this.layerIndex = layer.load(0, { shade: [0.5, '#393D49'] });
+                        },
+                        success:function(data){
+                            layer.close(this.layerIndex);
+                            if(data.status >= 300){
+                                layer.msg(data.statusInfo.message);//失败的表情
+                                return;
+                            }else{
+                                layer.msg("添加成功！", {
+                                    icon: 6,//成功的表情
+                                    time: 1000 //1秒关闭（如果不配置，默认是3秒）
+                                });
+                                table.reload('currentTableId'); // 重新加载表格
+                            }
+                        },
+                        error: function (jqXHR, textStatus, errorThrown) {
+                            layer.close(this.layerIndex);
+                            layer.msg("添加失败，请检查后重新添加！: " + textStatus, {
+                                time: 2000
+                            }); //可以根据需要更改错误消息
+                        },
+                        complete: function () {
+                            form.val("form1", {
+                                'id':"",
+                                "ename": "" // "name": "value"
+                                ,"introduce": ""
+                            })
+                        }
+                    })
+                    return false;
+                });
+                table.on('tool(currentTableFilter)', function(obj) {
+                    var data = obj.data; // 获取当前行的数据
+                    var layEvent = obj.event; // 获取当前事件名称
+
+                    if (layEvent === 'edit') {
+                        // 执行编辑操作
+                        editModel(data);
+                    } else if (layEvent === 'delete') {
+                        // 执行删除操作
+                        deleteModel(data.id);
+                    }
+                });
+                function deleteModel(id) {
+                    layer.confirm('确定要删除吗？', function(index) {
+                        $.ajax({
+                            url: "/materialEngin/" + id,
+                            type: 'DELETE',
+                            success: function(data) {
+                                layer.msg('删除成功！');
+                                table.reload('currentTableId'); // 重新加载表格
+                            },
+                            error: function() {
+                                layer.msg('删除失败！');
+                            }
+                        });
+                        layer.close(index);
+                    });
+                }
+            },
+            error: function() {
+                // 处理错误，例如显示一个消息
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+    });
+</script>
+
+</body>
+</html>

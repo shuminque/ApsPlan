@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>产量信息</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="/static/lib/layui-v2.6.3/css/layui.css" media="all">
+    <link rel="stylesheet" href="/static/css/public.css" media="all">
+</head>
+<body>
+<div class="layuimini-container">
+    <div class="layuimini-main">
+        <fieldset class="table-search-fieldset">
+            <legend>搜索信息</legend>
+            <div style="margin: 10px 10px 10px 10px">
+                <form class="layui-form layui-form-pane" action="">
+                    <div class="layui-form-item">
+                        <div class="layui-inline">
+                            <label class="layui-form-label">日期</label>
+                            <div class="layui-input-block">
+                                <input type="text" name="date" id="date1"  placeholder="请选择日期"
+                                       autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <button type="submit" class="layui-btn layui-btn-primary" lay-submit
+                                    lay-filter="data-search-btn"><i class="layui-icon"></i> 搜 索
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </fieldset>
+        <button id="addProductInfoBtn" class="layui-btn">添加产量信息</button>
+        <table class="layui-hide" id="currentTableId" lay-filter="currentTableFilter">  </table>
+        <div id="productInfoAddForm" style="display: none;">
+            <fieldset class="table-search-fieldset">
+                <div class="layui-fluid">
+                    <div class="layui-card">
+                        <div class="layui-card-body">
+                            <div>
+                                <form class="layui-form" lay-filter="form1" style="margin: 0 auto;max-width: 460px;padding-top: 20px; padding-bottom: 200px">
+                                    <div class="layui-form-item">
+                                        <label class="layui-form-label">日期:</label>
+                                        <div class="layui-input-block">
+                                            <input type="text" placeholder="请填写日期" name="date" id="date2" class="layui-input"
+                                                   lay-verify="required" required>
+                                        </div>
+                                    </div>
+                                    <div class="layui-form-item">
+                                        <label class="layui-form-label">小径产量:</label>
+                                        <div class="layui-input-block">
+                                            <input type="number" placeholder="请填写小径产量" name="smallDiameter" class="layui-input"
+                                                   lay-verify="required" required>
+                                        </div>
+                                    </div>
+                                    <div class="layui-form-item">
+                                        <label class="layui-form-label">中径产量:</label>
+                                        <div class="layui-input-block">
+                                            <input type="number" placeholder="请填写中径产量" name="mediumDiameter" class="layui-input" lay-verify="required" required>
+                                        </div>
+                                    </div>
+                                    <div class="layui-form-item">
+                                        <label class="layui-form-label">万向节产量:</label>
+                                        <div class="layui-input-block">
+                                            <input type="number" placeholder="请填写万向节产量" name="gimbal" class="layui-input" lay-verify="required" required>
+                                        </div>
+                                    </div>
+                                    <div class="layui-form-item">
+                                        <label class="layui-form-label">RAB产量:</label>
+                                        <div class="layui-input-block">
+                                            <input type="number" placeholder="请填写RAB产量" name="rab" class="layui-input" lay-verify="required" required>
+                                        </div>
+                                    </div>
+                                    <!-- 厂区ID (如果不必要，可以隐藏) -->
+                                    <div class="layui-form-item" style="" id="depositorySelectDiv">
+                                        <label class="layui-form-label">厂区</label>
+                                        <div class="layui-input-block">
+                                            <select name="depositoryId" id="depositorySelect">
+                                                <option value="" selected>请选择厂区</option>
+                                                <option value="1">SAB</option>
+                                                <option value="2">ZAB</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <!-- 根据需要继续添加其他字段 -->
+                                    <div class="layui-form-item">
+                                        <div class="layui-input-block">
+                                            <button class="layui-btn" lay-submit lay-filter="formStep">
+                                                &emsp;增加产量信息&emsp;
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        <hr>
+                    </div>
+                </div>
+            </fieldset>
+        </div>
+        <script type="text/html" id="operation-bar">
+            <!--            <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>-->
+<!--            <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="delete">删除</a>-->
+        </script>
+        <script type="text/template" id="editModelTemplate">
+            <form class="layui-form" lay-filter="editFormFilter">
+                <input type="hidden" name="id"> <!-- 新增的隐藏字段，用于存放要编辑的数据的ID -->
+                <div class="layui-form-item">
+                    <label class="layui-form-label">日期:</label>
+                    <div class="layui-input-block">
+                        <input type="text" placeholder="请填写日期" name="date" id="date3" class="layui-input" lay-verify="required" required>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">小径产量:</label>
+                    <div class="layui-input-block">
+                        <input type="number" placeholder="请填写小径产量" name="smallDiameter" class="layui-input" lay-verify="required" required>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">中径产量:</label>
+                    <div class="layui-input-block">
+                        <input type="number" placeholder="请填写中径产量" name="mediumDiameter" class="layui-input" lay-verify="required" required>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">万向节产量:</label>
+                    <div class="layui-input-block">
+                        <input type="number" placeholder="请填写万向节产量" name="gimbal" class="layui-input" lay-verify="required" required>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">RAB产量:</label>
+                    <div class="layui-input-block">
+                        <input type="number" placeholder="请填写RAB产量" name="rab" class="layui-input" lay-verify="required" required>
+                    </div>
+                </div>
+                <!-- 根据需要继续添加其他字段 -->
+                <div class="layui-form-item">
+                    <div class="layui-input-block">
+                        <button class="layui-btn" lay-submit lay-filter="editSubmitBtnFilter">
+                            &emsp;保存修改&emsp; <!-- 更改了按钮文本 -->
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </script>
+    </div>
+</div>
+<script src="/static/lib/layui-v2.6.3/layui.js" charset="utf-8"></script>
+<script>
+    var data;
+    layui.use(['form', 'table','layer','laydate'], function () {
+        var $ = layui.jquery,
+            form = layui.form,
+            table = layui.table,
+            laydate = layui.laydate,
+            layer = layui.layer;
+        laydate.render({
+            elem: '#date1',
+            type: 'month'
+        });
+
+        laydate.render({
+            elem: '#date2',
+        });
+
+        laydate.render({
+            elem: '#date3',
+        });
+
+
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                let pp;
+                var userDepositoryId = data.depositoryId;
+                var authority = data.authority;
+                if (userDepositoryId === 0 || authority === '审核人') {
+                    toolbarTemplate = `
+                        <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+                        <a class="layui-btn layui-btn-xs layui-btn-danger data-count-delete" lay-event="delete">删除</a>
+                    `;
+                } else {
+                    toolbarTemplate = ` `;
+                }
+
+                $("#operation-bar").html(toolbarTemplate);
+                if(userDepositoryId !== 0) {
+                    $('#depositorySelectDiv').hide(); // 如果用户厂区ID不为0，则隐藏选择框
+                }
+                if (userDepositoryId === 0) {
+                    pp = '/productInfo';
+                } else {
+                    pp = '/productInfo?depositoryId=' + userDepositoryId;
+                }
+                table.render({
+                    elem: "#currentTableId",
+                    url: pp,
+                    initSort: {field: 'date', type: 'desc'},
+                    parseData: function (res) {
+                        console.log(res.data);  // 打印返回的数据
+                        return {
+                            "status": res.status, //解析接口状态
+                            "message": res.statusInfo.message, //解析提示文本
+                            "count": res.count, //解析数据长度
+                            "data": res.data //解析数据列表
+                        };
+                    },
+                    response: {
+                        statusName: 'status' //规定数据状态的字段名称，默认：code
+                        ,statusCode: 200 //规定成功的状态码，默认：0
+                        ,msgName: 'message' //规定状态信息的字段名称，默认：msg
+                        ,countName: 'count' //规定数据总数的字段名称，默认：count
+                        ,dataName: 'data' //规定数据列表的字段名称，默认：data
+                    },
+                    toolbar: ['filter', 'exports', 'print'],
+                    cols: [ [
+                        {field: 'id',  title: '编号',hide:true},
+                        {field: 'date',  title: '日期', sort: true,templet: function(d) {
+                                var date = new Date(d.date);
+                                return date.getFullYear() + '-' + (date.getMonth() + 1).toString().padStart(2, '0');
+                            }},
+                        {field: 'smallDiameter',  title: '小径产量', sort: true},
+                        {field: 'mediumDiameter',  title: '中径产量', sort: true},
+                        {field: 'gimbal',  title: '万向节产量', sort: true},
+                        {field: 'rab',  title: 'RAB产量', sort: true},
+                        {field: 'depositoryId', title: '厂区', sort: true, templet: function(d) {
+                                return d.depositoryId === 1 ? 'SAB' : d.depositoryId === 2 ? 'ZAB' : '';
+                            }},
+                        {title: ' ', align: 'center', toolbar: '#operation-bar'}
+                    ]]
+                });
+                form.on('submit(data-search-btn)', function (data) {
+                    var req = {};
+                    data = data.field;
+                    if (data.date !== '') {
+                        var yearMonth = data.date.split('-');
+                        var year = parseInt(yearMonth[0], 10);
+                        var month = parseInt(yearMonth[1], 10);
+                        var startDate = new Date(year, month - 1, 1);
+                        req.startDate = startDate.toISOString().split('T')[0];
+                        var endDate = new Date(year, month, 0);
+                        req.endDate = endDate.toISOString().split('T')[0];
+                    }
+                    table.reload('currentTableId', {
+                        url: pp,
+                        page: {
+                            curr: 1
+                        },
+                        where: req
+                    }, 'data');
+
+                    return false;
+                });
+
+                $('#addProductInfoBtn').on('click', function() {
+                    layer.open({
+                        type: 1,  // 页面层
+                        title: '产量信息增加',  // 修改标题
+                        area: ['500px', '400px'],  // 宽高
+                        content: $('#productInfoAddForm'),  // 修改内容的选择器
+                        success: function(layero, index) {
+                            // 这里可以添加一些弹出层打开后的初始化代码，如果需要的话
+                        }
+                    });
+                });
+                form.on('submit(formStep)', function (data) {
+                    $.ajax({
+                        url:"/productInfo",
+                        type:'post',
+                        dataType:'json',
+                        contentType: "application/json;charset=utf-8",
+                        data:JSON.stringify(data.field),
+                        beforeSend:function () {
+                            this.layerIndex = layer.load(0, { shade: [0.5, '#393D49'] });
+                        },
+                        success:function(data){
+                            layer.close(this.layerIndex);
+                            if(data.status >= 300){
+                                layer.msg(data.statusInfo.message); // 这里已经有了一个错误提示
+                                return;
+                            }else{
+                                layer.msg("添加成功！", {
+                                    icon: 6, //成功的表情
+                                    time: 1000 //1秒关闭（如果不配置，默认是3秒）
+                                });
+                                setTimeout(function() {
+                                    table.reload('currentTableId'); // 重新加载表格
+                                    layer.closeAll(); // 关闭所有弹出层
+                                }, 1100); //稍微延迟一点，确保消息显示完全
+                            }
+                        },
+                        error: function(jqXHR, textStatus, errorThrown) {
+                            layer.close(this.layerIndex);
+                            layer.msg('错误的操作，错误信息：' + errorThrown, {
+                                icon: 5, //失败的表情
+                                time: 3000 //3秒关闭
+                            });
+                        },
+                        complete: function () {
+                            form.val("form1", {
+                                'date': "",
+                                'smallDiameter': "",
+                                'mediumDiameter': "",
+                                'gimbal': "",
+                                'rab': "",
+                                'depositoryId': ""
+                            });
+                        }
+                    })
+                    return false;
+                });
+
+                table.on('tool(currentTableFilter)', function(obj) {
+                    var data = obj.data; // 获取当前行的数据
+                    var layEvent = obj.event; // 获取当前事件名称
+
+                    if (layEvent === 'edit') {
+                        // 执行编辑操作
+                        editModel(data);
+                    } else if (layEvent === 'delete') {
+                        // 执行删除操作
+                        deleteModel(data.id);
+                    }
+                });
+                function editModel(data) {
+                    if (data.date) {
+                        var date = new Date(data.date);
+                        data.date = date.getFullYear() + '-' + (date.getMonth() + 1).toString().padStart(2, '0') + '-' + date.getDate().toString().padStart(2, '0');
+                    }
+                    var index = layer.open({
+                        type: 1, // 页面层
+                        title: '编辑产量信息',
+                        area: ['40%', '60%'], // 设置弹出层的宽高
+                        content: $('#editModelTemplate').html(), // 获取编辑模板的HTML
+                        success: function(layero, index) {
+                            // 填充数据到表单中
+                            var form = layui.form;
+                            form.val("editFormFilter", data);
+                            layui.laydate.render({
+                                elem: layero.find('input[name="date"]')[0], // 使用layero找到当前弹出层的日期输入元素
+                            });
+                            // 监听提交按钮
+                            form.on('submit(editSubmitBtnFilter)', function(formData) {
+                                console.log(formData);
+                                // 获取表单数据，发送到服务器更新
+                                $.ajax({
+                                    url: "/productInfo/" + data.id,  // 使用外部data参数
+                                    type: 'PUT',
+                                    dataType: 'json',
+                                    contentType: "application/json;charset=utf-8",
+                                    data: JSON.stringify(formData.field),
+                                    success: function(data, textStatus, xhr) {
+                                        layer.close(this.layerIndex);
+                                        if (data.status === 205) {
+                                            layer.msg("更新成功！", { icon: 6, time: 1000 });
+                                            table.reload('currentTableId'); // 重新加载表格
+                                        } else if(data.status === 409) { // 检查409状态码
+                                            layer.msg('更新失败：' + data.data, { icon: 5, time: 3000 }); // 使用data.data来获取错误消息
+                                        } else {
+                                            // 当状态码不是200和409时，显示一个通用错误消息
+                                            layer.msg('未知错误：' + xhr.status, { icon: 5, time: 3000 });
+                                        }
+                                        layer.close(index); // 关闭弹出层
+                                    },
+                                    error: function (xhr, textStatus, errorThrown) {
+                                        layer.close(this.layerIndex);
+                                        // 当请求失败时，显示一个通用错误消息
+                                        layer.msg('请求失败：' + errorThrown, { icon: 5, time: 3000 }); // 5是失败的表情
+                                    }
+                                });
+                                return false; // 阻止表单跳转
+                            });
+                        }
+                    });
+                }
+
+                function deleteModel(id) {
+                    layer.confirm('确定要删除吗？', function(index) {
+                        $.ajax({
+                            url: "/productInfo/" + id,
+                            type: 'DELETE',
+                            success: function(data) {
+                                layer.msg('删除成功！');
+                                table.reload('currentTableId'); // 重新加载表格
+                            },
+                            error: function() {
+                                layer.msg('删除失败！');
+                            }
+                        });
+                        layer.close(index);
+                    });
+                }
+            },
+            error: function() {
+                // 处理错误，例如显示一个消息
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+    });
+</script>
+</body>
+</html>

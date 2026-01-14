@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="../../static/css/index.css">
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <title>数字化分析</title>
+<!--    <script src="../../static/js/jquery-2.2.1.min.js"></script>旧版本-->
+    <script src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js"></script>
+    <script src="../../static/js/rem.js"></script>
+    <script src="../../static/js/echarts.min.js"></script>
+    <script src="../../static/js/index.js"></script>
+    <script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+    <script src="/static/js/http_cdnjs.cloudflare.com_ajax_libs_xlsx_0.17.3_xlsx.full.min.js"></script>
+    <script src="/static/js/http_cdnjs.cloudflare.com_ajax_libs_exceljs_4.3.0_exceljs.js"></script>
+    <script src="/static/js/lay-config.js?v=1.0.4" charset="utf-8"></script>
+    <style>
+        .layui-inline[title="导出"],.layui-inline[title="打印"]{
+            display: none;
+        }
+    </style>
+
+</head>
+<body>
+    <div class="t_container">
+        <main class="t_main">
+            <header class="t_title">
+                <h2>各客户库存概况</h2>
+                <div>
+                    <input type="date" id="cutoff-date">
+                    <select id="depository-select">
+                        <option value="ALL">所有厂区</option>
+                        <option value="SAB">SAB</option>
+                        <option value="ZAB">ZAB</option>
+                    </select>
+                    <select id="state-select">
+                        <option value="ALL">所有状态</option>
+                        <option value="正常">正常</option>
+                        <option value="死库">死库</option>
+                    </select>
+                </div>
+            </header>
+            <div class="t_box">
+                <div id="chart_2" style="width: 100%; height: 100%;"></div>
+            </div>
+            <div id="recordTableContainer2" style="display: none">
+                <table class="layui-hide" id="recordTable2" lay-filter="recordTableFilter2"></table>
+            </div>
+        </main>
+        <main class="t_main">
+            <div class="t_box_2">
+            <header class="t_title">
+                <h2>库存分析</h2>
+                <div>
+                    <input type="text" id="year-selector-three" placeholder="请选择年" autocomplete="off">
+                    <select id="customer-select-two">
+                        <option value="" selected>搜索客户</option>
+                        <option th:each="customer : ${customers}"
+                                th:value="${customer.name}"
+                                th:text="${customer.name}"></option>
+                    </select>
+                    <select id="depository-select-two">
+                        <option value="ALL">所有厂区</option>
+                        <option value="SAB">SAB</option>
+                        <option value="ZAB">ZAB</option>
+                    </select>
+                    <select id="state-select-two">
+                        <option value="ALL">所有状态</option>
+                        <option value="正常" selected>正常</option>
+                        <option value="死库">死库</option>
+                    </select>
+<!--                    <p style=":  color: #666; font-size:16px;">在库数据包括转入、转出、返库</p>-->
+                </div>
+                <div class="t_box" style="height: 6rem;">
+                    <div id="chart_3" style="width: 100%; height: 100%;"></div>
+                </div>
+            </header>
+            </div>
+        </main>
+        <main class="t_main">
+            <div class="t_box_2">
+                <header class="t_title">
+                    <h2>每日库存推移</h2>
+                    <div>
+                        <input type="text" id="year-selector-four" placeholder="请选择年月" autocomplete="off">
+                        <select id="depository-select-four">
+                            <option value="ALL">所有厂区</option>
+                            <option value="SAB">SAB</option>
+                            <option value="ZAB">ZAB</option>
+                        </select>
+                        <select id="state-select-four">
+                            <option value="ALL">所有状态</option>
+                            <option value="正常" selected>正常</option>
+                            <option value="死库">死库</option>
+                        </select>
+                    </div>
+                    <div class="t_box" style="height: 6rem;">
+                        <div id="chart_4" style="width: 100%; height: 100%;"></div>
+                    </div>
+                </header>
+            </div>
+        </main>
+        <main class="t_main">
+            <div class="t_box_2">
+                <header class="t_title">
+                    <h1>库存产品状况预警</h1>
+                    <div style="display: none">
+                        <label class="layui-form-label">状态选择</label>
+                        <div class="layui-input-inline">
+                            <select name="state" id="stateSelect">
+                                <option value="正常">正常</option>
+                                <option value="死库">死库</option>
+                                <option value="ALL">全部</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="layui-input-inline" style="position: relative; z-index: 999;">
+                        <input type="text" name="time" id="date" placeholder="选择日期区间" autocomplete="off" class="layui-input" >
+                    </div>
+                    <table class="layui-hide" id="currentTableId" lay-filter="currentTableFilter"></table>
+                </header>
+            </div>
+        </main>
+
+    </div>
+    <script>
+
+
+        layui.use(['form', 'laydate', 'table'], function() {
+            var form = layui.form;  // 添加这行
+            var layer = layui.layer;
+            var miniTab = layui.miniTab;
+            var laydate = layui.laydate;
+            var table = layui.table;
+            tableInstance = table;  // 将table对象赋值给全局变量
+            // 初始化日期选择器
+            laydate.render({
+                elem: '#startDatePicker'
+            });
+            laydate.render({
+                elem: '#endDatePicker'
+            });
+            laydate.render({
+                elem: '#date'
+                , range: true,
+                rangeLinked: true,
+                done: function(value, date, endDate) {
+                    loadReport();
+                }
+            });
+            laydate.render({ elem: '#year-selector-three', type: 'year' });
+            laydate.render({
+                elem: '#year-selector-four', // 目标元素
+                type: 'month',               // 月份选择器
+                done: function(value) {      // 用户选择日期后的回调
+                    updateChart4(value);     // 立即更新图表，传入选中的值
+                }
+            });
+            loadInitialChartData();
+            // 添加事件监听器，当日期或厂区改变时，更新图表数据
+            document.getElementById('cutoff-date').addEventListener('change', updateChartData);
+            document.getElementById('depository-select').addEventListener('change', updateChartData);
+            document.getElementById('state-select').addEventListener('change', updateChartData);
+
+            function updateChartData() {
+                const selectedDate = document.getElementById('cutoff-date').value;
+                const selectedDepository = document.getElementById('depository-select').value;
+                const selectedState = document.getElementById('state-select').value;
+                if (selectedDate) {
+                    fetchChartDataAndUpdateEchart(selectedDate, selectedDepository, selectedState);
+                }
+            }
+            function loadInitialChartData() {
+                const today = new Date().toISOString().split('T')[0]; // 获取今天的日期，格式为YYYY-MM-DD
+                document.getElementById('cutoff-date').value = today; // 设置日期选择器为今天
+                updateChartData(); // 使用今天的日期加载图表数据
+            }
+            // 获取并更新图表数据的函数，根据指定的截止日期
+            function fetchChartDataAndUpdateEchart(cutoffDate, depository, state) {
+                // 构建请求URL，根据是否选择了“所有厂区”来调整参数
+                let url = `/bearingRecords/customer-status?cutoffDate=${cutoffDate}`;
+                if (depository !== 'ALL') {
+                    url += `&depository=${depository}`;
+                }
+                if (state !== 'ALL') {
+                    url += `&state=${state}`;
+                }
+                fetch(url)
+                    .then(response => response.json())
+                    .then(data => {
+                        echart_2(data); // 使用获取的数据更新图表
+                    })
+                    .catch(error => console.error('Error fetching chart data:', error));
+            }
+
+            function echart_2(chartData) {
+                // 基于准备好的dom，初始化echarts实例
+                var myChart = echarts.init(document.getElementById('chart_2'));
+                const customers = [...new Set(chartData.map(item => item.customer))]; // 假设chartData是您的数据
+                const colors = customers.map(() => generateRandomColor());
+                // 处理从后端获取的数据
+                const yAxisData = chartData.map(item => item.customer); // 顾客名称
+                const totalLA = chartData.reduce((sum, item) => sum + item.LA_quantity, 0);
+                const totalLB = chartData.reduce((sum, item) => sum + item.LB_quantity, 0);
+                const totals = chartData.reduce((acc, item) => {
+                    acc.totalLA += item.LA_quantity;
+                    acc.totalLB += item.LB_quantity;
+                    return acc;
+                }, { totalLA: 0, totalLB: 0 });
+                const legendData = yAxisData;
+                const barSeriesData = chartData.map(item => item.LA_quantity + item.LB_quantity); // 假设后端数据有LA_quantity属性
+                const pieSeriesData = chartData.map(item => ({
+                    value: 1,
+                    name: item.customer, // 使用name作为饼图的名称
+                    LA_quantity: item.LA_quantity, // 在这里添加LB的数量
+                    LB_quantity: item.LB_quantity // 在这里添加LB的数量
+                }));
+
+                myChart.setOption({
+                    // graphic: {
+                    //     elements: [{
+                    //         type: 'image',
+                    //         style: {
+                    //             width: 30,
+                    //             height: 30
+                    //         },
+                    //         left: '73%',
+                    //         top: 'center'
+                    //     }]
+                    // },
+                    tooltip: {
+                        trigger: 'axis',
+                        axisPointer: { type: 'shadow' }
+                    },
+                    grid: {
+                        left: '5%',
+                        right: '80%',
+                        top: '10%',
+                        bottom: '10%',
+                        containLabel: true,
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: ['LA', 'LB'], // X轴显示LA和LB
+                        axisLine: { show: true },
+                        axisLabel: {
+                            show: false,
+                            color: '#FFFFFF' // 设置X轴标签颜色为白色
+                        }
+                    },
+                    yAxis: {
+                        type: 'value',
+                        axisLine: { show: true },
+                        axisLabel: { show: false, color: '#FFFFFF' }
+                    },
+                    legend: {
+                        data: legendData, // 设置图例数据
+                        orient: 'vertical', // 图例排列方向，垂直排列
+                        right: '5%',
+                        top: 'middle', // 垂直居中
+                        textStyle: {
+                            color: '#FFFFFF' // 设置图例文字颜色为白色
+                        }
+                    },
+                    // xAxis: {
+                    //     type: 'value',
+                    //     position:'top',
+                    //     splitLine: {show: false},
+                    //     boundaryGap: [0, 0.01],
+                    //     axisTick: {
+                    //         show: false
+                    //     },
+                    //     axisLine: { show: false }, // 如果您也想隐藏轴线，可以设置为 false
+                    //     axisLabel: { show: false }, // 设置为false来隐藏轴的刻度标签
+                    // },
+                    // yAxis: {
+                    //     type: 'category',
+                    //     data: yAxisData,
+                    //     position:'left',
+                    //     axisTick: {
+                    //         show: false
+                    //     },
+                    //     splitLine: {
+                    //         show: false
+                    //     },
+                    //     axisLabel: {
+                    //         textStyle: {
+                    //             color: '#FFFFFF',
+                    //             fontSize: 12
+                    //         }
+                    //     },
+                    //     axisLine: {
+                    //         show: true,
+                    //         lineStyle: {
+                    //             color: '#6173A3'
+                    //         }
+                    //     },
+                    // },
+                    series: [
+                        {
+                            name: '总量',
+                            type: 'bar',
+                            data: [
+                                {
+                                    value: totals.totalLA,
+                                    label: {
+                                        show: true,
+                                        position: 'top',
+                                        color: '#FFFFFF',
+                                        formatter: function(params) {
+                                            // 使用Intl.NumberFormat进行千分位格式化
+                                            const formattedValue = new Intl.NumberFormat('en-US').format(params.value);
+                                            return `外轮库存总数: \n ${formattedValue}`;
+                                        }
+                                    },
+                                    itemStyle: {
+                                        color: '#1f77b4' // 为总LA设置一种颜色
+                                    }
+                                },
+                                {
+                                    value: totals.totalLB,
+                                    label: {
+                                        show: true,
+                                        position: 'top',
+                                        color: '#FFFFFF',
+                                        formatter: function(params) {
+                                            // 使用Intl.NumberFormat进行千分位格式化
+                                            const formattedValue = new Intl.NumberFormat('en-US').format(params.value);
+                                            return `内轮库存总数: \n ${formattedValue}`;
+                                        }
+                                    },
+                                    itemStyle: {
+                                        color: '#ff7f0e' // 为总LB设置另一种颜色
+                                    }
+                                }
+                            ],
+                            itemStyle: {
+                                color: function(params) {
+                                    // 根据条目的类型（LA或LB）为其分配颜色
+                                    return params.dataIndex === 0 ? '#1f77b4' : '#ff7f0e';
+                                }
+                            }
+                        },
+                        {
+                            type: 'pie',
+                            radius: ['50%', '77%'],
+                            center: ['55%', '50%'],
+                            roseType: 'radius',
+                            color: function(params) {
+                                // 这里使用params.dataIndex来获取当前数据项的索引，然后使用该索引从colors数组中获取颜色
+                                return colors[params.dataIndex % colors.length]; // 使用模运算确保索引不会超出数组长度
+                            },
+                            data: pieSeriesData,
+                            label: {
+                                normal: {
+                                    rich: {
+                                        nameStyle: {
+                                            // 名称样式
+                                            color: '#FFFFFF',
+                                            align: 'left',
+                                            fontSize: 13,
+                                            lineHeight: 12
+                                        },
+                                        valueStyle: {
+                                            // 数值样式
+                                            color: '#FFFFFF',
+                                            align: 'left',
+                                            fontSize: 13,
+                                            lineHeight: 12
+                                        }
+                                    },
+                                    formatter: function(param) {
+                                        const formatter = new Intl.NumberFormat('en-US');
+                                        const LA_quantityFormatted = formatter.format(param.data.LA_quantity);
+                                        const LB_quantityFormatted = formatter.format(param.data.LB_quantity);
+                                        const totalLA = totals.totalLA;
+                                        const totalLB = totals.totalLB;
+                                        const percentage = ((param.data.LA_quantity / totalLA + param.data.LB_quantity / totalLB) / 2 * 100).toFixed(0);
+                                        return [
+                                            '{nameStyle|' + param.name +" "+ percentage +"%"+'}',
+                                            '{valueStyle|外轮: ' + LA_quantityFormatted + '}',
+                                            '{valueStyle|内轮: ' + LB_quantityFormatted + '}'
+                                        ].join('\n');
+                                    },
+                                    padding: [0, 10] // 根据需要调整padding来对齐文本
+                                }
+                            },
+                            // tooltip: {
+                            //     trigger: 'item',
+                            //     formatter: function(param) {
+                            //         return `${param.name}: <br>外轮:${param.data.LA_quantity}<br>内轮:${param.data.LB_quantity}`;
+                            //     }
+                            // },
+                            labelLine: {
+                                normal: {
+                                    length: 30, // 调整指向线的起始部分长度
+                                    length2: 15, // 调整指向线从转折点到标签的部分长度
+                                    smooth: 0.2, // 可以尝试启用平滑
+                                    lineStyle: {
+                                        color: '#FFFFFF' // 设置线条颜色为白色
+                                    }
+                                }
+                            },
+                            itemStyle: {
+                                normal: {
+                                    shadowBlur: 30,
+                                    shadowColor: 'rgba(0, 0, 0, 0.4)'
+                                }
+                            },
+                            animationType: 'scale',
+                            animationEasing: 'elasticOut',
+                            animationDelay: function(idx) {
+                                return Math.random() * 200;
+                            }
+                        }
+                    ]
+                });
+                myChart.off('click');
+                myChart.on('click', async function(params) {
+                    var customer = params.name;
+                    const cutoffDate = document.getElementById('cutoff-date').value;
+                    let currentDepository = document.getElementById('depository-select').value;
+                    if (currentDepository === 'ALL') {
+                        currentDepository = '';
+                    }
+                    let state = document.getElementById('state-select').value;
+                    if (state === 'ALL') {
+                        state = '';
+                    }
+
+                    console.log(customer);
+                    console.log(cutoffDate);
+                    console.log(currentDepository);
+                    console.log(state);
+
+                    const url = `/bearingRecords/inventory?customer=${customer}&cutoffDate=${cutoffDate}&depository=${currentDepository}&state=${state}`;
+
+                    $.ajax({
+                        url: url,
+                        type: 'GET',
+                        dataType: 'json',
+                        success: function(records) {
+                            var widthPercentage = 60;
+                            var heightPercentage = 60;
+
+                            var screenWidth = $(window).width();
+                            var screenHeight = $(window).height();
+
+                            var popupWidth = (widthPercentage / 100) * screenWidth;
+                            var popupHeight = (heightPercentage / 100) * screenHeight;
+
+                            var maxPopupWidth = 2800;
+                            var maxPopupHeight = 2600;
+
+                            popupWidth = Math.min(popupWidth, maxPopupWidth);
+                            popupHeight = Math.min(popupHeight, maxPopupHeight);
+                            layer.open({
+                                type: 1,
+                                title: '<b style="font-weight: bold;">' + customer + '</b>', // 加粗标题
+                                content: $('#recordTableContainer2'),
+                                area: [popupWidth + 'px', popupHeight + 'px'],
+                                shadeClose: true, // 点击遮罩关闭
+                                closeBtn: 1, // 显示关闭按钮
+                                success: function(layero, index) {
+                                }
+                            });
+                            renderTable2(records);                    },
+                        error: function(error) {
+                            console.log("Error fetching records for category", error);
+                        }
+                    });
+
+                    function renderTable2(records) {
+                        function formatDate(dateStr) {
+                            if (!dateStr) return '';
+                            let date = new Date(dateStr);
+                            let year = date.getFullYear();
+                            let month = (date.getMonth() + 1).toString().padStart(2, '0');
+                            let day = date.getDate().toString().padStart(2, '0');
+                            return `${year}-${month}-${day}`;
+                        }
+                        // 处理 records，先过滤掉数量为0的记录
+                        var filteredRecords = records.filter(function(record) {
+                            return record.quantity !== 0;
+                        });
+// 对相同的箱号、型号、客户进行分组，并合并数量
+                        var groupedRecords = {};
+// 分组和合并数量
+                        filteredRecords.forEach(function(record) {
+                            var key = `${record.boxText}_${record.model}_${record.customer}`;  // 使用箱号、型号和客户作为唯一键
+                            if (groupedRecords[key]) {
+                                // 如果该组合已经存在，合并数量
+                                groupedRecords[key].quantity += record.quantity;
+                            } else {
+                                // 如果该组合不存在，直接添加
+                                groupedRecords[key] = {
+                                    customer: record.customer,
+                                    boxText: record.boxText,
+                                    model: record.model,
+                                    quantity: record.quantity
+                                };
+                            }
+                        });
+                        var mergedRecords = Object.values(groupedRecords);
+                        table.render({
+                            elem: '#recordTable2',
+                            height: "full-50",
+                            cols: [ [  // 表头
+                                { field: 'boxText', title: '箱号', sort: true, align: 'center' }, // 内容居中
+                                { field: 'model', title: '型号', align: 'center' },               // 内容居中
+                                { field: 'quantity', title: '数量', align: 'center', sort: true }             // 内容居中
+                            ]],
+                            limit: mergedRecords.length,  // 设置分页的每页记录数为合并后的记录数
+                            data: mergedRecords,  // 渲染合并后的数据
+                        });
+
+                    }
+
+                    function formatDate(dateStr) {
+                        if (!dateStr) return '';
+                        let date = new Date(dateStr);
+                        let year = date.getFullYear();
+                        let month = (date.getMonth() + 1).toString().padStart(2, '0');
+                        let day = date.getDate().toString().padStart(2, '0');
+                        return `${year}-${month}-${day}`;
+                    }
+                });
+
+            }
+
+            // 页面加载完成后，自动加载数据
+            document.addEventListener('DOMContentLoaded', loadInitialChartData);
+            function generateRandomColor() {
+                const letters = '0123456789ABCDEF';
+                let color = '#';
+                for (let i = 0; i < 6; i++) {
+                    color += letters[Math.floor(Math.random() * 16)];
+                }
+                return color;
+            }
+            var tableInstance;  // 定义一个全局table变量
+            function loadReport() {
+                // 获取选择框和日期选择器的值
+                var dates = document.getElementById('date').value.split(' - ');
+                var startDate1 = dates[0];
+                var endDate1 = dates[1];
+                console.log(dates, "+", startDate1, '+', endDate1);
+                // 获取状态选择器的值
+                var state = document.getElementById('stateSelect').value;
+                // 创建新的URL condWarn使用的是everyPairForModel查询结果
+                var url = `/bearingRecords/condWarn?state=${state}&startDate=${startDate1}&endDate=${endDate1}`;
+                // 更新表格的URL
+                tableInstance.render({
+                    title:"库存产品状况预警",
+                    elem: "#currentTableId",
+                    url: url,
+                    height: "full-50", // 设置表格高度并固定表头
+                    height: '600px',
+                    toolbar: ['filter', 'exports', 'print'],
+                    parseData: function(res) { // 将原始数据格式适配成 layui 表格组件所期望的格式
+                        var filteredData = res.filter(function(record) {
+                            return record.pair > 0;
+                        });
+                        // 对数据进行排序，将在库_LA和在库_LB的红色柱形排到上面
+                        filteredData.sort(function(a, b) {
+                            // 判断颜色
+                            var colorA_LA = (a.入库_LA === 0 && a.出库_LA === 0) ? 1 : 0;
+                            var colorA_LB = (a.入库_LB === 0 && a.出库_LB === 0) ? 1 : 0;
+                            var colorB_LA = (b.入库_LA === 0 && b.出库_LA === 0) ? 1 : 0;
+                            var colorB_LB = (b.入库_LB === 0 && b.出库_LB === 0) ? 1 : 0;
+
+                            // 判断库存
+                            var inStockA_LA = (a.在库_LA > 0) ? 1 : 0;
+                            var inStockA_LB = (a.在库_LB > 0) ? 1 : 0;
+                            var inStockB_LA = (b.在库_LA > 0) ? 1 : 0;
+                            var inStockB_LB = (b.在库_LB > 0) ? 1 : 0;
+
+                            // 排序逻辑
+                            if (colorB_LA === 1 && colorB_LB === 1 && inStockB_LA === 1 && inStockA_LA === 1 && colorA_LA === 1 && colorA_LB === 1) {
+                                return 1;
+                            }
+                            if (colorA_LA === 1 && inStockA_LA === 1) {
+                                return -1;
+                            } else if (colorB_LA === 1 && inStockB_LA === 1) {
+                                return 1;
+                            }
+                            if (colorA_LB === 1 && inStockA_LB === 1) {
+                                return -1;
+                            } else if (colorB_LB === 1 && inStockB_LB === 1) {
+                                return 1;
+                            }
+                            return 0;
+                        });
+                        return {
+                            "code": 0, // 解析接口状态
+                            "msg": "", // 解析提示文本
+                            "count": filteredData.length, // 解析数据长度
+                            "data": filteredData // 解析数据列表
+                        };
+                    },
+                    request: {
+                        pageName: 'page', // 页码的参数名称，默认：page
+                        limitName: 'size' // 每页数据量的参数名，默认：limit
+                    },
+                    cols: [
+                        [ // 表头
+                            { field: ' ', title: ' ', colspan: 1, rowspan: 1, align: 'center' },
+                            { field: ' ', title: '配对', colspan: 1, rowspan: 1, hide: true, align: 'center'},
+                            { field: ' ', title: '型号', colspan: 2, rowspan: 1, align: 'center' },
+                            { field: ' ', title: '入库', colspan: 2, rowspan: 1, align: 'center' },
+                            { field: ' ', title: '库存', colspan: 2, rowspan: 1, align: 'center' },
+                            { field: ' ', title: '出库', colspan: 2, rowspan: 1, align: 'center' },
+                            { field: ' ', title: '最后记录日期', colspan: 2, rowspan: 1, align: 'center' },
+                            { field: ' ', title: '库存时间', colspan: 2, rowspan: 1, align: 'center' },
+                        ], [
+                            { field: '客户', title: '客户', colspan: 1, rowspan: 1, align: 'center' },
+                            { field: 'pair', title: 'Pair', colspan: 1, rowspan: 1, hide: true, align: 'center',sort:true},
+                            { field: '型号_LA', title: '外轮', align: 'center' },
+                            { field: '型号_LB', title: '内轮', align: 'center' },
+                            { field: '入库_LA', title: '入库LA', templet: function(d) {
+                                    const barWidth = Math.min(100, Math.log10(d.入库_LA + 1) * 10); // 使用对数比例计算宽度
+                                    return `<div style="display: flex; align-items: center;">
+                        <div style="width: ${barWidth}px; height: 20px; background-color: #26b510;"></div>
+                        <div style="margin-left: 5px;">${d.入库_LA}</div>
+                    </div>`;
+                                }, align: 'center' },
+                            { field: '入库_LB', title: '入库LB', templet: function(d) {
+                                    const barWidth = Math.min(100, Math.log10(d.入库_LB + 1) * 10); // 使用对数比例计算宽度
+                                    return `<div style="display: flex; align-items: center;">
+                        <div style="width: ${barWidth}px; height: 20px; background-color: #26b510;"></div>
+                        <div style="margin-left: 5px;">${d.入库_LB}</div>
+                    </div>`;
+                                }, align: 'center' },
+                            { field: '在库_LA', title: '在库LA', templet: function(d) {
+                                    const barWidth = Math.min(100, Math.log10(d.在库_LA + 1) * 10); // 使用对数比例计算宽度
+                                    const barColor = (d.入库_LA === 0 && d.出库_LA === 0) ? '#d5270f' : '#26b510'; // 根据条件设置颜色
+                                    return `<div style="display: flex; align-items: center;">
+                        <div style="width: ${barWidth}px; height: 20px; background-color: ${barColor};"></div>
+                        <div style="margin-left: 5px;">${d.在库_LA}</div>
+                    </div>`;
+                                }, align: 'center' },
+                            { field: '在库_LB', title: '在库LB', templet: function(d) {
+                                    const barWidth = Math.min(100, Math.log10(d.在库_LB + 1) * 10); // 使用对数比例计算宽度
+                                    const barColor = (d.入库_LB === 0 && d.出库_LB === 0) ? '#d5270f' : '#26b510'; // 根据条件设置颜色
+                                    return `<div style="display: flex; align-items: center;">
+                        <div style="width: ${barWidth}px; height: 20px; background-color: ${barColor};"></div>
+                        <div style="margin-left: 5px;">${d.在库_LB}</div>
+                    </div>`;
+                                }, align: 'center' },
+                            { field: '出库_LA', title: '出库LA', templet: function(d) {
+                                    const barWidth = Math.min(100, Math.log10(d.出库_LA + 1) * 10); // 使用对数比例计算宽度
+                                    return `<div style="display: flex; align-items: center;">
+                        <div style="width: ${barWidth}px; height: 20px; background-color: #26b510;"></div>
+                        <div style="margin-left: 5px;">${d.出库_LA}</div>
+                    </div>`;
+                                }, align: 'center' },
+                            { field: '出库_LB', title: '出库LB', templet: function(d) {
+                                    const barWidth = Math.min(100, Math.log10(d.出库_LB + 1) * 10); // 使用对数比例计算宽度
+                                    return `<div style="display: flex; align-items: center;">
+                        <div style="width: ${barWidth}px; height: 20px; background-color: #26b510;"></div>
+                        <div style="margin-left: 5px;">${d.出库_LB}</div>
+                    </div>`;
+                                }, align: 'center' },
+                            {
+                                field: 'LA最后记录时间',
+                                title: 'LA',
+                                align: 'center',
+                                templet: function(d) {
+                                    return formatDate(d['LA最后记录时间']);
+                                }
+                            },
+                            {
+                                field: 'LB最后记录时间',
+                                title: 'LB',
+                                align: 'center',
+                                templet: function(d) {
+                                    return formatDate(d['LB最后记录时间']);
+                                }
+                            },
+                            {
+                                field: '库存时间',
+                                title: '库存',
+                                align: 'center',
+                                templet: function (d) {
+                                    const la = d['LA最后记录时间'];
+                                    const lb = d['LB最后记录时间'];
+                                    if (!la && !lb) return '-';
+                                    let earlier = null;
+
+                                    if (la && lb) {
+                                        earlier = new Date(la) < new Date(lb) ? la : lb;
+                                    } else {
+                                        earlier = la || lb;
+                                    }
+
+                                    return diffYearMonth(earlier, endDate1);
+                                }
+                            },
+                            { field: '箱号', title: '箱号', align: 'center' ,hide: true, },
+
+                        ]
+                    ],
+                    done: function() {
+                        // 设置toolbar的颜色为白色
+                        var toolbar = document.querySelector('.layui-table-tool');
+                        if (toolbar) {
+                            toolbar.style.backgroundColor = 'white';
+                        }
+                        var tableView = document.querySelector('.layui-table-view');
+                        if (tableView) {
+                            tableView.style.borderRadius = '50px'; // 调整圆角的半径
+                            tableView.style.overflow = 'hidden'; // 隐藏溢出内容
+                            tableView.style.opacity = '0.8';
+                            tableView.style.marginTop = '-20px';
+                        }
+                        addCustomExportButton(); // 确保在每次表格加载完成后添加按钮
+
+                    }
+                });
+            }
+
+            function formatDate(dateStr) {
+                if (!dateStr) return '';
+                const date = new Date(dateStr);
+                if (isNaN(date)) return dateStr; // 返回原始数据（防止无效格式）
+                return date.toISOString().slice(0, 10); // 输出 yyyy-mm-dd
+            }
+            function diffYearMonth(start, end) {
+                const startDate = new Date(start);
+                const endDate = new Date(end);
+                let years = endDate.getFullYear() - startDate.getFullYear();
+                let months = endDate.getMonth() - startDate.getMonth();
+
+                if (months < 0) {
+                    years--;
+                    months += 12;
+                }
+
+                if (years < 0) return '-';
+                if (years === 0 && months === 0) return '0月';
+                if (years === 0) return `${months}月`;
+                if (months === 0) return `${years}年`;
+                return `${years}年${months}月`;
+            }
+
+            function addCustomExportButton() {
+                if ($('#customExportButton').length === 0) {
+                    var customExportButton = $('<button class="layui-btn layui-btn-primary layui-btn-sm" id="customExportButton" style="display: flex; align-items: center;"><i class="layui-icon layui-icon-export" style="margin-right: 5px;"></i> 导出</button>');
+                    $('.layui-table-tool-temp').prepend(customExportButton);
+
+                    // 绑定自定义导出按钮点击事件
+                    $('#customExportButton').on('click', function() {
+                        customExport();
+                    });
+                }
+            }
+
+            function customExport() {
+                var data = table.cache['currentTableId']; // 从表格缓存中获取当前表格的数据
+                // 生成导出文件
+                exportTable(data);
+            }
+
+            async function exportTable(data) {
+                // 准备数据
+                var dates = document.getElementById('date').value.split(' - ');
+                var startDate1 = dates[0];
+                var endDate1 = dates[1];
+                var exportData = data.map(row => {
+                    const la = row['LA最后记录时间'];
+                    const lb = row['LB最后记录时间'];
+
+                    let earlier = null;
+                    if (la && lb) {
+                        earlier = new Date(la) < new Date(lb) ? la : lb;
+                    } else {
+                        earlier = la || lb;
+                    }
+
+                    const 库存时间 = earlier ? diffYearMonth(earlier, endDate1) : '-';
+
+                    return {
+                        客户: row.客户,
+                        Pair: row.pair,
+                        外轮: row.型号_LA,
+                        内轮: row.型号_LB,
+                        入库LA: row.入库_LA,
+                        入库LB: row.入库_LB,
+                        在库LA: row.在库_LA,
+                        在库LB: row.在库_LB,
+                        出库LA: row.出库_LA,
+                        出库LB: row.出库_LB,
+                        库存时间: 库存时间,
+                        箱号:row.箱号
+                    };
+                });
+
+// 排序逻辑
+                function parseInventoryTime(timeStr) {
+                    if (!timeStr || timeStr === '-') return -1;
+                    const yearMatch = timeStr.match(/(\d+)年/);
+                    const monthMatch = timeStr.match(/(\d+)月/);
+                    const years = yearMatch ? parseInt(yearMatch[1]) : 0;
+                    const months = monthMatch ? parseInt(monthMatch[1]) : 0;
+                    return years * 12 + months;
+                }
+
+
+// 判断是否是“需要标红”的行
+                function isHighlighted(row) {
+                    const laHighlight = row.在库LA !== 0 && row.入库LA === 0 && row.出库LA === 0;
+                    const lbHighlight = row.在库LB !== 0 && row.入库LB === 0 && row.出库LB === 0;
+                    return laHighlight || lbHighlight;
+                }
+
+// 拆分与排序
+                const highlightRows = exportData.filter(isHighlighted);
+                const normalRows = exportData.filter(row => !isHighlighted(row));
+                highlightRows.sort((a, b) => parseInventoryTime(a.库存时间) - parseInventoryTime(b.库存时间));
+
+// 合并
+                exportData = [...highlightRows, ...normalRows];
+
+                // 创建一个新的工作簿
+                var workbook = new ExcelJS.Workbook();
+                var worksheet = workbook.addWorksheet('库存产品状况');
+
+                // 添加标题行
+                worksheet.addRow(["客户", "Pair", "外轮", "内轮", "入库LA", "入库LB", "在库LA", "在库LB", "出库LA", "出库LB","库存时间","箱号"]);
+
+                // 添加数据行
+                exportData.forEach(row => {
+                    worksheet.addRow([row.客户, row.Pair, row.外轮, row.内轮, row.入库LA, row.入库LB, row.在库LA, row.在库LB, row.出库LA, row.出库LB, row.库存时间, row.箱号]);
+                });
+
+                // 应用背景颜色样式
+                worksheet.eachRow((row, rowNumber) => {
+                    if (rowNumber > 1) { // 跳过标题行
+                        let cellLA = row.getCell(3); // 外轮
+                        let cellLB = row.getCell(4); // 内轮
+                        let cellLA2 = row.getCell(7); // 外轮
+                        let cellLB2 = row.getCell(8); // 内轮
+                        let dataRow = exportData[rowNumber - 2];
+
+                        if (dataRow.在库LA !== 0 && dataRow.入库LA === 0 && dataRow.出库LA === 0) {
+                            cellLA.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FF0000' }
+                            };
+                            cellLA2.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FF0000' }
+                            };
+                        }
+                        if (dataRow.在库LB !== 0 && dataRow.入库LB === 0 && dataRow.出库LB === 0) {
+                            cellLB.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FF0000' }
+                            };
+                            cellLB2.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FF0000' }
+                            };
+                        }
+                    }
+                });
+
+                // 导出 Excel 文件
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = '库存产品状况.xlsx';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+                // 获取元素
+                const yearSelector = document.getElementById('year-selector-three');
+                const depositorySelect = document.getElementById('depository-select-two');
+                const stateSelect = document.getElementById('state-select-two');
+                const customerSelect = document.getElementById('customer-select-two');
+                const chartContainer = document.getElementById('chart_3');
+
+                // 初始化年份选择器（您可以使用日期选择器库，这里假设使用简单的输入框）
+                const currentYear = new Date().getFullYear();
+                yearSelector.value = currentYear;
+
+                // 初始化 ECharts 实例
+                const myChart = echarts.init(chartContainer);
+
+            let legendSelected = {
+                'LA入库': true,
+                'LB入库': true,
+                'LAB入库': true,
+                'LA出库': true,
+                'LB出库': true,
+                'LAB出库': true,
+                'LA库存': true,
+                'LB库存': true,
+                'LAB库存': true
+            };
+            let isUpdating = false; // 防止重复触发
+            function setFiltersDisabled(disabled) {
+                yearSelector.disabled = disabled;
+                depositorySelect.disabled = disabled;
+                stateSelect.disabled = disabled;
+                customerSelect.disabled = disabled;
+            }
+
+            // 定义一个函数，用于获取数据并更新图表
+                function updateChart() {
+                    if (isUpdating) return; // 避免短时间多次快速触发
+                    isUpdating = true;      // 加锁
+                    setFiltersDisabled(true);  // 禁用下拉框
+                    const selectedYear = yearSelector.value;
+                    const selectedDepository = depositorySelect.value;
+                    const selectedState = stateSelect.value;
+                    const selectCustomer = customerSelect.value;
+
+                    // 构造请求参数
+                    const params = new URLSearchParams({
+                        year: selectedYear,
+                        customer:selectCustomer,
+                        depository: selectedDepository,
+                        state: selectedState
+                    });
+
+                    // 发送 AJAX 请求到后端 API
+                    fetch(`/bearingRecords/monthlyInventory?${params.toString()}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            // 格式化数字为 "万" 或者普通数值
+                            function formatNumber(num) {
+                                if (num >= 10000) {
+                                    return (num / 10000).toFixed(0) + '万';  // 显示为万
+                                } else {
+                                    return num.toString();  // 小于10000直接显示
+                                }
+                            }
+
+                            // 处理返回的数据
+                            const months = [];
+                            const LA_in = [];
+                            const LB_in = [];
+                            const LAB_in = [];
+                            const LA_out = [];
+                            const LB_out = [];
+                            const LAB_out = [];
+                            const LA_quantity = [];
+                            const LB_quantity = [];
+                            const LAB_quantity = [];
+                            const total_in = [];
+                            const total_out = [];
+                            const total_quantity = [];
+
+                            data.forEach(item => {
+                                months.push(item.month);
+                                LA_in.push(item.LA_in || 0);
+                                LB_in.push(item.LB_in || 0);
+                                LAB_in.push(item.LAB_in || 0);
+                                LA_out.push(item.LA_out || 0);
+                                LB_out.push(item.LB_out || 0);
+                                LAB_out.push(item.LAB_out || 0);
+                                // // 当 LA_in 和 LA_out 都为零时，LA_quantity 为零，否则使用实际值
+                                // if (item.LA_in === 0 && item.LA_out === 0) {
+                                //     LA_quantity.push(0);
+                                // } else {
+                                // }
+                                LA_quantity.push(item.LA_quantity || 0);
+                                //
+                                // // 当 LB_in 和 LB_out 都为零时，LB_quantity 为零，否则使用实际值
+                                // if (item.LB_in === 0 && item.LB_out === 0) {
+                                //     LB_quantity.push(0);
+                                // } else {
+                                // }
+                                LB_quantity.push(item.LB_quantity || 0);
+                                LAB_quantity.push(item.LAB_quantity || 0);
+
+                                total_in.push((item.LA_in || 0) + (item.LB_in || 0));
+                                total_out.push((item.LA_out || 0) + (item.LB_out || 0));
+                                total_quantity.push((item.LA_quantity || 0) + (item.LB_quantity || 0));
+                            });
+                            // 计算汇总
+                            const summary = {
+                                LA_in_total: LA_in.reduce((a, b) => a + b, 0),
+                                LA_out_total: LA_out.reduce((a, b) => a + b, 0),
+                                LB_in_total: LB_in.reduce((a, b) => a + b, 0),
+                                LB_out_total: LB_out.reduce((a, b) => a + b, 0),
+                                LAB_in_total: LAB_in.reduce((a, b) => a + b, 0),
+                                LAB_out_total: LAB_out.reduce((a, b) => a + b, 0),
+                            };
+                            // 设置图表配置项
+                            const option = {
+                                textStyle: {
+                                    color: '#FFFFFF' // 白色
+                                },
+                                grid: {
+                                    left: '10%',
+                                    right: '10%',
+                                    top: '10%',
+                                    bottom: '20%',
+                                },
+                                tooltip: {
+                                    trigger: 'item',
+                                    textStyle: {
+                                        color: '#FFFFFF' // 提示文字颜色
+                                    },
+                                },
+                                legend: {
+                                    data: ['LA入库', 'LB入库', 'LAB入库','LA出库', 'LB出库', 'LAB出库','LA库存', 'LB库存', 'LAB库存'],
+                                    textStyle: {
+                                        color: '#FFFFFF'
+                                    },
+                                    formatter: function (name) {
+                                        const map = {
+                                            'LA入库': summary.LA_in_total,
+                                            'LB入库': summary.LB_in_total,
+                                            'LAB入库': summary.LAB_in_total,
+                                            'LA出库': summary.LA_out_total,
+                                            'LB出库': summary.LB_out_total,
+                                            'LAB出库': summary.LAB_out_total,
+                                            'LA库存': '',
+                                            'LB库存': '',
+                                            'LAB库存': ''
+                                        };
+                                        // --- 获取 legend 当前选中状态 ---
+                                        let selected = {};
+                                        try {
+                                            selected = myChart.getOption().legend[0].selected || {};
+                                        } catch (e) {}
+
+                                        const isSelected = selected[name] !== false;
+                                        const value = isSelected ? map[name] : '';
+
+                                        // 保证一定返回字符串，避免 charAt 报错
+                                        return `{title|${name}}` + (value ? `\n{value|${formatNumber(value)}}` : '');
+                                    },
+                                    textStyle: {
+                                        rich: {
+                                            title: {
+                                                color: '#fff',
+                                                fontSize: 14,
+                                                lineHeight: 18
+                                            },
+                                            value: {
+                                                color: '#ffd21e',
+                                                fontSize: 13,
+                                                lineHeight: 16,
+                                            }
+                                        }
+                                    }
+                                },
+                                graphic: [
+                                    {
+                                        type: 'text',
+                                        left: '80%',
+                                        top: 2,
+                                        style: {
+                                            text: '(在库数据包括转入、转出、返库)',
+                                            fill: '#ffd21e',
+                                            font: '16px sans-serif'
+                                        }
+                                    },
+                                ],
+                                xAxis: {
+                                    type: 'category',
+                                    data: months,
+                                    axisLabel: {
+                                        interval: 0, // 保证所有月份标签都显示
+                                        rotate: 0,  // 旋转标签以防重叠
+                                        color: '#FFFFFF', // X轴文字颜色
+                                        rich: {
+                                            largeFont: {
+                                                fontSize: 11, // 设置自定义标签的字体大小
+                                                color: '#FFFFFF' // 自定义标签的颜色
+                                            }
+                                        },
+                                        formatter: function (value) {
+                                            const showIn  = Object.keys(legendSelected).some(k => k.includes('入库') && legendSelected[k]);
+                                            const showOut = Object.keys(legendSelected).some(k => k.includes('出库') && legendSelected[k]);
+                                            const showStock = Object.keys(legendSelected).some(k => k.includes('库存') && legendSelected[k]);
+
+                                            const labels = [];
+                                            if (showIn) labels.push('{largeFont|入库}');
+                                            if (showOut) labels.push('{largeFont|出库}');
+                                            if (showStock) labels.push('{largeFont|在库}');
+
+                                            if (labels.length === 0) return '\n' + value;
+                                            return '\n' + labels.join('  ') + '\n\n' + value;
+                                        }
+                                    },
+                                    axisLine: {
+                                        lineStyle: {
+                                            color: '#FFFFFF' // X轴轴线颜色
+                                        }
+                                    },
+                                    axisTick: {
+                                        lineStyle: {
+                                            color: '#FFFFFF' // X轴刻度颜色
+                                        }
+                                    }
+                                },
+                                yAxis: {
+                                    type: 'value',
+                                    axisLabel: {
+                                        color: '#FFFFFF' // Y轴标签字体颜色
+                                    },
+                                    axisLine: {
+                                        lineStyle: {
+                                            color: '#FFFFFF' // Y轴轴线颜色
+                                        }
+                                    },
+                                    axisTick: {
+                                        lineStyle: {
+                                            color: '#FFFFFF' // Y轴刻度颜色
+                                        }
+                                    },
+                                    splitLine: {
+                                        lineStyle: {
+                                            color: '#FFFFFF' // 网格线颜色，如果需要
+                                        }
+                                    }
+                                },
+                                series: [
+                                    {
+                                        name: 'LB入库',
+                                        type: 'bar',
+                                        stack: '入库',
+                                        data: LB_in,
+                                        itemStyle: {
+                                            color: '#33a02c' // 可自定义颜色
+                                        },
+                                        label: {
+                                            show: true,
+                                            position: 'insideTop',
+                                            color: '#FFFFFF',
+                                            formatter: function(params) {
+                                                return params.value === 0 ? '' : formatNumber(LB_in[params.dataIndex]);
+                                            }
+                                        }
+                                    },
+                                    {
+                                        name: 'LA入库',
+                                        type: 'bar',
+                                        stack: '入库',
+                                        data: LA_in,
+                                        itemStyle: {
+                                            color: '#d5270f' // 可自定义颜色
+                                        },
+                                        label: {
+                                            show: true,
+                                            position: 'top',
+                                            color: '#FFFFFF',
+                                            formatter: function(params) {
+                                                return params.value === 0 ? '' : formatNumber(LA_in[params.dataIndex]);
+                                            }
+                                        },
+                                        z:10
+                                    },
+                                    {
+                                        name: 'LAB入库',
+                                        type: 'bar',
+                                        stack: '入库',
+                                        data: LAB_in,
+                                        itemStyle: {
+                                            color: '#0862d6' // 可自定义颜色
+                                        },
+                                        label: {
+                                            show: true,
+                                            position: 'top',
+                                            color: '#FFFFFF',
+                                            formatter: function(params) {
+                                                return params.value === 0 ? '' : formatNumber(LAB_in[params.dataIndex]);
+                                            }
+                                        },
+                                        z:10
+                                    },
+                                    {
+                                        name: 'LB出库',
+                                        type: 'bar',
+                                        stack: '出库',
+                                        data: LB_out,
+                                        itemStyle: {
+                                            color: '#33a02c' // 可自定义颜色
+                                        },
+                                        label: {
+                                            show: true,
+                                            position: 'insideTop',
+                                            color: '#FFFFFF',
+                                            formatter: function(params) {
+                                                return params.value === 0 ? '' : formatNumber(LB_out[params.dataIndex]);
+                                            }
+                                        }
+                                    },
+                                    {
+                                        name: 'LA出库',
+                                        type: 'bar',
+                                        stack: '出库',
+                                        data: LA_out,
+                                        itemStyle: {
+                                            color: '#d5270f' // 可自定义颜色
+                                        },
+                                        label: {
+                                            show: true,
+                                            position: 'top',
+                                            color: '#FFFFFF',
+                                            formatter: function(params) {
+                                                return params.value === 0 ? '' : formatNumber(LA_out[params.dataIndex]);
+                                            }
+                                        },
+                                        z:10
+                                    },
+                                    {
+                                        name: 'LAB出库',
+                                        type: 'bar',
+                                        stack: '出库',
+                                        data: LAB_out,
+                                        itemStyle: {
+                                            color: '#0a6ab6' // 可自定义颜色
+                                        },
+                                        label: {
+                                            show: true,
+                                            position: 'insideTop',
+                                            color: '#FFFFFF',
+                                            formatter: function(params) {
+                                                return params.value === 0 ? '' : formatNumber(LAB_out[params.dataIndex]);
+                                            }
+                                        }
+                                    },
+                                    {
+                                        name: 'LB库存',
+                                        type: 'bar',
+                                        stack: '库存',
+                                        data: LB_quantity,
+                                        itemStyle: {
+                                            color: '#33a02c' // 可自定义颜色
+                                        },
+                                        label: {
+                                            show: true,
+                                            position: 'insideTop',
+                                            color: '#FFFFFF',
+                                            formatter: function(params) {
+                                                return params.value === 0 ? '' : formatNumber(LB_quantity[params.dataIndex]);
+                                            }
+                                        }
+                                    },
+                                    {
+                                        name: 'LA库存',
+                                        type: 'bar',
+                                        stack: '库存',
+                                        data: LA_quantity,
+                                        itemStyle: {
+                                            color: '#d5270f' // 可自定义颜色
+                                        },
+                                        label: {
+                                            show: true,
+                                            position: 'top',
+                                            color: '#FFFFFF',
+                                            formatter: function(params) {
+                                                return params.value === 0 ? '' : formatNumber(LA_quantity[params.dataIndex]);
+                                            }
+                                        },
+                                        z:10
+                                    },
+                                    {
+                                        name: 'LAB库存',
+                                        type: 'bar',
+                                        stack: '库存',
+                                        data: LAB_quantity,
+                                        itemStyle: {
+                                            color: '#0563f3' // 可自定义颜色
+                                        },
+                                        label: {
+                                            show: true,
+                                            position: 'insideTop',
+                                            color: '#FFFFFF',
+                                            formatter: function(params) {
+                                                return params.value === 0 ? '' : formatNumber(LAB_quantity[params.dataIndex]);
+                                            }
+                                        }
+                                    }
+                                ]
+                            };
+                            // 使用配置项显示图表
+                            myChart.setOption(option);
+                            myChart.off('legendselectchanged');
+                            myChart.on('legendselectchanged', function (params) {
+                                legendSelected = params.selected; // 记录状态
+                                // 只更新 X 轴，不动 option
+                                myChart.setOption({
+                                    xAxis: {
+                                        axisLabel: {
+                                            formatter: function (value) {
+                                                const showIn = Object.keys(legendSelected).some(k => k.includes('入库') && legendSelected[k]);
+                                                const showOut = Object.keys(legendSelected).some(k => k.includes('出库') && legendSelected[k]);
+                                                const showStock = Object.keys(legendSelected).some(k => k.includes('库存') && legendSelected[k]);
+
+                                                const labels = [];
+                                                if (showIn) labels.push('{largeFont|入库}');
+                                                if (showOut) labels.push('{largeFont|出库}');
+                                                if (showStock) labels.push('{largeFont|在库}');
+
+                                                if (labels.length === 0) return '\n' + value;
+                                                return '\n' + labels.join('  ') + '\n\n' + value;
+                                            }
+                                        }
+                                    }
+                                });
+                            });
+                            setFiltersDisabled(false); // 恢复控件
+                            isUpdating = false;        // 解锁
+
+                        })
+                        .catch(error => {
+                            console.error('获取数据失败:', error);
+                        });
+                }
+
+                // 监听用户选择的变化
+                yearSelector.addEventListener('change', updateChart);
+                depositorySelect.addEventListener('change', updateChart);
+                stateSelect.addEventListener('change', updateChart);
+                customerSelect.addEventListener('change', updateChart);
+                updateChart();
+            // 获取元素
+            const yearSelector4 = document.getElementById('year-selector-four');
+            const depositorySelect4 = document.getElementById('depository-select-four');
+            const stateSelect4 = document.getElementById('state-select-four');
+            const chartContainer4 = document.getElementById('chart_4');
+            // 初始化年份选择器（您可以使用日期选择器库，这里假设使用简单的输入框）
+            const currentYear4 = new Date().toISOString().slice(0, 7); // 获取当前年月 (yyyy-MM)
+            yearSelector4.value = currentYear4;
+            // 初始化 ECharts 实例
+            const myChart4 = echarts.init(chartContainer4);
+            // 定义一个函数，用于获取数据并更新图表
+            function updateChart4() {
+                const selectedYear = yearSelector4.value;
+                const selectedDepository = depositorySelect4.value;
+                const selectedState = stateSelect4.value;
+                // 构造请求参数
+                const params = new URLSearchParams({
+                    yearMonth: selectedYear,
+                    depository: selectedDepository,
+                    state: selectedState
+                });
+
+                // 发送 AJAX 请求到后端 API
+                fetch(`/bearingRecords/dayInventory?${params.toString()}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // 格式化数字为 "万" 或者普通数值
+                        function formatNumber(num) {
+                            if (num >= 10000) {
+                                return (num / 10000).toFixed(0) + '万';  // 显示为万
+                            } else {
+                                return num.toString();  // 小于10000直接显示
+                            }
+                        }
+                        // 处理返回的数据
+                        const days = [];
+                        const LA_quantity = [];
+                        const LB_quantity = [];
+                        const total_quantity = [];
+                        data.forEach(item => {
+                            days.push(item.day);
+                            LA_quantity.push(item.LA_quantity || 0);
+                            LB_quantity.push(item.LB_quantity || 0);
+                            total_quantity.push((item.LA_quantity || 0) + (item.LB_quantity || 0));
+                        });
+                        const averageLA = (LA_quantity.reduce((sum, val) => sum + val, 0) / LA_quantity.length).toFixed(2);
+                        const averageLB = (LB_quantity.reduce((sum, val) => sum + val, 0) / LB_quantity.length).toFixed(2);
+                        const averageLAInWan = (averageLA / 10000).toFixed(0);
+                        const averageLBInWan = (averageLB / 10000).toFixed(0);
+                        // 设置图表配置项
+                        const option = {
+                            textStyle: {
+                                color: '#FFFFFF' // 白色
+                            },
+                            grid: {
+                                left: '10%',
+                                right: '10%',
+                                top: '10%',
+                                bottom: '20%',
+                            },
+                            tooltip: {
+                                trigger: 'item',
+                                textStyle: {
+                                    color: '#FFFFFF' // 提示文字颜色
+                                },
+                                formatter: function (params) {
+                                    // 定义堆叠组名称数组
+                                    const stackNames = ['在库'];
+
+                                    // 找到当前系列的索引
+                                    const seriesIndex = params.seriesIndex;
+
+                                    // 确定堆叠组名称
+                                    const stackName = stackNames[Math.floor(seriesIndex / 2)]; // 每组两个系列
+
+                                    // 获取分类信息
+                                    const materialType = params.seriesName;
+
+                                    // 获取当前值
+                                    const value = params.value.toLocaleString(); // 格式化值为千分位
+
+                                    // 返回完整提示信息
+                                    return `${materialType}${stackName}: ${value}`;
+                                }
+                            },
+                            legend: {
+                                data: ['LA', 'LB'], // 这里保留与 series.name 对应的值
+                                textStyle: {
+                                    color: '#FFFFFF' // 图例字体颜色
+                                },
+                                formatter: (name) => {
+                                    // 根据图例名称追加平均值
+                                    if (name === 'LA') {
+                                        return `{a|LA}\n{b|平均：${averageLAInWan}万}`;
+                                    } else if (name === 'LB') {
+                                        return `{a|LB}\n{b|平均：${averageLBInWan}万}`;
+                                    }
+                                    return name;
+                                },
+                                itemGap: 20, // 控制图例之间的间距
+                                textStyle: {
+                                    rich: {
+                                        a: {
+                                            fontSize: 14,
+                                            color: '#FFFFFF',
+                                            fontWeight: 'bold'
+                                        },
+                                        b: {
+                                            fontSize: 12,
+                                            color: '#FFD700' // 平均值部分可以使用不同颜色区分
+                                        }
+                                    }
+                                }
+                            },
+                            xAxis: {
+                                type: 'category',
+                                data: days,
+                                axisLabel: {
+                                    interval: 0, // 保证所有月份标签都显示
+                                    rotate: 0,  // 旋转标签以防重叠
+                                    color: '#FFFFFF', // X轴文字颜色
+                                    rich: {
+                                        largeFont: {
+                                            fontSize: 11, // 设置自定义标签的字体大小
+                                            color: '#FFFFFF' // 自定义标签的颜色
+                                        }
+                                    },
+                                    formatter: function (value, index) {
+                                        return value.slice(5);
+                                    }
+                                },
+                                axisLine: {
+                                    lineStyle: {
+                                        color: '#FFFFFF' // X轴轴线颜色
+                                    }
+                                },
+                                axisTick: {
+                                    lineStyle: {
+                                        color: '#FFFFFF' // X轴刻度颜色
+                                    }
+                                }
+                            },
+                            yAxis: {
+                                type: 'value',
+                                max: 50000000 ,
+                                axisLabel: {
+                                    color: '#FFFFFF' // Y轴标签字体颜色
+                                },
+                                axisLine: {
+                                    lineStyle: {
+                                        color: '#FFFFFF' // Y轴轴线颜色
+                                    }
+                                },
+                                axisTick: {
+                                    lineStyle: {
+                                        color: '#FFFFFF' // Y轴刻度颜色
+                                    }
+                                },
+                                splitLine: {
+                                    lineStyle: {
+                                        color: '#FFFFFF' // 网格线颜色，如果需要
+                                    }
+                                }
+                            },
+                            series: [
+                                {
+                                    name: 'LB',
+                                    type: 'bar',
+                                    stack: '库存',
+                                    data: LB_quantity,
+                                    itemStyle: {
+                                        color: '#33a02c' // 可自定义颜色
+                                    },
+                                    label: {
+                                        show: true,
+                                        position: 'insideTop',
+                                        color: '#FFFFFF',
+                                        formatter: function(params) {
+                                            return params.value === 0 ? '' : formatNumber(LB_quantity[params.dataIndex]);
+                                        }
+                                    },
+                                },
+                                {
+                                    name: 'LA',
+                                    type: 'bar',
+                                    stack: '库存',
+                                    data: LA_quantity,
+                                    itemStyle: {
+                                        color: '#d5270f' // 可自定义颜色
+                                    },
+                                    label: {
+                                        show: true,
+                                        position: 'insideTop',
+                                        color: '#FFFFFF',
+                                        formatter: function(params) {
+                                            return params.value === 0 ? '' : formatNumber(LA_quantity[params.dataIndex]);
+                                        }
+                                    },
+                                    z: 10
+                                }
+                            ]
+                        };
+                        // 使用配置项显示图表
+                        myChart4.setOption(option);
+                    })
+                    .catch(error => {
+                        console.error('获取数据失败:', error);
+                    });
+            }
+            // 监听用户选择的变化
+            depositorySelect4.addEventListener('change', updateChart4);
+            stateSelect4.addEventListener('change', updateChart4);
+            updateChart4();
+        });
+    </script>
+</body>
+</html>

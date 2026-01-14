@@ -1,0 +1,596 @@
+
+  {
+    "homeInfo": {
+      "title": "首页",
+      "href": "/welcome"
+    },
+    "logoInfo": {
+      "title": "综合仓库",
+      "image": "static/images/xuri-logo.jpeg",
+      "href": ""
+    },
+    "menuInfo": [
+      {
+        "title": "仓库信息概览",
+        "href": "/welcome",
+        "icon": "fa fa-tachometer",
+        "target": "_self",
+        "child": [
+          {
+            "title": "首页",
+            "href": "/welcome",
+            "icon": "fa fa-home",
+            "target": "_self"
+          }
+        ]
+      },
+      {
+        "title": "仓库管理",
+        "icon": "fa fa-lemon-o",
+        "href": "",
+        "target": "_self",
+        "child": [
+          {
+            "title": "申请提交",
+            "icon": "fa fa-book",
+            "target": "_self",
+            "child": [
+              {
+                "title": "入库申请",
+                "href": "/application_in",
+                "icon": "layui-icon layui-icon-file-b",
+                "target": "_self"
+              },
+              {
+                "title": "出库申请",
+                "href": "/application_out",
+                "icon": "fa fa-file-text",
+                "target": "_self"
+              },
+              {
+                "title": "库存转移申请",
+                "href": "application_transfer",
+                "icon": "fa fa-exchange",
+                "target": "_self"
+              }
+            ]
+          },
+          {
+            "title": "入库管理",
+            "icon": "fa fa-mail-forward",
+            "target": "_self",
+            "child": [
+              {
+                "title": "入库查询",
+                "href": "/table_in",
+                "icon": "fa fa-th-list",
+                "target": "_self"
+              },
+              {
+                "title": "入库可视化",
+                "href": "/chart_in",
+                "icon": "fa fa-bar-chart",
+                "target": "_self"
+              }
+            ]
+          },
+          {
+            "title": "出库管理",
+            "icon": "fa fa-mail-reply",
+            "target": "_self",
+            "child": [
+              {
+                "title": "出库查询",
+                "href": "/table_out",
+                "icon": "fa fa-th-list",
+                "target": "_self"
+              },
+              {
+                "title": "出库可视化",
+                "href": "/chart_out",
+                "icon": "fa fa-pie-chart",
+                "target": "_self"
+              }
+            ]
+          },
+          {
+            "title": "库存管理",
+            "icon": "fa fa-server",
+            "target": "_self",
+            "child": [
+              {
+                "title": "库存查询",
+                "href": "/table_stock",
+                "icon": "fa fa-th-list",
+                "target": "_self"
+              },
+              {
+                "title": "库存可视化",
+                "href": "/chart_stock",
+                "icon": "fa fa-area-chart",
+                "target": "_self"
+              }
+            ]
+          },
+          {
+            "title": "基础数据",
+            "icon": "fa fa-wrench",
+            "target": "_self",
+            "child": [
+              {
+                "title": "物品信息",
+                "href": "/material_add",
+                "icon": "layui-icon layui-icon-list",
+                "target": "_self"
+              },
+              {
+                "title": "型号信息",
+                "href": "/materialType_add",
+                "icon": "layui-icon layui-icon-list",
+                "target": "_self"
+              },
+              {
+                "title": "工程信息",
+                "href": "/materialEngin_add",
+                "icon": "layui-icon layui-icon-list",
+                "target": "_self"
+              },
+              {
+                "title": "厂区信息",
+                "href": "/depository_add",
+                "icon": "layui-icon layui-icon-template-1",
+                "target": "_self"
+              },
+              {
+                "title": "汇率信息",
+                "href": "/rate_add",
+                "icon": "layui-icon layui-icon-template-1",
+                "target": "_self"
+              }
+            ]
+          },
+          {
+            "title": "报表查看",
+            "icon": "fa fa-map",
+            "target": "_self",
+            "child": [
+              {
+                "title": "各类总表",
+                "href": "/every_type",
+                "icon": "layui-icon layui-icon-list",
+                "target": "_self"
+              },
+              {
+                "title": "细化表",
+                "href": "/total_table",
+                "icon": "layui-icon layui-icon-list",
+                "target": "_self"
+              },
+              {
+                "title": "转移表",
+                "href": "/transfer_table",
+                "icon": "layui-icon layui-icon-list",
+                "target": "_self"
+              }
+            ]
+          },
+          {
+            "title": "任务审批",
+            "icon": "fa fa-tasks",
+            "target": "_self",
+            "href": "/my_task"
+          },
+          {
+            "title": "一次性相关",
+            "icon": "fa fa-tasks",
+            "target": "_self",
+            "child": [
+              {
+                "title": "一次性填写",
+                "href": "/welcome",
+                "icon": "layui-icon layui-icon-list",
+                "target": "_self"
+              },
+              {
+                "title": "一次性报表",
+                "href": "/welcome",
+                "icon": "layui-icon layui-icon-list",
+                "target": "_self"
+              }
+            ]
+          },
+          {
+            "homeInfo": {
+              "title": "首页",
+              "href": "/welcome"
+            },
+            "logoInfo": {
+              "title": "综合仓库",
+              "image": "static/images/xuri-logo.jpeg",
+              "href": "/index#//welcome"
+            },
+            "menuInfo": [
+              {
+                "title": "仓库信息",
+                "href": "/welcome",
+                "icon": "fa fa-tachometer",
+                "target": "_self",
+                "roles": [
+                  "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                ],
+                "child": [
+                  {
+                    "title": "首页",
+                    "href": "/welcome",
+                    "icon": "fa fa-home",
+                    "target": "_self",
+                    "roles": [
+                      "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                    ]
+                  }
+                ]
+              },
+              {
+                "title": "仓库管理",
+                "icon": "fa fa-lemon-o",
+                "href": "",
+                "target": "_self",
+                "roles": [
+                  "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                ],
+                "child": [
+                  {
+                    "title": "申请提交",
+                    "icon": "fa fa-book",
+                    "target": "_self",
+                    "roles": [
+                      "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                    ],
+                    "child": [
+                      {
+                        "title": "入库申请",
+                        "href": "/application_in",
+                        "icon": "fa fa-arrow-down",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      },
+                      {
+                        "title": "出库申请",
+                        "href": "/application_out",
+                        "icon": "fa fa-arrow-up",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      },
+                      {
+                        "title": "库存转移申请",
+                        "href": "application_transfer",
+                        "icon": "fa fa-exchange",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "title": "入库管理",
+                    "icon": "fa fa-mail-forward",
+                    "target": "_self",
+                    "roles": [
+                      "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                    ],
+                    "child": [
+                      {
+                        "title": "入库查询",
+                        "href": "/table_in",
+                        "icon": "fa fa-th-list",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "title": "出库管理",
+                    "icon": "fa fa-mail-reply",
+                    "target": "_self",
+                    "roles": [
+                      "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                    ],
+                    "child": [
+                      {
+                        "title": "出库查询",
+                        "href": "/table_out",
+                        "icon": "fa fa-th-list",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "title": "库存管理",
+                    "icon": "fa fa-server",
+                    "target": "_self",
+                    "roles": [
+                      "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                    ],
+                    "child": [
+                      {
+                        "title": "库存查询",
+                        "href": "/table_stock",
+                        "icon": "fa fa-th-list",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "title": "基础数据",
+                    "icon": "fa fa-wrench",
+                    "target": "_self",
+                    "roles": [
+                      "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                    ],
+                    "child": [
+                      {
+                        "title": "物品信息",
+                        "href": "/material_add",
+                        "icon": "layui-icon layui-icon-file",
+                        "target": "_self",
+                        "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+                      },
+                      {
+                        "title": "分类信息",
+                        "href": "/materialType_add",
+                        "icon": "layui-icon layui-icon-tabs",
+                        "target": "_self",
+                        "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+                      },
+                      {
+                        "title": "工程信息",
+                        "href": "/materialEngin_add",
+                        "icon": "layui-icon layui-icon-util",
+                        "target": "_self",
+                        "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+                      },
+                      {
+                        "title": "厂区信息",
+                        "href": "/depository_add",
+                        "icon": "layui-icon layui-icon-template",
+                        "target": "_self",
+                        "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+                      },
+                      {
+                        "title": "汇率信息",
+                        "href": "/rate_add",
+                        "icon": "layui-icon layui-icon-dollar",
+                        "target": "_self",
+                        "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+                      },
+                      {
+                        "title": "领用信息",
+                        "href": "/dropData_add",
+                        "icon": "layui-icon layui-icon-form",
+                        "target": "_self",
+                        "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+                      },
+                      {
+                        "title": "产量信息",
+                        "href": "/productInfo_add",
+                        "icon": "layui-icon layui-icon-chart",
+                        "target": "_self",
+                        "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+                      }
+                    ]
+                  },
+                  {
+                    "title": "报表查看",
+                    "icon": "fa fa-map",
+                    "target": "_self",
+                    "roles": [
+                      "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                    ],
+                    "child": [
+                      {
+                        "title": "成本分类报表",
+                        "href": "/every_type",
+                        "icon": "layui-icon layui-icon-list",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      },
+                      {
+                        "title": "部品明细报表",
+                        "href": "/total_table",
+                        "icon": "layui-icon layui-icon-list",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      },
+                      {
+                        "title": "互借明细",
+                        "href": "/transfer_table",
+                        "icon": "layui-icon layui-icon-list",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "title": "任务审批",
+                    "icon": "fa fa-tasks",
+                    "target": "_self",
+                    "href": "/my_task",
+                    "roles": [
+                      "SAB_sh", "ZAB_sh", "ALL"
+                    ]
+                  },
+                  {
+                    "title": "一次性相关",
+                    "icon": "fa fa-tasks",
+                    "target": "_self",
+                    "roles": [
+                      "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                    ],
+                    "child": [
+                      {
+                        "title": "一次性填写",
+                        "href": "/once_add",
+                        "icon": "fa fa-pencil",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      },
+                      {
+                        "title": "一次性报表",
+                        "href": "/once_table",
+                        "icon": "layui-icon layui-icon-list",
+                        "target": "_self",
+                        "roles": [
+                          "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "title": "Dd",
+                    "icon": "fa fa-tasks",
+                    "target": "_self",
+                    "roles": [
+                      "ALL"
+                    ],
+                    "child": [
+                      {
+                        "title": "入库可视化",
+                        "href": "/chart_in",
+                        "icon": "fa fa-bar-chart",
+                        "target": "_self",
+                        "roles": [
+                          "ALL"
+                        ]
+                      },
+                      {
+                        "title": "出库可视化",
+                        "href": "/chart_out",
+                        "icon": "fa fa-pie-chart",
+                        "target": "_self",
+                        "roles": [
+                          "ALL"
+                        ]
+                      },
+                      {
+                        "title": "库存可视化",
+                        "href": "/chart_stock",
+                        "icon": "fa fa-area-chart",
+                        "target": "_self",
+                        "roles": [
+                          "ALL"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "title": "辅助管理",
+                "icon": "fa fa-slideshare",
+                "href": "",
+                "target": "_self",
+                "roles": [
+                  "ALL"
+                ],
+                "child": [
+                  {
+                    "title": "人员管理",
+                    "href": "/table_user",
+                    "icon": "fa fa-group",
+                    "target": "",
+                    "roles": [
+                      "ALL"
+                    ]
+                  },
+                  {
+                    "title": "公告发布",
+                    "href": "/notice_edit",
+                    "icon": "fa fa-superpowers",
+                    "target": "_self",
+                    "roles": [
+                      "ALL"
+                    ]
+                  }
+                ]
+              },
+              {
+                "title": "个人中心",
+                "href": "pages/error.html",
+                "icon": "fa fa-superpowers",
+                "target": "_self",
+                "roles": [
+                  "ALL"
+                ],
+                "child": [
+                  {
+                    "title": "个人信息",
+                    "href": "/account_look",
+                    "icon": "layui-icon layui-icon-friends",
+                    "target": "",
+                    "roles": [
+                      "ALL"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "辅助管理",
+        "icon": "fa fa-slideshare",
+        "href": "",
+        "target": "_self",
+        "child": [
+          {
+            "title": "人员管理",
+            "href": "/table_user",
+            "icon": "fa fa-group",
+            "target": ""
+          },
+          {
+            "title": "公告发布",
+            "href": "/notice_edit",
+            "icon": "fa fa-superpowers",
+            "target": "_self"
+          }
+        ]
+      },
+      {
+        "title": "个人中心",
+        "href": "pages/error.html",
+        "icon": "fa fa-superpowers",
+        "target": "_self",
+        "child": [
+          {
+            "title": "个人信息",
+            "href": "/account_look",
+            "icon": "layui-icon layui-icon-friends",
+            "target": ""
+          }
+        ]
+      }
+    ]
+  }

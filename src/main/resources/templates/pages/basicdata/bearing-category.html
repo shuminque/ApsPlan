@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>成品分类基础表</title>
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+    <!-- jQuery 库 -->
+    <script src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <button id="addCategoryBtn" class="layui-btn">添加成品分类</button>
+
+    <table id="recordTable" lay-filter="recordTableFilter"></table>
+</div>
+
+<!-- 工具栏模板 -->
+<script type="text/html" id="actionBar">
+    <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+    <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="delete">删除</a>
+</script>
+<!-- 添加分类的表单（在弹出层中显示） -->
+<div id="addCategoryForm" style="display: none; padding: 20px;">
+    <form class="layui-form" lay-filter="addForm">
+        <div class="layui-form-item">
+            <label class="layui-form-label">编号 ：</label>
+            <div class="layui-input-block">
+                <input type="text" name="id" required lay-verify="required" placeholder="请输入编号" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 输入字段 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">分类名称：</label>
+            <div class="layui-input-block">
+                <input type="text" name="name" required lay-verify="required" placeholder="请输入分类名称" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 提交按钮 -->
+        <div class="layui-form-item">
+            <div class="layui-input-block">
+                <button type="submit" class="layui-btn" lay-submit lay-filter="submitAddForm">提交</button>
+            </div>
+        </div>
+    </form>
+</div>
+<!-- 编辑分类的表单（在弹出层中显示） -->
+<script type="text/template" id="editStateModelTemplate">
+    <form class="layui-form" lay-filter="editStateFormFilter">
+        <!-- 状态编号 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">分类编号</label>
+            <div class="layui-input-block">
+                <input type="text" placeholder="请输入分类编号" name="id" required class="layui-input" readonly>
+            </div>
+        </div>
+        <!-- 状态名称 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">分类名称</label>
+            <div class="layui-input-block">
+                <input type="text" placeholder="请输入分类名称" name="name" required class="layui-input">
+            </div>
+        </div>
+        <!-- 提交按钮 -->
+        <div class="layui-form-item" style="text-align: center;">
+            <button class="layui-btn layui-btn-normal" lay-submit lay-filter="editStateSubmitBtnFilter">
+                更新分类
+            </button>
+        </div>
+    </form>
+</script>
+<script>
+    layui.use(['table', 'form', 'layer'], function(){
+        var table = layui.table;
+        var form = layui.form;
+        var layer = layui.layer;
+
+        // 渲染表格
+        table.render({
+            elem: '#recordTable',
+            url: '/productCategories/', // 数据接口
+            parseData: function(res) { // 将原始数据格式适配成 layui 表格组件所期望的格式
+                return {
+                    "code": 0, // 解析接口状态
+                    "msg": "", // 解析提示文本
+                    "count": res.length, // 解析数据长度
+                    "data": res // 解析数据列表
+                };
+            },
+            cols: [ [ // 表头
+                {field: 'id', title: 'ID'},
+                {field: 'name', title: '名称'},
+                {title: '操作', toolbar: '#actionBar'} // 添加操作列
+            ]],
+            limit:20,
+            page: true //开启分页
+        });
+        $('#addCategoryBtn').click(function() {
+            layer.open({
+                type: 1,
+                title: '添加制品分类',
+                content: $('#addCategoryForm'),
+                area: ['500px', '300px'],
+                success: function(layero, index) {
+                    form.render(); // 渲染表单
+                },
+                end: function() {
+                    $('#addCategoryForm').attr('style', 'display: none;'); // 重新设置style属性为display: none;
+                }
+            });
+        });
+        form.on('submit(submitAddForm)', function(data) {
+            // 获取表单数据
+            var formData = data.field;
+
+            // 发送 AJAX 请求到服务器
+            $.ajax({
+                url: '/productCategories/', // 服务器端的添加分类接口
+                type: 'POST',
+                contentType: 'application/json', // 发送数据的格式
+                data: JSON.stringify(formData), // 将表单数据转换为 JSON 字符串
+                success: function(response) {
+                    // 这里处理请求成功的情况
+                    console.log(response); // 打印服务器返回的数据
+                    layer.msg('分类添加成功！', {icon: 1, time: 2000}); // 弹出成功消息
+                    table.reload('recordTable'); // 重新加载表格数据
+                },
+                error: function(xhr, status, error) {
+                    // 这里处理请求失败的情况
+                    console.error(error); // 打印错误信息
+                    layer.msg('添加失败！', {icon: 2, time: 2000}); // 弹出失败消息
+                },
+                complete: function () {
+                    form.val("addForm",{
+                        'id':"",
+                        'name':""
+                    })
+                }
+            });
+
+            return false; // 阻止表单跳转
+        });
+
+        // 监听工具条
+        table.on('tool(recordTableFilter)', function(obj){
+            var data = obj.data; // 获得当前行数据
+            var layEvent = obj.event; // 获得 lay-event 对应的值（也就是自定义的事件名）
+            if(layEvent === 'edit'){
+                // 编辑操作
+                editProductCategory(data);
+            } else if(layEvent === 'delete'){
+                // 删除操作
+                deleteProductCategory(data.id);
+            }
+        });
+        function editProductCategory(data) {
+            // 打开弹出层
+            layer.open({
+                type: 1,
+                title: '编辑分类',
+            content: $('#editStateModelTemplate').html(), // 使用模板的内容
+                area: ['500px', '300px'],
+                success: function(layero, index) {
+                    // 使用 layui.form 来填充表单数据
+                    layui.form.val('editStateFormFilter', {
+                        'id': data.id,
+                        'name': data.name
+                    });
+                    layui.form.render();
+                }
+            });
+        }
+
+        // 监听编辑表单的提交事件
+        layui.form.on('submit(editStateSubmitBtnFilter)', function(data) {
+            var formData = data.field; // 获取表单数据
+            // 发送 AJAX 请求来更新数据
+            $.ajax({
+                url: '/productCategories/' + formData.id, // 假设这是更新分类的接口
+                type: 'PUT', // 使用 PUT 方法更新
+                contentType: 'application/json', // 发送数据的格式
+                data: JSON.stringify(formData), // 将表单数据转换为 JSON 字符串
+                success: function(response) {
+                    // 处理请求成功的情况
+                    layer.msg('更新成功！', {icon: 1, time: 2000});
+                    table.reload('recordTable'); // 重新加载表格数据
+                    layer.closeAll(); // 关闭所有弹出层
+                },
+                error: function(xhr, status, error) {
+                    // 处理请求失败的情况
+                    layer.msg('更新失败！', {icon: 2, time: 2000});
+                }
+            });
+            return false; // 阻止表单跳转
+        });
+
+        function deleteProductCategory(id) {
+            layer.confirm('确定要删除吗？', function (index) {
+                $.ajax({
+                    url: '/productCategories/' + id,
+                    type: 'DELETE',
+                    success: function(res) {
+                        layer.msg('删除成功！');
+                        layui.table.reload('recordTable'); // 重新加载表格
+                    },
+                    error: function(err) {
+                        layer.msg('删除失败！');
+                    }
+                });
+                layer.close(index);
+            });
+        }
+    });
+</script>
+</body>
+</html>

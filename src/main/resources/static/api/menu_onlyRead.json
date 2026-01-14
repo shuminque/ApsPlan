@@ -1,0 +1,258 @@
+{
+  "homeInfo": {
+    "title": "首页",
+    "href": "/welcome"
+  },
+  "logoInfo": {
+    "title": "综合仓库",
+    "image": "static/images/xuri-logo.jpeg",
+    "href": "/index#//welcome"
+  },
+  "menuInfo": [
+    {
+      "title": "仓库信息",
+      "href": "/welcome",
+      "icon": "fa fa-tachometer",
+      "target": "_self",
+      "roles": [
+        "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+      ],
+      "child": [
+        {
+          "title": "首页",
+          "href": "/welcome",
+          "icon": "fa fa-home",
+          "target": "_self",
+          "roles": [
+            "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "仓库管理",
+      "icon": "fa fa-lemon-o",
+      "href": "",
+      "target": "_self",
+      "roles": [
+        "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+      ],
+      "child": [
+        {
+          "title": "操作提交",
+          "icon": "fa fa-book",
+          "target": "_self",
+          "roles": [
+            "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+          ],
+          "child": [
+            {
+              "title": "入库操作",
+              "href": "/BearingStorage-in",
+              "icon": "fa fa-arrow-down",
+              "target": "_self",
+              "roles": [
+                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+              ]
+            },
+            {
+              "title": "出库操作",
+              "href": "/BearingStorage-out",
+              "icon": "fa fa-arrow-up",
+              "target": "_self",
+              "roles": [
+                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+              ]
+            },
+            {
+              "title": "返库操作",
+              "href": "/BearingStorage-return",
+              "icon": "fa fa-exchange",
+              "target": "_self",
+              "roles": [
+                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+              ]
+            },
+            {
+              "title": "转入操作",
+              "href": "/BearingStorage-tranIn",
+              "icon": "fa fa-exchange",
+              "target": "_self",
+              "roles": [
+                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+              ]
+            },
+            {
+              "title": "转出操作",
+              "href": "/BearingStorage-tranOut",
+              "icon": "fa fa-exchange",
+              "target": "_self",
+              "roles": [
+                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "产品仓库管理",
+          "icon": "fa fa-server",
+          "target": "_self",
+          "roles": [
+            "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+          ],
+          "child": [
+            {
+              "title": "进出查询",
+              "href": "/Inquire-all",
+              "icon": "fa fa-th-list",
+              "target": "_self",
+              "roles": [
+                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+              ]
+            },
+            {
+              "title": "在库查询",
+              "href": "/Inquire-stock",
+              "icon": "fa fa-th-list",
+              "target": "_self",
+              "roles": [
+                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+              ]
+            },
+            {
+              "title": "溶解号登记",
+              "href": "/Inquire-dissolve",
+              "icon": "fa fa-th-list",
+              "target": "_self",
+              "roles": [
+                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+              ]
+            },
+            {
+              "title": "二维码生成",
+              "href": "/GenerateAndPrintQR",
+              "icon": "fa fa-th-list",
+              "target": "_self",
+              "roles": [
+                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "基础数据",
+          "icon": "fa fa-wrench",
+          "target": "_self",
+          "roles": [
+            "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
+          ],
+          "child": [
+            {
+              "title": "成品信息",
+              "href": "/bearings",
+              "icon": "layui-icon layui-icon-file",
+              "target": "_self",
+              "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+            },
+            {
+              "title": "成品分类",
+              "href": "/bearing-category",
+              "icon": "layui-icon layui-icon-tabs",
+              "target": "_self",
+              "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+            },
+            {
+              "title": "钢材等级",
+              "href": "/bearing-steel-grade",
+              "icon": "layui-icon layui-icon-util",
+              "target": "_self",
+              "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+            },
+            {
+              "title": "钢厂信息",
+              "href": "/bearing-steel-type",
+              "icon": "layui-icon layui-icon-dollar",
+              "target": "_self",
+              "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+            },
+            {
+              "title": "厂区信息",
+              "href": "/depository_add",
+              "icon": "layui-icon layui-icon-template",
+              "target": "_self",
+              "roles": ["SAB_cg","SAB_sh","ZAB_cg","ZAB_sh","ALL"]
+            }
+          ]
+        },
+        {
+          "title": "报表查看",
+          "icon": "fa fa-map",
+          "target": "_self",
+          "roles": [
+            "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+          ],
+          "child": [
+            {
+              "title": "制品在库报表",
+              "href": "/every_pair",
+              "icon": "layui-icon layui-icon-list",
+              "target": "_self",
+              "roles": [
+                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "辅助管理",
+      "icon": "fa fa-slideshare",
+      "href": "",
+      "target": "_self",
+      "roles": [
+        "ALL"
+      ],
+      "child": [
+        {
+          "title": "人员管理",
+          "href": "/table_user",
+          "icon": "fa fa-group",
+          "target": "",
+          "roles": [
+            "ALL"
+          ]
+        },
+        {
+          "title": "公告发布",
+          "href": "/notice_edit",
+          "icon": "fa fa-superpowers",
+          "target": "_self",
+          "roles": [
+            "ALL"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "个人中心",
+      "href": "pages/error.html",
+      "icon": "fa fa-superpowers",
+      "target": "_self",
+      "roles": [
+        "ALL"
+      ],
+      "child": [
+        {
+          "title": "个人信息",
+          "href": "/account_look",
+          "icon": "layui-icon layui-icon-friends",
+          "target": "",
+          "roles": [
+            "ALL"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>钢材等级基础表</title>
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+    <!-- jQuery 库 -->
+    <script src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <button id="addGradeBtn" class="layui-btn">添加钢材等级</button>
+    <table id="gradeTable" lay-filter="gradeTableFilter"></table>
+</div>
+
+<!-- 工具栏模板 -->
+<script type="text/html" id="actionBar">
+    <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+    <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="delete">删除</a>
+</script>
+
+<!-- 添加钢材等级的表单（在弹出层中显示） -->
+<div id="addGradeForm" style="display: none; padding: 20px;">
+    <form class="layui-form" lay-filter="addForm">
+        <div class="layui-form-item">
+            <label class="layui-form-label">名称：</label>
+            <div class="layui-input-block">
+                <input type="text" name="grade" required lay-verify="required" placeholder="请输入钢材等级名称" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <div class="layui-input-block">
+                <button type="submit" class="layui-btn" lay-submit lay-filter="submitAddForm">提交</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- 编辑钢材等级的表单模板 -->
+<script type="text/template" id="editGradeModelTemplate">
+    <form class="layui-form" lay-filter="editGradeFormFilter">
+        <div class="layui-form-item">
+            <label class="layui-form-label">编号：</label>
+            <div class="layui-input-block">
+                <input type="text" name="id" required class="layui-input" readonly>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">名称：</label>
+            <div class="layui-input-block">
+                <input type="text" name="grade" required lay-verify="required" placeholder="请输入钢材等级名称" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item" style="text-align: center;">
+            <button class="layui-btn layui-btn-normal" lay-submit lay-filter="editGradeSubmitBtnFilter">
+                更新
+            </button>
+        </div>
+    </form>
+</script>
+
+<script>
+    layui.use(['table', 'form', 'layer'], function(){
+        var table = layui.table;
+        var form = layui.form;
+        var layer = layui.layer;
+
+        // 渲染表格
+        table.render({
+            elem: '#gradeTable',
+            url: '/steelGrades/', // 数据接口
+            parseData: function(res) { // 将原始数据格式适配成 layui 表格组件所期望的格式
+                return {
+                    "code": 0,
+                    "msg": "",
+                    "count": res.length,
+                    "data": res
+                };
+            },
+            cols: [ [
+                {field: 'id', title: 'ID'},
+                {field: 'grade', title: '名称'},
+                {title: '操作', toolbar: '#actionBar'}
+            ]],
+            limit: 20,
+            page: true
+        });
+
+        $('#addGradeBtn').click(function() {
+            layer.open({
+                type: 1,
+                title: '添加钢材等级',
+                content: $('#addGradeForm'),
+                area: ['500px', '300px'],
+                success: function(layero, index) {
+                    form.render();
+                },
+                end: function() {
+                    $('#addGradeForm').hide();
+                }
+            });
+        });
+
+        form.on('submit(submitAddForm)', function(data) {
+            var formData = data.field;
+            // 发送 AJAX 请求到服务器
+            $.ajax({
+                url: '/steelGrades/', // 服务器端的添加分类接口
+                type: 'POST',
+                contentType: 'application/json', // 发送数据的格式
+                data: JSON.stringify(formData), // 将表单数据转换为 JSON 字符串
+                success: function(response) {
+                    // 这里处理请求成功的情况
+                    console.log(response); // 打印服务器返回的数据
+                    layer.msg('添加成功！', {icon: 1, time: 2000}); // 弹出成功消息
+                    table.reload('gradeTable'); // 重新加载表格数据
+                },
+                error: function(xhr, status, error) {
+                    // 这里处理请求失败的情况
+                    console.error(error); // 打印错误信息
+                    layer.msg('添加失败！', {icon: 2, time: 2000}); // 弹出失败消息
+                },
+                complete: function () {
+                    form.val("addForm",{
+                        'id':"",
+                        'grade':""
+                    })
+                }
+            });
+            return false;
+        });
+
+        table.on('tool(gradeTableFilter)', function(obj) {
+            var data = obj.data;
+            var layEvent = obj.event;
+            if (layEvent === 'edit') {
+                editSteelGrade(data);
+            } else if (layEvent === 'delete') {
+                deleteSteelGrade(data.id);
+            }
+        });
+
+        function editSteelGrade(data) {
+            // 打开弹出层
+            layer.open({
+                type: 1,
+                title: '编辑钢等',
+                content: $('#editGradeModelTemplate').html(), // 使用模板的内容
+                area: ['500px', '300px'],
+                success: function(layero, index) {
+                    // 使用 layui.form 来填充表单数据
+                    layui.form.val('editGradeFormFilter', {
+                        'id': data.id,
+                        'grade': data.grade
+                    });
+                    layui.form.render();
+                }
+            });
+        }
+        // 监听编辑表单的提交事件
+        layui.form.on('submit(editGradeSubmitBtnFilter)', function(data) {
+            var formData = data.field; // 获取表单数据
+            // 发送 AJAX 请求来更新数据
+            $.ajax({
+                url: '/steelGrades/' + formData.id, // 假设这是更新分类的接口
+                type: 'PUT', // 使用 PUT 方法更新
+                contentType: 'application/json', // 发送数据的格式
+                data: JSON.stringify(formData), // 将表单数据转换为 JSON 字符串
+                success: function(response) {
+                    layer.close(this.layerIndex);
+                    // 处理请求成功的情况
+                    layer.msg('更新成功！', {icon: 1, time: 3000});
+                    table.reload('gradeTable'); // 重新加载表格数据
+                    layer.closeAll(); // 关闭所有弹出层
+                },
+                error: function(xhr, status, error) {
+                    // 处理请求失败的情况
+                    layer.msg('更新失败！', {icon: 2, time: 3000});
+                }
+            });
+            return false; // 阻止表单跳转
+        });
+        function deleteSteelGrade(id) {
+            layer.confirm('确定要删除吗？', function (index) {
+                $.ajax({
+                    url: '/steelGrades/' + id,
+                    type: 'DELETE',
+                    success: function(res) {
+                        layer.msg('删除成功！');
+                        layui.table.reload('gradeTable'); // 重新加载表格
+                    },
+                    error: function(err) {
+                        layer.msg('删除失败！');
+                    }
+                });
+                layer.close(index);
+            });
+        }
+    });
+</script>
+</body>
+</html>

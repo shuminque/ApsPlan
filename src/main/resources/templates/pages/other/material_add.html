@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <title>部品信息</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="/static/lib/layui-v2.6.3/css/layui.css" media="all">
+    <link rel="stylesheet" href="/static/css/public.css" media="all">
+</head>
+<body>
+<div class="layuimini-container">
+    <div class="layuimini-main">
+        <fieldset class="table-search-fieldset">
+            <legend>搜索信息</legend>
+            <div style="margin: 10px 10px 10px 10px">
+                <form class="layui-form layui-form-pane" action="">
+                    <div class="layui-form-item">
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <select name="depositoryId" >
+                                    <option value="" selected>请选择厂区</option>
+                                    <option value="1">SAB</option>
+                                    <option value="2">ZAB</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="atId" autocomplete="off" class="layui-input" placeholder="搜索AT号">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="mname" autocomplete="off" class="layui-input" placeholder="搜索品名">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <select name="typeId" >
+                                    <option value="">请选择分类</option>
+                                    <option th:each="type : ${materialTypes}" th:value="${type.id}" th:text="${type.id}+' '+${type.tname}"></option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="model" autocomplete="off" class="layui-input" placeholder="搜索规格">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <button type="submit" class="layui-btn layui-btn-primary" lay-submit
+                                    lay-filter="data-search-btn"><i class="layui-icon"></i> 搜 索
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </fieldset>
+        <button id="addEnginBtn" class="layui-btn">添加部品</button>
+        <table class="layui-hide" id="currentTableId" lay-filter="currentTableFilter"></table>
+        <div id="enginAddForm" style="display: none;">
+            <fieldset class="table-search-fieldset">
+                <div class="layui-fluid">
+                    <div class="layui-card">
+                        <div class="layui-card-body">
+                            <form class="layui-form" lay-filter="form1" style="margin: 0 auto;">
+                                <!-- AT号 -->
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">AT号</label>
+                                    <div class="layui-input-block">
+                                        <input type="text" placeholder="请填入 AT号" name="atId" required class="layui-input" lay-verify="required">
+                                    </div>
+                                </div>
+                                <!-- 品名 -->
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">品名</label>
+                                    <div class="layui-input-block">
+                                        <input type="text" placeholder="请填入 品名" name="mname" required class="layui-input" lay-verify="required">
+                                    </div>
+                                </div>
+                                <!-- 规格 -->
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">规格</label>
+                                    <div class="layui-input-block">
+                                        <input type="text" placeholder="请填入 规格" name="model" class="layui-input">
+                                    </div>
+                                </div>
+                                <!-- 分类 -->
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">分类</label>
+                                    <div class="layui-input-block">
+                                        <select name="typeId" lay-verify="required">
+                                            <option value="">请选择分类</option>
+                                            <option th:each="type : ${materialTypes}" th:value="${type.id}" th:text="${type.id}+' '+${type.tname}"></option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <!-- 图号 -->
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">图号</label>
+                                    <div class="layui-input-block">
+                                        <input type="text" placeholder="请填入 图号" name="picNum" class="layui-input">
+                                    </div>
+                                </div>
+                                <!-- 工程 -->
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">工程</label>
+                                    <div class="layui-input-block">
+                                        <select name="enginId" lay-verify="required">
+                                            <option value="">请选择工程</option>
+                                            <option th:each="engin : ${materialEngins}" th:value="${engin.id}" th:text="${engin.id}+' '+${engin.ename}"></option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <!-- 厂区ID (如果不必要，可以隐藏) -->
+                                <div class="layui-form-item" style="" id="depositorySelectDiv">
+                                    <label class="layui-form-label">厂区</label>
+                                    <div class="layui-input-block">
+                                        <select name="depositoryId" id="depositorySelect">
+                                            <option value="" selected>请选择厂区</option>
+                                            <option value="1">SAB</option>
+                                            <option value="2">ZAB</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <!-- 提交按钮 -->
+                                <div class="layui-form-item" style="text-align: center;">
+                                    <button class="layui-btn layui-btn-normal" lay-submit lay-filter="formStep">
+                                        增添部品
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </fieldset>
+        </div>
+        <script type="text/html" id="operation-bar">
+<!--            <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>-->
+<!--            <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="delete">删除</a>-->
+        </script>
+        <script type="text/template" id="editModelTemplate">
+            <form class="layui-form" lay-filter="editFormFilter">
+                <!-- AT号 -->
+                <div class="layui-form-item">
+                    <label class="layui-form-label">AT号</label>
+                    <div class="layui-input-block">
+                        <input type="text" placeholder="请填入 AT号" name="atId" required class="layui-input">
+                    </div>
+                </div>
+                <!-- 品名 -->
+                <div class="layui-form-item">
+                    <label class="layui-form-label">品名</label>
+                    <div class="layui-input-block">
+                        <input type="text" placeholder="请填入 品名" name="mname" required class="layui-input">
+                    </div>
+                </div>
+                <!-- 分类 -->
+                <div class="layui-form-item">
+                    <label class="layui-form-label">分类</label>
+                    <div class="layui-input-block">
+                        <select name="typeId">
+                            <option value="">请选择分类</option>
+                            <option th:each="type : ${materialTypes}" th:value="${type.id}" th:text="${type.id}+' '+${type.tname}"></option>
+                        </select>
+                    </div>
+                </div>
+                <!-- 规格 -->
+                <div class="layui-form-item">
+                    <label class="layui-form-label">规格</label>
+                    <div class="layui-input-block">
+                        <input type="text" placeholder="请填入 规格" name="model" class="layui-input">
+                    </div>
+                </div>
+                <!-- 图号 -->
+                <div class="layui-form-item">
+                    <label class="layui-form-label">图号</label>
+                    <div class="layui-input-block">
+                        <input type="text" placeholder="请填入 图号" name="picNum" class="layui-input">
+                    </div>
+                </div>
+                <!-- 工程 -->
+                <div class="layui-form-item">
+                    <label class="layui-form-label">工程</label>
+                    <div class="layui-input-block">
+                        <select name="enginId">
+                            <option value="">请选择工程</option>
+                            <option th:each="engin : ${materialEngins}" th:value="${engin.id}" th:text="${engin.id}+' '+${engin.ename}"></option>
+                        </select>
+                    </div>
+                </div>
+                <!-- 状态 -->
+                <div class="layui-form-item">
+                    <label class="layui-form-label">状态</label>
+                    <div class="layui-input-block">
+                        <select name="stateId">
+                            <option value="">请选择状态</option>
+                            <option value="1">使用中</option>
+                            <option value="2">2年以上不流动、待确认</option>
+                            <option value="3">4年以上不流动、死库存</option>
+                            <option value="4">AT号资源空、无实物</option>
+                            <option value="5">曾经使用过，现已不再使用</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- 提交按钮 -->
+                <div class="layui-form-item" style="text-align: center;">
+                    <button class="layui-btn layui-btn-normal" lay-submit="editSubmitBtnFilter" lay-filter="editSubmitBtnFilter">
+                        更新部品
+                    </button>
+                </div>
+            </form>
+        </script>
+    </div>
+</div>
+<script src="/static/lib/layui-v2.6.3/layui.js" charset="utf-8"></script>
+<script type="text/javascript" src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js" charset="utf-8"></script>
+<script>
+    var data;
+    layui.use(['form', 'table','layer'], function () {
+        var $ = layui.jquery,
+            form = layui.form,
+            table =  layui.table,
+            layer = layui.layer;
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                let pp;
+                var userDepositoryId = data.depositoryId;
+                var authority = data.authority;
+                if (userDepositoryId === 0 ) {
+                    toolbarTemplate = `
+                        <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+                        <a class="layui-btn layui-btn-xs layui-btn-danger data-count-delete" lay-event="delete">删除</a>
+                    `;
+                } else if (authority === '审核人'){
+                    toolbarTemplate = `
+                        <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+                    `;
+                } else {
+                    toolbarTemplate = ` `;
+                }
+                $("#operation-bar").html(toolbarTemplate);
+
+                $(document).ready(function(){
+                    if (userDepositoryId === 1 || userDepositoryId === 2) {
+                        // 隐藏厂区选择框
+                        $('#depositorySelectDiv').hide();
+                    }
+                });
+
+                // 如果depositoryId为0，则允许访问两个厂区
+                if (userDepositoryId === 0) {
+                    pp = '/material';
+                } else {
+                    pp = '/material?depositoryId=' + userDepositoryId;
+                }
+                table.render({
+                    elem: "#currentTableId",
+                    url: pp,
+                    parseData: function (res) { //res 即为原始返回的数据
+                        return {
+                            "status": res.status, //解析接口状态
+                            "message": res.statusInfo.message, //解析提示文本
+                            "count": res.count, //解析数据长度
+                            "data": res.data //解析数据列表
+                        };
+                    },
+                    request: {
+                        pageName: 'page', //页码的参数名称，默认：page
+                        limitName: 'size' //每页数据量的参数名，默认：limit
+                    },
+                    response: {
+                        statusName: 'status' //规定数据状态的字段名称，默认：code
+                        ,statusCode: 200 //规定成功的状态码，默认：0
+                        ,msgName: 'message' //规定状态信息的字段名称，默认：msg
+                        ,countName: 'count' //规定数据总数的字段名称，默认：count
+                        ,dataName: 'data' //规定数据列表的字段名称，默认：data
+                    },
+                    toolbar: ['filter', 'exports', 'print'],
+                    cols: [ [
+                        // {field: 'id', width: '6%', title: '序号'},
+                        {field: 'depositoryName', title: '厂区'},
+                        {field: 'atId',  title: 'AT号', sort: true},
+                        {field: 'mname',  title: '品名'},
+                        {field: 'model', title: '规格'},
+                        {field: 'typeName', title: '分类'},
+                        {field: 'enginName',title: '工程'},
+                        {field: 'picNum',title: '图号'},
+                        {field: 'stateName',title: '状态'},
+                        {title: ' ',  align: 'center', toolbar: '#operation-bar'}
+                    ]],
+                    limits: [20, 54, 200, 500, 100000],
+                    limit: 20,
+                    page: true,
+                    skin: 'line'
+                });
+                // 监听搜索操作
+                form.on('submit(data-search-btn)', function (data) {
+                    var req={};
+                    data=data.field;
+                    if (data.mname!==''){
+                        req.mname=data.mname;
+                    }
+                    if (data.atId!==''){
+                        req.atId = data.atId;
+                    }
+                    if (data.typeId && data.typeId !== ''){
+                        req.typeId = data.typeId;
+                    }
+                    if (data.model!==''){
+                        req.model=data.model;
+                    }
+                    if (data.depositoryId!==''){
+                        req.depositoryId=data.depositoryId;
+                    }
+                    //执行搜索重载
+                    table.reload('currentTableId', {
+                        url: pp,
+                        page: {
+                            curr: 1
+                        }
+                        , where: req
+                    }, 'data');
+                    return false;
+                });
+                $('#addEnginBtn').on('click', function() {
+                    layer.open({
+                        type: 1,  // 页面层
+                        title: '部品增加',  // 标题
+                        area: ['550px', '600px'],  // 宽高
+                        content: $('#enginAddForm'),
+                        success: function(layero, index) {
+                            // 这里可以添加一些弹出层打开后的初始化代码，如果需要的话
+                        }
+                    });
+                });
+                form.on('submit(formStep)', function (data) {
+                    // 前端验证
+                    if (!data.field.atId || data.field.atId.trim() === "") {
+                        layer.msg("请输入AT号！");
+                        return false;
+                    }
+                    if (!data.field.mname || data.field.mname.trim() === "") {
+                        layer.msg("请输入品名！");
+                        return false;
+                    }
+                    if (!data.field.model || data.field.model.trim() === "") {
+                        layer.msg("请输入规格！");
+                        return false;
+                    }
+                    $.ajax({
+                        url: "/instmaterial",
+                        type: 'POST',
+                        dataType: 'json',
+                        contentType: "application/json;charset=utf-8",
+                        data: JSON.stringify(data.field),
+                        beforeSend: function () {
+                            this.layerIndex = layer.load(0, {shade: [0.5, '#393D49']});
+                        },
+                        success: function (data, textStatus, xhr) {
+                            layer.close(this.layerIndex);
+                            if (data.status === 201) {
+                                layer.msg("添加成功！", { icon: 6, time: 1000 });
+                                table.reload('currentTableId'); // 重新加载表格
+                            } else if(data.status === 409) { // 检查409状态码
+                                layer.msg('添加失败：' + data.data, { icon: 5, time: 3000 }); // 使用data.data来获取错误消息
+                            } else {
+                                // 当状态码不是200和409时，显示一个通用错误消息
+                                layer.msg('未知错误：' + xhr.status, { icon: 5, time: 3000 });
+                            }
+                        },
+                        error: function (xhr, textStatus, errorThrown) {
+                            layer.close(this.layerIndex);
+                            // 当请求失败时，显示一个通用错误消息
+                            layer.msg('请求失败：' + errorThrown, { icon: 5, time: 3000 }); // 5是失败的表情
+                        },
+                        complete: function () {
+                            form.val("form1", {
+                                'atId': "",
+                                'mname': "",
+                                'model': "",
+                                'typeId': "",
+                                'picNum': "",
+                                'enginId': "",
+                                'stateId': "",
+                                'depositoryId': ""
+                            })
+                        }
+                    })
+                    return false;
+                });
+
+                table.on('tool(currentTableFilter)', function(obj) {
+                    var data = obj.data; // 获取当前行的数据
+                    var layEvent = obj.event; // 获取当前事件名称
+
+                    if (layEvent === 'edit') {
+                        // 执行编辑操作
+                        editModel(data);
+                    } else if (layEvent === 'delete') {
+                        // 执行删除操作
+                        deleteModel(data.id);
+                    }
+                });
+                function editModel(data) {
+                    var index = layer.open({
+                        type: 1, // 页面层
+                        title: '编辑部品',
+                        area: ['40%', '90%'], // 设置弹出层的宽高
+                        content: $('#editModelTemplate').html(), // 获取编辑模板的HTML
+                        success: function(layero, index) {
+                            // 填充数据到表单中
+                            var form = layui.form;
+                            form.val("editFormFilter", data);
+                            // 监听提交按钮
+                            form.on('submit(editSubmitBtnFilter)', function(formData) {
+                                console.log(formData);
+                                // 获取表单数据，发送到服务器更新
+                                $.ajax({
+                                    url: "/material/" + data.id,  // 使用外部data参数
+                                    type: 'PUT',
+                                    dataType: 'json',
+                                    contentType: "application/json;charset=utf-8",
+                                    data: JSON.stringify(formData.field),
+                                    success: function(data, textStatus, xhr) {
+                                        layer.close(this.layerIndex);
+                                        if (data.status === 205) {
+                                            layer.msg("更新成功！", { icon: 6, time: 1000 });
+                                            table.reload('currentTableId'); // 重新加载表格
+                                        } else if(data.status === 409) { // 检查409状态码
+                                            layer.msg('更新失败：' + data.data, { icon: 5, time: 3000 }); // 使用data.data来获取错误消息
+                                        } else {
+                                            // 当状态码不是200和409时，显示一个通用错误消息
+                                            layer.msg('未知错误：' + xhr.status, { icon: 5, time: 3000 });
+                                        }
+                                        layer.close(index); // 关闭弹出层
+                                        table.reload('currentTableId'); // 重新加载表格
+                                    },
+                                    error: function (xhr, textStatus, errorThrown) {
+                                        layer.close(this.layerIndex);
+                                        // 当请求失败时，显示一个通用错误消息
+                                        layer.msg('请求失败：' + errorThrown, { icon: 5, time: 3000 }); // 5是失败的表情
+                                    }
+                                });
+                                return false; // 阻止表单跳转
+                            });
+                        }
+                    });
+                }
+                function deleteModel(id) {
+                    layer.confirm('确定要删除吗？', function(index) {
+                        $.ajax({
+                            url: "/material/" + id,
+                            type: 'DELETE',
+                            success: function(data) {
+                                layer.msg('删除成功！');
+                                table.reload('currentTableId'); // 重新加载表格
+                            },
+                            error: function() {
+                                layer.msg('删除失败！');
+                            }
+                        });
+                        layer.close(index);
+                    });
+                }
+            },
+            error: function() {
+                // 处理错误，例如显示一个消息
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+    });
+</script>
+</body>
+</html>

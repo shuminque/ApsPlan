@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <title>一次性报表</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <link rel="stylesheet" href="/static/css/public.css" media="all">
+    <link rel="stylesheet" type="text/css" href="/static/css/formSelects-v4.css"/>
+</head>
+<body>
+<div class="layuimini-container">
+    <div class="layuimini-main">
+        <fieldset class="table-search-fieldset">
+            <legend>搜索信息</legend>
+            <div style="margin: 10px 10px 10px 10px">
+                <form class="layui-form layui-form-pane" action="">
+                    <div class="layui-form-item">
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <select name="depositoryId" >
+                                    <option value="" selected>请选择厂区</option>
+                                    <option value="1">SAB</option>
+                                    <option value="2">ZAB</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <label class="layui-form-label">日期</label>
+                            <div class="layui-input-block">
+                                <input type="text" name="time" id="date"  placeholder="请选择起止日期"
+                                       autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="name" autocomplete="off" class="layui-input" placeholder="搜索品名">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="model" autocomplete="off" class="layui-input" placeholder="搜索规格">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <select name="typeId" >
+                                    <option value="">请选择分类</option>
+                                    <option th:each="type : ${materialTypes}" th:value="${type.id}" th:text="${type.id}+' '+${type.tname}"></option>
+                                </select>
+                            </div>
+                        </div>
+<!--                        <div class="layui-inline" style="width: 57%;">-->
+<!--                                <select name="typeId" xm-select="selectId" >-->
+<!--                                    <option value="">请选择分类</option>-->
+<!--                                    <option th:each="material_type : ${materialTypes}" th:value="${material_type.id}" th:text="${material_type.tname}" ></option>-->
+<!--                                </select>-->
+<!--                        </div>-->
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="applyRemark" autocomplete="off" class="layui-input" placeholder="搜索领用部门">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <button type="submit" class="layui-btn layui-btn-primary" lay-submit
+                                    lay-filter="data-search-btn"><i class="layui-icon"></i> 搜 索
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </fieldset>
+        <script type="text/template" id="editModelTemplate">
+            <form class="layui-form" lay-filter="editFormFilter">
+                <div class="layui-form-item">
+                    <label class="layui-form-label">品名</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="name" required lay-verify="required" placeholder="请输入品名" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">规格</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="model" placeholder="请输入规格" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">分类</label>
+                    <div class="layui-input-block">
+                        <select name="typeId">
+                            <option value="">请选择分类</option>
+                            <option th:each="material_type : ${materialTypes}" th:value="${material_type.id}" th:text="${material_type.tname}" ></option>
+                        </select>
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">单价</label>
+                    <div class="layui-input-block">
+                        <input type="number" name="unitPrice" placeholder="请输入单价" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">数量</label>
+                    <div class="layui-input-block">
+                        <input type="number" name="quantity" required lay-verify="required" placeholder="请输入数量" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">金额</label>
+                    <div class="layui-input-block">
+                        <input type="number" name="price" placeholder="请输入金额" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">日期</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="time" id="editDate" placeholder="请选择日期" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-form-label">领用部门</label>
+                    <div class="layui-input-block">
+                        <input type="text" name="applyRemark" placeholder="请输入领用部门" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-form-item">
+                    <div class="layui-input-block">
+                        <button class="layui-btn" lay-submit lay-filter="editSubmitBtnFilter">提交</button>
+                        <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+                    </div>
+                </div>
+            </form>
+        </script>
+
+
+        <table class="layui-hide" id="currentTableId" lay-filter="currentTableFilter"></table>
+        <script type="text/html" id="operation-bar">
+            <!--            <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>-->
+            <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="delete">删除</a>
+        </script>
+    </div>
+</div>
+<script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+<script type="text/javascript" src="/static/js/formSelects-v4.js" charset="utf-8"></script>
+<script>
+    var data;
+    layui.use(['form', 'table','layer','laydate'], function () {
+        var $ = layui.jquery,
+            form = layui.form,
+            table =  layui.table,
+            layer = layui.layer,
+            laydate=layui.laydate;
+        laydate.render({
+            elem: '#date',
+            range: true,
+            rangeLinked: true,
+            shortcuts: [
+                {
+                    text: "上个月",
+                    value: function(){
+                        var value = [];
+                        var date1 = new Date();
+                        date1.setMonth(date1.getMonth() - 1);
+                        date1.setDate(1);
+                        date1.setHours(0, 0, 0, 0);
+                        value.push(date1);
+                        var date2 = new Date();
+                        date2.setDate(1);
+                        date2.setHours(0, 0, 0, 0);
+                        date2 = date2.getTime() - 1;
+                        value.push(new Date(date2));
+                        return value;
+                    }
+                },
+                {
+                    text: "这个月",
+                    value: function(){
+                        var value = [];
+                        var date1 = new Date();
+                        date1.setDate(1);//1号
+                        date1.setHours(0, 0, 0, 0);
+                        value.push(date1);
+
+                        var date2 = new Date();
+                        date2.setMonth(date2.getMonth() + 1);
+                        date2.setDate(0); // 设置为当前月的最后一天
+                        date2.setHours(23, 59, 59, 999); // 设置为当天的最后一刻
+                        value.push(date2);
+                        return value;
+                    }
+                },
+                {
+                    text: "下个月",
+                    value: function(){
+                        var value = [];
+                        var date1 = new Date();
+                        date1.setMonth(date1.getMonth() + 1);
+                        date1.setDate(1);
+                        date1.setHours(0, 0, 0, 0);
+                        value.push(date1);
+                        var date2 = new Date();
+                        date2.setMonth(date2.getMonth() + 2);
+                        date2.setDate(1);
+                        date2.setHours(0, 0, 0, 0);
+                        date2 = date2.getTime() - 1;
+                        value.push(new Date(date2));
+                        return value;
+                    }
+                }
+            ]
+        });
+        var userAuthority;
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                let pp;
+                var userDepositoryId = data.depositoryId;
+                userAuthority = data.authority;
+
+                // 如果depositoryId为0，则允许访问两个厂区
+                if (userDepositoryId === 0) {
+                    pp = '/api/onceFill/list';
+                } else {
+                    pp = '/api/onceFill/list?depositoryId='+userDepositoryId;
+                }
+                table.render({
+                    elem: "#currentTableId",
+                    url: pp,
+                    height: "full-50", // 设置表格高度并固定表头
+                    parseData: function (res) { //res 即为原始返回的数据
+                        return {
+                            "status": res.status, //解析接口状态
+                            "message": res.statusInfo.message, //解析提示文本
+                            "count": res.count, //解析数据长度
+                            "data": res.data //解析数据列表
+                        };
+                    },
+                    request: {
+                        pageName: 'page', //页码的参数名称，默认：page
+                        limitName: 'size' //每页数据量的参数名，默认：limit
+                    },
+                    response: {
+                        statusName: 'status' //规定数据状态的字段名称，默认：code
+                        ,statusCode: 200 //规定成功的状态码，默认：0
+                        ,msgName: 'message' //规定状态信息的字段名称，默认：msg
+                        ,countName: 'count' //规定数据总数的字段名称，默认：count
+                        ,dataName: 'data' //规定数据列表的字段名称，默认：data
+                    },
+                    toolbar: ['filter', 'exports', 'print'],
+                    cols: [ [
+                        { field: 'typeId', width: '6%', title: '分类id', hide: true },
+                        {field: 'typeName', width: '15%',title: '分类' , sort: true},
+                        {field: 'id', width: '6%', title: '序号'},
+                        {field: 'name',  title: '品名'},
+                        {field: 'model', title: '规格'},
+                        {field: 'unitPrice',title: '单价'},
+                        {field: 'quantity',title: '数量'},
+                        {field: 'price', title: '金额',  templet: function(d) {
+                                return parseFloat(d.price).toFixed(2);  // 格式化为两位小数
+                            }},
+                        {field: 'time',title: '日期',  sort: true, templet: function(d){
+                                return formatDate(d.time);
+                            }},
+                        {field: 'applyRemark', title: '领用部门', width: 210, templet: function(d){
+                                return d.applyRemark ? d.applyRemark.replace(/[A-Z]-[A-Z](-\d)?/g, '') : '';
+                            }},
+                        {field: 'introduce', title: '备注'},
+                        // {field: 'depositoryId', width: '6%', title: '厂区'}
+                        {
+                            title: '操作',
+                            minWidth: 200,
+                            align: "center",
+                            templet: function (row) {
+                                // 初始化按钮字符串
+                                let buttons =
+                                    ' ';
+                                const today = new Date();
+                                const currentMonth = today.getMonth() + 1; // JavaScript中，月份是从0开始的
+                                const currentYear = today.getFullYear();
+
+                                // 获取数据的日期
+                                const [year, month] = (typeof row.time === 'string' && row.time.includes('-')) ?
+                                    row.time.split('-').map(Number) : [null, null];
+                                if ( year === currentYear && month === currentMonth ) {
+                                    buttons += '<a class="layui-btn layui-btn-xs" lay-event="edit">修改</a>';
+                                    buttons += '<a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="delete">删除</a>';
+                                } else if (userAuthority === '系统管理员'){
+                                    buttons += '<a class="layui-btn layui-btn-xs" lay-event="edit">修改</a>';
+                                    buttons += '<a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="delete">删除</a>';
+                                }
+                                return buttons;
+                            }
+                        }
+                    ]],
+                    limits: [10, 50, 100, 100000],
+                    limit: 100,
+                    page: true,
+                    skin: 'line',
+                    // skin: 'line'
+                });
+                function formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    let date = new Date(dateStr);
+                    let year = date.getFullYear();
+                    let month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    let day = date.getDate().toString().padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+
+                // 监听搜索操作
+                form.on('submit(data-search-btn)', function (data) {
+                    var req={};
+                    data=data.field;
+                    if (data.depositoryId!==''){
+                        req.depositoryId=data.depositoryId;
+                    }
+                    if (data.name!==''){
+                        req.name=data.name;
+                    }
+                    if (data.atId!==''){
+                        req.atId = data.atId;
+                    }
+                    if (data.model!==''){
+                        req.model=data.model;
+                    }
+                    if (data.typeId && data.typeId !== ''){
+                        req.typeId = data.typeId.split(',').map(Number);
+                    }
+                    if (data.applyRemark!==''){
+                        req.applyRemark=data.applyRemark;
+                    }
+                    if (data.time!==''){
+                        var dates = data.time.split(' - ');
+                        req.startDate = dates[0];
+                        req.endDate = dates[1];
+                    }
+                    //执行搜索重载
+                    table.reload('currentTableId', {
+                        url: pp,
+                        page: {
+                            curr: 1
+                        }
+                        , where: req
+                    }, 'data');
+                    return false;
+                });
+                table.on('tool(currentTableFilter)', function(obj) {
+                    var data = obj.data; // 获取当前行的数据
+                    var layEvent = obj.event; // 获取当前事件名称
+
+                    if (layEvent === 'edit') {
+                        // 执行编辑操作
+                        editModel(data);
+                    } else if (layEvent === 'delete') {
+                        // 执行删除操作
+                        deleteModel(data.id);
+                    }
+                });
+
+                function editModel(data) {
+                    var index = layer.open({
+                        type: 1, // 页面层
+                        title: '编辑部品',
+                        area: ['40%', '90%'], // 设置弹出层的宽高
+                        content: $('#editModelTemplate').html(), // 获取编辑模板的HTML
+                        success: function(layero, index) {
+                            // 填充数据到表单中
+                            var form = layui.form;
+                            data.time = formatDate(data.time);
+                            form.val("editFormFilter", data);
+                            console.log(data);
+                            laydate.render({
+                                elem: '#editDate',
+                                type: 'date',
+                                value: data.time
+                            });
+
+                            // 监听提交按钮
+                            form.on('submit(editSubmitBtnFilter)', function(formData) {
+                                console.log(formData);
+
+                                // 获取表单数据，发送到服务器更新
+                                $.ajax({
+                                    url: "/api/onceFill/update/" + data.id, // 确保这个URL与您的API匹配
+                                    type: 'PUT',
+                                    dataType: 'json',
+                                    contentType: "application/json;charset=utf-8",
+                                    data: JSON.stringify(formData.field),
+                                    success: function(response) {
+                                        layer.msg('修改完成！');
+                                        layer.close(index); // 关闭弹出层
+                                        table.reload('currentTableId'); // 重新加载表格
+                                    },
+                                    error: function() {
+                                        layer.msg('修改失败！');
+                                    }
+                                });
+                                return false; // 阻止表单跳转
+                            });
+                        }
+                    });
+                }
+                function deleteModel(id) {
+                    layer.confirm('确定要删除吗？', function(index) {
+                        $.ajax({
+                            url: "/api/onceFill/delete/" + id,
+                            type: 'DELETE',
+                            success: function(data) {
+                                layer.msg('删除成功！');
+                                table.reload('currentTableId'); // 重新加载表格
+                            },
+                            error: function() {
+                                layer.msg('删除失败！');
+                            }
+                        });
+                        layer.close(index);
+                    });
+                }
+            },
+            error: function() {
+                // 处理错误，例如显示一个消息
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+    });
+    formSelects.render('selectId');
+</script>
+</body>
+</html>

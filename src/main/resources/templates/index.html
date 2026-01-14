@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <title>成品仓库管理系统</title>
+    <meta name="keywords" content="layuimini">
+    <meta name="description" content="接口">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta http-equiv="Access-Control-Allow-Origin" content="*">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="icon" href="/static/images/xuri-logo.ico">
+    <link rel="stylesheet" href="/static/lib/layui-v2.6.3/css/layui.css" media="all">
+    <link rel="stylesheet" href="/static/css/layuimini.css?v=2.0.4.2" media="all">
+    <link rel="stylesheet" href="/static/css/themes/default.css" media="all">
+    <link rel="stylesheet" href="/static/lib/font-awesome-4.7.0/css/font-awesome.min.css" media="all">
+    <!--[if lt IE 9]>
+    <script src="/static/js/otherJs/cdn.staticfile.org_html5shiv_r29_html5.min.js"></script>
+    <script src="/static/js/otherJs/cdn.staticfile.org_respond.js_1.4.2_respond.min.js"></script>
+    <![endif]-->
+    <style id="layuimini-bg-color">
+
+    </style>
+    <style>
+        .layui-layout-admin .layui-body {
+            padding-bottom: 5px;
+        }
+    </style>
+</head>
+<body class="layui-layout-body layuimini-all">
+<div class="layui-layout layui-layout-admin">
+
+    <div class="layui-header header">
+        <div class="layui-logo layuimini-logo"></div>
+
+        <div class="layuimini-header-content">
+            <a>
+                <div class="layuimini-tool"><i title="展开" class="fa fa-outdent" data-side-fold="1"></i></div>
+            </a>
+
+            <!--电脑端头部菜单-->
+            <ul class="layui-nav layui-layout-left layuimini-header-menu layuimini-menu-header-pc layuimini-pc-show">
+            </ul>
+
+            <!--手机端头部菜单-->
+            <ul class="layui-nav layui-layout-left layuimini-header-menu layuimini-mobile-show">
+                <li class="layui-nav-item">
+                    <a href="javascript:;"><i class="fa fa-list-ul"></i> 选择模块</a>
+                    <dl class="layui-nav-child layuimini-menu-header-mobile">
+                    </dl>
+                </li>
+            </ul>
+
+            <ul class="layui-nav layui-layout-right">
+
+                <li class="layui-nav-item" lay-unselect>
+                    <a href="javascript:;" id="notification-icon">
+                        <i class="fa fa-bell" style="margin-left: -10px"></i>
+                        <span class="layui-badge" id="notification-count" style="margin-left: -40px"></span>
+                    </a>
+                    <dl class="layui-nav-child" id="notification-list">
+                        <!-- 通知内容将在这里动态加载 -->
+                    </dl>
+                </li>
+
+                <li class="layui-nav-item" lay-unselect>
+                    <a href="javascript:;" data-refresh="刷新"><i class="fa fa-refresh"></i></a>
+                </li>
+                <li class="layui-nav-item" lay-unselect>
+                    <a href="javascript:;" data-clear="清理" class="layuimini-clear"><i class="fa fa-trash-o"></i></a>
+                </li>
+                <li class="layui-nav-item mobile layui-hide-xs" lay-unselect>
+                    <a href="javascript:;" data-check-screen="full"><i class="fa fa-arrows-alt"></i></a>
+                </li>
+                <li class="layui-nav-item layuimini-setting">
+                    <a href="javascript:;" th:text="${uname}">admin</a>
+                    <dl class="layui-nav-child">
+<!--                        <dd>-->
+<!--                            <a href="javascript:;" layuimini-content-href="/account_look" data-title="基本资料" data-icon="fa fa-gears">基本资料<span class="layui-badge-dot"></span></a>-->
+<!--                        </dd>-->
+<!--                        <dd>-->
+<!--                            <a href="javascript:;" layuimini-content-href="/user_password" data-title="修改密码" data-icon="fa fa-gears">修改密码</a>-->
+<!--                        </dd>-->
+<!--                        <dd>-->
+<!--                            <hr>-->
+<!--                        </dd>-->
+                        <dd>
+                            <a href="javascript:;" class="login-out">退出登录</a>
+                        </dd>
+                    </dl>
+                </li>
+                <li class="layui-nav-item" lay-unselect>
+                    <a data-bgcolor="配色方案"><i></i></a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!--无限极左侧菜单-->
+    <div class="layui-side layui-bg-black layuimini-menu-left">
+    </div>
+
+    <!--初始化加载层-->
+    <div class="layuimini-loader">
+        <div class="layuimini-loader-inner"></div>
+    </div>
+
+    <!--手机端遮罩层-->
+    <div class="layuimini-make"></div>
+
+    <!-- 移动导航 -->
+    <div class="layuimini-site-mobile"><i class="layui-icon"></i></div>
+
+    <div class="layui-body">
+
+        <div class="layuimini-tab layui-tab-rollTool layui-tab" lay-filter="layuiminiTab" lay-allowclose="true">
+            <ul class="layui-tab-title">
+                <li class="layui-this" id="layuiminiHomeTabId" lay-id=""></li>
+            </ul>
+            <div class="layui-tab-control">
+                <li class="layuimini-tab-roll-left layui-icon layui-icon-left"></li>
+                <li class="layuimini-tab-roll-right layui-icon layui-icon-right"></li>
+                <li class="layui-tab-tool layui-icon layui-icon-down">
+                    <ul class="layui-nav close-box">
+                        <li class="layui-nav-item">
+                            <a href="javascript:;"><span class="layui-nav-more"></span></a>
+                            <dl class="layui-nav-child">
+                                <dd><a href="javascript:;" layuimini-tab-close="current">关 闭 当 前</a></dd>
+                                <dd><a href="javascript:;" layuimini-tab-close="other">关 闭 其 他</a></dd>
+                                <dd><a href="javascript:;" layuimini-tab-close="all">关 闭 全 部</a></dd>
+                            </dl>
+                        </li>
+                    </ul>
+                </li>
+            </div>
+            <div class="layui-tab-content">
+                <div id="layuiminiHomeTabIframe" class="layui-tab-item layui-show"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="/static/lib/layui-v2.6.3/layui.js" charset="utf-8"></script>
+<script src="/static/js/lay-config.js?v=2.0.0" charset="utf-8"></script>
+<script>
+    layui.use(['jquery', 'layer', 'miniAdmin','miniTongji'], function () {
+        var $ = layui.jquery,
+            layer = layui.layer,
+            miniAdmin = layui.miniAdmin,
+            miniTongji = layui.miniTongji;
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                var userDepositoryId = data.depositoryId;
+                var userAuthority = data.authority;
+                var role;
+
+                if (userDepositoryId === 0) {
+                    role = "ALL";
+                } else if (userDepositoryId === 1) {
+                    if(userAuthority === '仅查看'){
+                        role = "onlyRead"
+                    }else{
+                        role = userAuthority === '审核人' ? "SAB_sh" : "SAB_cg";
+                    }
+                } else {
+                    if(userAuthority === '仅查看'){
+                        role = "onlyRead"
+                    }else{
+                    role = userAuthority === '审核人' ? "ZAB_sh" : "ZAB_cg";
+                    }
+                }
+                console.log(role);
+                // 加载统一的菜单JSON
+                // $.getJSON("/static/api/" + (role === "onlyRead" ? "menu_onlyRead.json" : "menu_roles.json"), function(menuData) {
+                $.getJSON("/static/api/menu_roles.json", function(menuData) {
+                    if (userDepositoryId === 0) {
+                        menuData.logoInfo.title = "成品仓库";
+                    } else if (userDepositoryId === 1) {
+                        menuData.logoInfo.title = "SAB";
+                    } else if (userDepositoryId === 2) {
+                        menuData.logoInfo.title = "ZAB";
+                    }
+                    // 根据角色过滤菜单
+                    var filteredMenu = filterMenuByRole(menuData, role);
+                    var options = {
+                        iniData: filteredMenu, // Use the filteredMenu data directly
+                        clearUrl: "/static/api/clear.json",
+                        urlHashLocation: true,
+                        bgColorDefault: false,
+                        multiModule: true,
+                        menuChildOpen: false,
+                        loadingTime: 0,
+                        pageAnim: true,
+                        maxTabNum: 20,
+                    };
+                    console.log(filteredMenu);
+                    miniAdmin.render(options);
+                });
+            },
+            error: function() {
+                alert('无法获取初始化数据');
+            }
+        });
+        // function filterMenuByRole(menuData, role) {
+        //     var result = {};
+        //     result.homeInfo = menuData.homeInfo;
+        //     result.logoInfo = menuData.logoInfo;
+        //     result.menuInfo = menuData.menuInfo.filter(item => {
+        //         let includeItem = false;
+        //         // 如果菜单项有子项，进一步过滤
+        //         if (item.child) {
+        //             item.child = item.child.filter(subItem => {
+        //                 // 只有当子菜单项的 roles 和其父菜单项的 roles 都包含指定的 role 时，子菜单项才会被包括
+        //                 return subItem.roles.includes(role) && item.roles.includes(role);
+        //             });
+        //             // 如果至少有一个子项应该被包括，标记菜单项为应该包括
+        //             includeItem = item.child.length > 0;
+        //         } else if (item.roles && item.roles.includes(role)) {
+        //             // 如果没有子项但菜单项包含了 role，也标记为应该包括
+        //             includeItem = true;
+        //         }
+        //         return includeItem;
+        //     });
+        //     return result;
+        // }
+        function filterMenuByRole(menuData, role) {
+            function filterItems(items) {
+                return items.filter(item => {
+                    // 首先检查当前菜单项是否包含指定角色
+                    if (!item.roles.includes(role)) {
+                        return false; // 如果当前菜单项不包含指定角色，则不包括它
+                    }
+                    // 如果当前菜单项有子菜单项，则递归地过滤这些子菜单项
+                    if (item.child && item.child.length > 0) {
+                        item.child = filterItems(item.child);
+                        // 过滤后，如果子菜单项为空，也可以选择不显示当前菜单项
+                        // 但这取决于具体需求，如果需要，可以取消下面这行代码的注释
+                        // return item.child.length > 0;
+                    }
+                    // 如果当前菜单项包含指定角色，并且（如果有子菜单项的话）经过过滤后还有子菜单项，则包括它
+                    return true;
+                });
+            }
+            // 对menuData.menuInfo应用过滤逻辑
+            var result = {
+                homeInfo: menuData.homeInfo,
+                logoInfo: menuData.logoInfo,
+                menuInfo: filterItems(menuData.menuInfo) // 使用递归函数过滤
+            };
+            return result;
+        }
+
+        // $(document).ready(function() {
+        //     function loadNotifications() {
+        //         $.ajax({
+        //             url: '/notifications/unread',
+        //             type: 'GET',
+        //             dataType: 'json',
+        //             success: function(data) {
+        //                 var notifications = data.data;
+        //                 $("#notification-list").empty();
+        //                 if (notifications.length === 0) {
+        //                     $("#notification-list").append('<dd><a href="javascript:;">没有新的通知</a></dd>');
+        //                     $("#notification-count").text('');
+        //                 } else {
+        //                     notifications.forEach(function(notification) {
+        //                         $("#notification-list").append('<dd data-id="' + notification.id + '">' +
+        //                             '<a href="javascript:;">' + notification.content + '</a></dd>');
+        //
+        //                         // $("#notification-list").append('<dd data-id="' + notification.id + '" ' +
+        //                         //     'data-link="' + notification.link + '"><a href="javascript:;">' +
+        //                         //     notification.content + '</a></dd>');
+        //
+        //                     });
+        //                     $("#notification-count").text(notifications.length);
+        //                 }
+        //             },
+        //             error: function() {
+        //                 layer.msg('获取通知失败');
+        //             }
+        //         });
+        //     }
+        //     loadNotifications();
+        //     // $("#notification-list").on("click", "dd", function() {
+        //     //     var notificationId = $(this).data("id");
+        //     //     var content = $(this).text();
+        //     //     var applicationIdMatch = content.match(/ID: (\d+)/);
+        //     //     var applicationId = applicationIdMatch ? applicationIdMatch[1] : null;
+        //     //
+        //     //     $.ajax({
+        //     //         url: '/notifications/mark-as-read/' + notificationId,
+        //     //         type: 'PUT',
+        //     //         success: function() {
+        //     //             loadNotifications();
+        //     //             if (content.includes("[出库]")) {
+        //     //                 window.location.href = "index#//application_out?id=" + applicationId+ "&refill=true";
+        //     //             } else if (content.includes("[入库]")) {
+        //     //                 window.location.href = "index#//application_in?id=" + applicationId + "&notificationId=" + notificationId + "&refill=true";
+        //     //             }
+        //     //             window.location.reload();
+        //     //         },
+        //     //         error: function() {
+        //     //             layer.msg('标记为已读失败');
+        //     //         }
+        //     //     });
+        //     // });
+        //     $("#notification-list").on("click", "dd", function() {
+        //         var notificationId = $(this).data("id");
+        //         var content = $(this).text();
+        //         var applicationIdMatch = content.match(/ID: (\d+)/);
+        //         var applicationId = applicationIdMatch ? applicationIdMatch[1] : null;
+        //
+        //         // 保留页面跳转逻辑，但移除标记为已读的AJAX请求和页面重新加载
+        //         if (content.includes("[出库]")) {
+        //             window.location.href = "index#//application_out?id=" + applicationId+ "&refill=true";
+        //         } else if (content.includes("[入库]")) {
+        //             window.location.href = "index#//application_in?id=" + applicationId + "&notificationId=" + notificationId + "&refill=true";
+        //         }
+        //         window.location.reload();
+        //     });
+        //
+        //
+        // });
+
+        $('.login-out').on("click", function () {
+            layer.msg('退出登录成功',{time: 1000 }, function () {
+                window.location = '/login';
+            });
+        });
+
+    });
+</script>
+</body>
+</html>

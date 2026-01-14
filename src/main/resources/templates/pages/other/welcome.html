@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <title>首页</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="/static/lib/layui-v2.6.3/css/layui.css" media="all">
+    <link rel="stylesheet" href="/static/lib/font-awesome-4.7.0/css/font-awesome.min.css" media="all">
+    <link rel="stylesheet" href="/static/css/public.css" media="all">
+    <!--[if lt IE 9]>
+    <script src="/static/js/otherJs/cdn.staticfile.org_html5shiv_r29_html5.min.js"></script>
+    <script src="/static/js/otherJs/cdn.staticfile.org_respond.js_1.4.2_respond.min.js"></script>
+    <![endif]-->
+    <style>
+        .layui-card {border:1px solid #f2f2f2;border-radius:5px;}
+        .icon {margin-right:10px;color:#1aa094;}
+        .icon-cray {color:#ffb800!important;}
+        .icon-blue {color:#1e9fff!important;}
+        .icon-tip {color:#ff5722!important;}
+        .layuimini-qiuck-module {text-align:center;margin-top: 10px}
+        .layuimini-qiuck-module a i {display:inline-block;width:100%;height:60px;line-height:60px;text-align:center;border-radius:2px;font-size:30px;background-color:#F8F8F8;color:#333;transition:all .3s;-webkit-transition:all .3s;}
+        .layuimini-qiuck-module a cite {position:relative;top:2px;display:block;color:#666;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;font-size:14px;}
+        .welcome-module {width:100%;height:210px;}
+        .panel {background-color:#fff;border:1px solid transparent;border-radius:3px;-webkit-box-shadow:0 1px 1px rgba(0,0,0,.05);box-shadow:0 1px 1px rgba(0,0,0,.05)}
+        .panel-body {padding:10px}
+        .panel-title {margin-top:0;margin-bottom:0;font-size:12px;color:inherit}
+        .label {display:inline;padding:.2em .6em .3em;font-size:75%;font-weight:700;line-height:1;color:#fff;text-align:center;white-space:nowrap;vertical-align:baseline;border-radius:.25em;margin-top: .3em;}
+        .layui-red {color:red}
+        .main_btn > p {height:40px;}
+        .layui-bg-number {background-color:#F8F8F8;}
+        .layuimini-notice-container {
+            max-height: 200px; /* 设置一个最大高度 */
+            overflow-y: auto; /* 添加垂直滚动条 */
+        }
+        /* 保持其他样式不变 */
+        .layuimini-notice:hover {background:#f6f6f6;}
+        .layuimini-notice {padding:7px 16px;clear:both;font-size:12px !important;cursor:pointer;position:relative;transition:background 0.2s ease-in-out;}
+        .layuimini-notice-title,.layuimini-notice-label {
+            padding-right: 70px !important;text-overflow:ellipsis!important;overflow:hidden!important;white-space:nowrap!important;}
+        .layuimini-notice-title {line-height:28px;font-size:14px;}
+        .layuimini-notice-extra {position:absolute;top:50%;margin-top:-8px;right:16px;display:inline-block;height:16px;color:#999;}
+        .layui-table-view .layui-table-body tr.layui-table-hover {
+            background-color: #f2f2f2; /* 高亮行的背景色，可根据需要调整 */
+        }
+
+        .layui-table-view .layui-table-body tr td {
+            padding: 2px 8px; /* 减少行内间距 */
+            line-height: 1.2; /* 调整行高 */
+        }
+
+        .layui-table-view .layui-table-header tr th {
+            padding: 2px 8px; /* 减少标题行内间距 */
+            line-height: 1.2; /* 调整标题行高 */
+        }
+
+    </style>
+</head>
+<body>
+<div class="layuimini-container">
+    <div class="layuimini-main">
+        <div class="layui-row layui-col-space8">
+            <div class="layui-col-md4">
+                <div class="layui-row layui-col-space10">
+                    <div class="layui-col-md15">
+                        <div class="layui-card">
+                            <div class="layui-card-header"><i class="fa fa-signal icon"></i>数据统计</div>
+                            <div class="layui-card-body">
+                                <div class="welcome-module">
+                                    <div class="layui-row layui-col-space10">
+                                        <div class="layui-col-xs6">
+                                            <div class="panel layui-bg-number">
+                                                <div class="panel-body">
+                                                    <div class="panel-title">
+                                                        <span class="label pull-right layui-bg-blue">A</span>
+                                                        <h5>SAB在库金额</h5>
+                                                    </div>
+                                                    <div class="panel-content">
+                                                        <h1 th:text="${SABpriceSum}"></h1>
+                                                        <small>SAB在库金额  CNY</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="layui-col-xs6">
+                                            <div class="panel layui-bg-number">
+                                                <div class="panel-body">
+                                                    <div class="panel-title">
+                                                        <span class="label pull-right layui-bg-cyan">B</span>
+                                                        <h5>ZAB在库金额</h5>
+                                                    </div>
+                                                    <div class="panel-content">
+                                                        <h1 th:text="${ZABpriceSum}"></h1>
+                                                        <small>ZAB在库金额  CNY</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="layui-col-xs6">
+                                            <div class="panel layui-bg-number">
+                                                <div class="panel-body">
+                                                    <div class="panel-title">
+                                                        <span class="label pull-right layui-bg-orange">C</span>
+                                                        <h5>SAB在库数</h5>
+                                                    </div>
+                                                    <div class="panel-content">
+                                                        <h1 th:text="${SABcountSum}"></h1>
+                                                        <small>SAB在库数</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="layui-col-xs6">
+                                            <div class="panel layui-bg-number">
+                                                <div class="panel-body">
+                                                    <div class="panel-title">
+                                                        <span class="label pull-right layui-bg-green">D</span>
+                                                        <h5>ZAB在库数</h5>
+                                                    </div>
+                                                    <div class="panel-content">
+                                                        <h1 th:text="${ZABcountSum}"></h1>
+                                                        <small>ZAB在库数</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="layui-col-md4" style="display: none;">
+                        <div class="layui-card">
+                            <div class="layui-card-header"><i class="fa fa-credit-card icon icon-blue"></i>快捷入口</div>
+                            <div class="layui-card-body">
+                                <div class="welcome-module">
+                                    <div class="layui-row layui-col-space10 layuimini-qiuck">
+                                        <!-- 入库申请 -->
+                                        <div class="layui-col-xs3 layuimini-qiuck-module">
+                                            <a href="javascript:;" layuimini-content-href="/application_in" data-title="入库申请" data-icon="fa fa-arrow-down">
+                                                <i class="fa fa-arrow-down"></i>
+                                                <cite>入库申请</cite>
+                                            </a>
+                                        </div>
+                                        <!-- 出库申请 -->
+                                        <div class="layui-col-xs3 layuimini-qiuck-module">
+                                            <a href="javascript:;" layuimini-content-href="/application_out" data-title="出库申请" data-icon="fa fa-arrow-up">
+                                                <i class="fa fa-arrow-up"></i>
+                                                <cite>出库申请</cite>
+                                            </a>
+                                        </div>
+                                        <!-- 转移申请 -->
+                                        <div class="layui-col-xs3 layuimini-qiuck-module">
+                                            <a href="javascript:;" layuimini-content-href="/application_transfer" data-title="转移申请" data-icon="fa fa-exchange">
+                                                <i class="fa fa-exchange"></i>
+                                                <cite>转移申请</cite>
+                                            </a>
+                                        </div>
+                                        <!-- 一次性填写 -->
+                                        <div class="layui-col-xs3 layuimini-qiuck-module">
+                                            <a href="javascript:;" layuimini-content-href="/once_add" data-title="一次性填写" data-icon="fa fa-pencil-alt">
+                                                <i class="fa fa-pencil"></i>
+                                                <cite>一次性填写</cite>
+                                            </a>
+                                        </div>
+                                        <!-- 入库查询 -->
+                                        <div class="layui-col-xs3 layuimini-qiuck-module">
+                                            <a href="javascript:;" layuimini-content-href="/table_in" data-title="入库查询" data-icon="fa fa-search">
+                                                <i class="fa fa-search-plus"></i>
+                                                <cite>入库查询</cite>
+                                            </a>
+                                        </div>
+                                        <!-- 出库查询 -->
+                                        <div class="layui-col-xs3 layuimini-qiuck-module">
+                                            <a href="javascript:;" layuimini-content-href="/table_out" data-title="出库查询" data-icon="fa fa-search">
+                                                <i class="fa fa-search-minus"></i>
+                                                <cite>出库查询</cite>
+                                            </a>
+                                        </div>
+                                        <!-- 库存查询 -->
+                                        <div class="layui-col-xs3 layuimini-qiuck-module">
+                                            <a href="javascript:;" layuimini-content-href="/table_stock" data-title="库存查询" data-icon="fa fa-search">
+                                                <i class="fa fa-list-alt"></i>
+                                                <cite>库存查询</cite>
+                                            </a>
+                                        </div>
+                                        <!-- 一次性报表 -->
+                                        <div class="layui-col-xs3 layuimini-qiuck-module">
+                                            <a href="javascript:;" layuimini-content-href="/once_table" data-title="一次性报表" data-icon="fa fa-pie-chart">
+                                                <i class="fa fa-pie-chart"></i>
+                                                <cite>一次性报表</cite>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 公告数据表格容器 -->
+            <div class="layui-col-md8">
+                <div class="layui-card">
+                    <div class="layui-card-header"><i class="fa fa-bullhorn icon icon-tip"></i>安全库存警报(在库为0)</div>
+                    <div class="layui-card-body">
+                        <table id="noticeTable" lay-filter="noticeTable"></table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+<!--        <div class="layui-row">-->
+<!--            &lt;!&ndash; 入库金额折线图 &ndash;&gt;-->
+<!--            <div class="layui-col-md6">-->
+<!--                <div class="layui-card">-->
+<!--                    <div class="layui-card-header"><i class="fa fa-signal icon"></i>入库折线图</div>-->
+<!--                    <div class="layui-card-body">-->
+<!--                        <div id="inbound-chart" style="width: 100%; height: 500px;"></div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+
+<!--            &lt;!&ndash; 出库金额折线图 &ndash;&gt;-->
+<!--            <div class="layui-col-md6">-->
+<!--                <div class="layui-card">-->
+<!--                    <div class="layui-card-header"><i class="fa fa-signal icon"></i>出库折线图</div>-->
+<!--                    <div class="layui-card-body">-->
+<!--                        <div id="outbound-chart" style="width: 100%; height: 500px;"></div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--        <div>-->
+<!--            <select id="depository-selector">-->
+<!--                <option value="">选择厂区</option>-->
+<!--                <option value="1">SAB</option>-->
+<!--                <option value="2">ZAB</option>-->
+<!--            </select>-->
+<!--            <input type="text" id="month-selector" placeholder="请选择年月">-->
+<!--            <div class="layui-row">-->
+<!--                &lt;!&ndash; 各工程使用金额分析图 &ndash;&gt;-->
+<!--                <div class="layui-col-md12">-->
+<!--                    <div class="layui-card">-->
+<!--                        <div class="layui-card-header"><i class="fa fa-signal icon"></i>各工程使用金额分析图</div>-->
+<!--                        <div class="layui-card-body">-->
+<!--                            <div id="category-bar-chart" style="width: 100%; height: 500px;"></div>-->
+<!--                        </div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--            <div id="recordTableContainer" style="display: none">-->
+<!--                <table class="layui-hide" id="recordTable" lay-filter="recordTableFilter"></table>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--        <div>-->
+<!--            <select id="depository-selector-two">-->
+<!--                <option value="">选择厂区</option>-->
+<!--                <option value="1">SAB</option>-->
+<!--                <option value="2">ZAB</option>-->
+<!--            </select>-->
+<!--            <input type="text" id="year-selector" placeholder="请选择年">-->
+<!--            <select name="typeId" id="typeSelect">-->
+<!--                <option value="">请选择分类</option>-->
+<!--                <option th:each="type : ${materialTypes}" th:value="${type.id}" th:text="${type.id}+' '+${type.tname}"></option>-->
+<!--            </select>-->
+<!--            <div class="layui-row">-->
+<!--                &lt;!&ndash; 产量柱形图 &ndash;&gt;-->
+<!--                <div class="layui-col-md12">-->
+<!--                    <div class="layui-card">-->
+<!--                        <div class="layui-card-header"><i class="fa fa-signal icon"></i>产量柱形图</div>-->
+<!--                        <div class="layui-card-body">-->
+<!--                            <div id="typeAmountChart" style="width: 100%; height: 500px;"></div>-->
+<!--                        </div>-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+    </div>
+</div>
+<script src="/static/lib/layui-v2.6.3/layui.js" charset="utf-8"></script>
+<script src="/static/js/lay-config.js?v=1.0.4" charset="utf-8"></script>
+<script type="text/javascript" src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js" charset="utf-8"></script>
+<script type="text/javascript" src="/static/js/http_cdn.bootcdn.net_ajax_libs_echarts_5.2.0_echarts.js" charset="utf-8"></script>
+<script>
+    layui.use(['layer', 'miniTab','echarts','laydate','table'], function () {
+        var $ = layui.jquery,
+            layer = layui.layer,
+            miniTab = layui.miniTab,
+            echarts = layui.echarts,
+            laydate = layui.laydate,
+            table = layui.table;
+        var userReviewGroupId;
+        var userAuthority;
+        //用户区分
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                let pp;
+                var userDepositoryId = data.depositoryId;
+                var toolbarTemplate;
+                var globalToolbarTemplate;
+                userAuthority = data.authority;
+                userReviewGroupId = data.review_group_id;
+                if (userDepositoryId === 0) {
+                    pp = '/notices';
+                } else {
+                    pp = '/notices?depositoryId=' + userDepositoryId;
+                }
+                table.render({
+                    elem: '#noticeTable',
+                    url: pp, // 数据接口
+                    height: "full-50",
+                    height: 200,
+                    parseData: function (res) { //res 即为原始返回的数据
+                        return {
+                            "status": res.status, //解析接口状态
+                            "message": res.statusInfo.message, //解析提示文本
+                            "count": res.count, //解析数据长度
+                            "data": res.data //解析数据列表
+                        };
+                    },
+                    response: {
+                        statusName: 'status' //规定数据状态的字段名称，默认：code
+                        ,statusCode: 200 //规定成功的状态码，默认：0
+                        ,msgName: 'message' //规定状态信息的字段名称，默认：msg
+                        ,countName: 'count' //规定数据总数的字段名称，默认：count
+                        ,dataName: 'data' //规定数据列表的字段名称，默认：data
+                    },
+                    cols: [ [ // 表头
+                        {field: 'title', title: '标题', hide: true},
+                        {field: 'atId', title: 'AT号', width:'10%',templet: function(d) {
+                                return '<div style="background-color: yellow;">' + d.atId + '</div>';
+                            }},
+                        {field: 'mname', title: '品名', width:'30%',templet: function(d) {
+                                return '<div style="background-color: yellow;">' + d.mname + '</div>';
+                            }},
+                        {field: 'model', title: '型号', width:'20%', templet: function(d) {
+                                return '<div style="background-color: yellow;">' + d.model + '</div>';
+                            }},
+                        {field: 'lastCount', title: '最后领用数', width:'12%',templet: function(d) {
+                                return '<div style="background-color: yellow;">' + d.lastCount + '</div>';
+                            }},
+                        {field: 'time', title: '最后领用时间', width:'18%', sort: true,templet: function(d){
+                                return formatDate(d.time);
+                            }},
+                    ]]
+                });
+                function formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    let date = new Date(dateStr);
+                    let year = date.getFullYear();
+                    let month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    let day = date.getDate().toString().padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+            },
+            error: function() {
+                // 处理错误，例如显示一个消息
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+        // 初始化日期选择器
+        laydate.render({
+            elem: '#month-selector',
+            type: 'month',
+            done: function(value, date, endDate) {
+                // 检查是否已选择厂区
+                if (document.getElementById('depository-selector').value) {
+                    fetchDataForMonth(value);
+                } else {
+                    alert("请先选择一个厂区！");
+                }
+            }
+        });
+        laydate.render({
+            elem: '#year-selector',
+            type: 'year',
+        });
+        // 初始化ECharts实例
+        var myChart = echarts.init(document.getElementById('typeAmountChart')); // 请确保您的div有一个ID，例如typeAmountChart
+        function fetchTypeAmountDataAndRenderChart() {
+            var year = document.getElementById('year-selector').value;
+            var depositoryId = document.getElementById('depository-selector-two').value;
+            var typeId = document.getElementById('typeSelect').value;
+
+            var url = '/type-amounts/' + year + '/' + typeId + '/' + depositoryId;
+            $.get(url, function(data) {
+                var colors = ['#5470C6'];
+
+                var option = {
+                    title: {
+                        text: '产量柱形图'
+                    },
+                    tooltip: {
+                        trigger: 'axis',
+                        axisPointer: {
+                            type: 'shadow'
+                        }
+                    },
+                    xAxis: {
+                        data: data.map(function(item) { return item.month; })
+                    },
+                    yAxis: [
+                        {
+                            type: 'value',
+                            position: 'left'
+                        },
+                        {
+                            type: 'value',
+                            position: 'right',
+                            show: true,
+                            splitLine: { show: false }
+                        }
+                    ],
+                    series: [
+                        {
+                            name: '金额',
+                            type: 'bar',
+                            yAxisIndex: 0,
+                            data: data.map(function(item) { return item.monthlyAmount; }),
+                            label: {
+                                normal: {
+                                    show: true,
+                                    position: 'top'
+                                }
+                            },
+                            itemStyle: {
+                                normal: {
+                                    color: function(params) {
+                                        return colors[params.dataIndex % colors.length];
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            name: '单价',
+                            type: 'line',
+                            yAxisIndex: 1,
+                            data: data.map(function(item) { return item.unitPrice; }),
+                            smooth: true,
+                            label: {
+                                normal: {
+                                    show: true,
+                                    position: 'top'
+                                }
+                            },
+                        }
+                    ]
+                };
+                myChart.setOption(option);
+            });
+        }
+        document.getElementById('depository-selector-two').addEventListener('change', fetchTypeAmountDataAndRenderChart);
+        document.getElementById('year-selector').addEventListener('change', fetchTypeAmountDataAndRenderChart);
+        document.getElementById('typeSelect').addEventListener('change', fetchTypeAmountDataAndRenderChart);
+
+        // 为厂区选择器添加事件监听器
+        document.getElementById('depository-selector').addEventListener('change', function() {
+            var selectedMonth = document.getElementById('month-selector').value;
+            if (selectedMonth) {
+                fetchDataForMonth(selectedMonth);
+            }
+        });
+        function fetchDataForMonth(yearMonth) {
+            var parts = yearMonth.split('-');  // 拆分为 ["2023", "01"]
+            var year = parts[0];
+            var month = parts[1];
+            var selectedDepositoryId = document.getElementById('depository-selector').value;
+            if (selectedDepositoryId) {
+                $.ajax({
+                    url: '/category-outbounds/' + year + '/' + month + '/' + selectedDepositoryId,
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        // 当成功获取数据时，初始化并设置分类柱形图
+                        initCategoryBarChart(data);
+                    },
+                    error: function(error) {
+                        console.log("Error fetching category outbounds", error);
+                    }
+                });
+            } else {
+                alert("请先选择一个厂区！");
+                // layer.msg('请先选择一个厂区！');
+            }
+        }
+        miniTab.listen();
+
+        /**
+         * 查看公告信息
+         **/
+        $('body').on('click', '.layuimini-notice', function () {
+            var title = $(this).children('.layuimini-notice-title').text(),
+                noticeTime = $(this).children('.layuimini-notice-extra').text(),
+                content = $(this).children('.layuimini-notice-content').html();
+            var html = '<div style="padding:15px 20px; text-align:justify; line-height: 22px;border-bottom:1px solid #e2e2e2;background-color: #2f4056;color: #ffffff">\n' +
+                '<div style="text-align: center;margin-bottom: 20px;font-weight: bold;border-bottom:1px solid #718fb5;padding-bottom: 5px"><h4 class="text-danger">' + title + '</h4></div>\n' +
+                '<div style="font-size: 12px">' + content + '</div>\n' +
+                '</div>\n';
+            parent.layer.open({
+                type: 1,
+                title: '系统公告'+'<span style="float: right;right: 1px;font-size: 12px;color: #b1b3b9;margin-top: 1px">'+noticeTime+'</span>',
+                area: '300px;',
+                shade: 0.8,
+                id: 'layuimini-notice',
+                btn: ['取消'],
+                btnAlign: 'c',
+                moveType: 1,
+                content:html,
+            });
+        });
+
+        /**
+         * 图功能
+         */
+        $(document).ready(function () {
+            // 获取当前年份
+            var year = new Date().getFullYear();
+            // 使用jQuery的AJAX功能从服务器获取数据
+            $.ajax({
+                url: '/monthly-amounts/' + year,
+                type: 'GET',
+                dataType: 'json',
+                success: function (data) {
+                    // 当成功获取数据时，初始化并设置ECharts图表
+                    initECharts(data);
+                },
+                error: function (error) {
+                    console.log("Error fetching data", error);
+                }
+            });
+        });
+        var echartsInstances = [];
+        function initECharts(data) {
+            var months = data.map(item => {
+                var dateParts = item.month.split("-");
+                return dateParts[1] + '月';  // 返回“月份 + '月'”格式
+            });
+
+            // 入库金额图
+            var sabInbound = data.map(item => item.sabInboundAmount);
+            var zabInbound = data.map(item => item.zabInboundAmount);
+
+            // 出库金额图
+            var sabOutbound = data.map(item => item.sabOutboundAmount);
+            var zabOutbound = data.map(item => item.zabOutboundAmount);
+
+            // 在库金额图
+            var sabStock = data.map(item => item.sabStockAmount);
+            var zabStock = data.map(item => item.zabStockAmount);
+
+            echartsInstances.push(initChart('inbound-chart', months, sabInbound, zabInbound, '入库金额'));
+            echartsInstances.push(initChart('outbound-chart', months, sabOutbound, zabOutbound, '出库金额'));
+            echartsInstances.push(initBarChart('stock-chart', months, sabStock, zabStock, '库存流水'));
+        }
+        function initCategoryBarChart(data) {
+            // 获取所有的类别
+            var categories = data.map(item => item.category);
+            // 使用Set去除重复的类别
+            var uniqueCategories = [...new Set(categories)];
+            // 获取每个类别的总金额
+            var amounts = uniqueCategories.map(category => {
+                var categoryData = data.find(item => item.category === category);
+                return categoryData ? categoryData.amount : 0;
+            });
+
+            // 定义一个颜色数组
+            var colors = ['#5470C6', '#91CC75', '#EE6666', '#E87C25', '#FFD85C', '#73C0DE', '#3BA272', '#FC8452', '#9A60B4', '#EA7CCC'];
+
+            var option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'shadow'
+                    }
+                },
+                legend: {
+                    data: uniqueCategories
+                },
+                xAxis: {
+                    type: 'category',
+                    data: uniqueCategories,
+                    axisLabel: {
+                        interval: 0, // 显示所有标签
+                        rotate: 35 // 旋转标签
+                    }
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                series: [{
+                    name: '金额',
+                    type: 'bar',
+                    data: amounts,
+                    label: {
+                        normal: {
+                            show: true,
+                            position: 'top'
+                        }
+                    },
+                    itemStyle: {
+                        normal: {
+                            color: function(params) {
+                                return colors[params.dataIndex % colors.length];
+                            }
+                        }
+                    }
+                }]
+            };
+            var chart = echarts.init(document.getElementById('category-bar-chart'));
+            chart.clear();  // 清除当前图表状态
+            chart.off('click');  // 移除之前注册的所有click事件处理程序
+            chart.setOption(option);
+            chart.on('click', function (params) {
+                var selectedDepositoryId = document.getElementById('depository-selector').value;
+                var selectedMonth = document.getElementById('month-selector').value;
+                var parts = selectedMonth.split('-');  // 拆分为 ["2023", "01"]
+                var year = parts[0];
+                var month = parts[1];
+                // 对分类名称进行URL编码
+                var encodedCategoryName = encodeURIComponent(params.name);
+                // 发送AJAX请求获取该分类的记录
+                $.ajax({
+                    url: '/api/categories/category-records/' + encodedCategoryName + '/' + selectedDepositoryId + '/' + year + '/' + month,
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(records) {
+                        var widthPercentage = 80; // 80%
+                        var heightPercentage = 60; // 60%
+
+                        var screenWidth = $(window).width();
+                        var screenHeight = $(window).height();
+
+                        var popupWidth = (widthPercentage / 100) * screenWidth;
+                        var popupHeight = (heightPercentage / 100) * screenHeight;
+
+                        // 确保弹出层的尺寸不超过一个最大值
+                        var maxPopupWidth = 800; // 最大宽度
+                        var maxPopupHeight = 600; // 最大高度
+
+                        popupWidth = Math.min(popupWidth, maxPopupWidth);
+                        popupHeight = Math.min(popupHeight, maxPopupHeight);
+
+                        layer.open({
+                            type: 1,
+                            title: params.name,
+                            content: $('#recordTableContainer'),
+                            area: [popupWidth + 'px', popupHeight + 'px'], // 使用像素值而不是百分比
+                            shadeClose: true
+                        });
+
+                        renderTable(records);
+                    },
+                    error: function(error) {
+                        console.log("Error fetching records for category", error);
+                    }
+                });
+            });
+
+            function renderTable(records) {
+                function formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    let date = new Date(dateStr);
+                    let year = date.getFullYear();
+                    let month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    let day = date.getDate().toString().padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+
+                table.render({
+                    elem: '#recordTable',
+                    height: "full-50", // 设置表格高度并固定表头
+                    cols: [ [
+                        { field: 'sourceTable', title: '来源表',  hide: true},
+                        { field: 'id', title: 'ID', hide: true},
+                        {
+                            field: 'atId',
+                            title: 'AT',
+                            templet: function(d) {
+                                return d.atId ? d.atId : '一次性';  // 如果atId为空，则显示“一次性”
+                            }
+                        },
+                        { field: 'name', title: '名称' },
+                        { field: 'model', title: '型号'},
+                        { field: 'quantity', title: '数量'},
+                        { field: 'unitPrice', title: '单价' },
+                        { field: 'totalAmount', title: '金额', templet: function(d) {
+                                return parseFloat(d.totalAmount).toFixed(2);  // 格式化为两位小数
+                            }},
+                        {
+                            field: 'recordDate',
+                            title: '记录日期',
+                            hide: true,
+                            flex:1,
+                            templet: function(d) {
+                                return formatDate(d.recordDate);
+                            }
+                        },
+                        { field: 'applyRemark', title: '备注' ,hide: true},
+                        { field: 'categoryTitle', title: '分类标题' ,hide: true}
+                    ]],
+                    limit: records.length,
+                    height: 280,
+                    data: records,
+                });
+            }
+        }
+
+        function initChart(chartId, months, sabData, zabData, title) {
+            var echartsInstance = echarts.init(document.getElementById(chartId), 'walden');
+            var option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: "cross",
+                        label: {
+                            backgroundColor: "#6e7985"
+                        }
+                    }
+                },
+                legend: {
+                    data: ['SAB', 'ZAB']
+                },
+                title: {
+                    text: title,
+                    left: 'left'
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    containLabel: true
+                },
+                toolbox: {
+                    feature: {
+                        saveAsImage: {}
+                    }
+                },
+                xAxis: {
+                    type: 'category',
+                    boundaryGap: false,
+                    data: months
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                series: [
+                    {
+                        name: 'SAB',
+                        type: 'line',
+                        // stack: '金额',
+                        smooth: false,
+                        label: {
+                            normal: {
+                                show: true,
+                                position: 'left'
+                            }
+                        },
+                        areaStyle: {},
+                        data: sabData
+                    },
+                    {
+                        name: 'ZAB',
+                        type: 'line',
+                        // stack: '金额',
+                        smooth: false,
+                        label: {
+                            normal: {
+                                show: true,
+                                position: 'right'
+                            }
+                        },
+                        areaStyle: {},
+                        data: zabData
+                    }
+                ]
+            };
+            echartsInstance.setOption(option);
+            return echartsInstance;
+        }
+        function initBarChart(chartId, months, sabData, zabData, title) {
+            var echartsInstance = echarts.init(document.getElementById(chartId), 'walden');
+            var option = {
+                tooltip: {
+                    trigger: 'axis'
+                },
+                legend: {
+                    data: ['SAB', 'ZAB']
+                },
+                title: {
+                    text: title,
+                    left: 'left'
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    containLabel: true
+                },
+                toolbox: {
+                    feature: {
+                        saveAsImage: {}
+                    }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: months
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                series: [
+                    {
+                        name: 'SAB',
+                        type: 'bar',
+                        barGap: '1%',
+                        label: {
+                            normal: {
+                                show: true,
+                                position: 'top'
+                            }
+                        },
+                        data: sabData
+                    },
+                    {
+                        name: 'ZAB',
+                        type: 'bar',
+                        barGap: '1%',
+                        label: {
+                            normal: {
+                                show: true,
+                                position: 'top'
+                            }
+                        },
+                        data: zabData,
+                    }
+                ]
+            };
+            echartsInstance.setOption(option);
+            return echartsInstance;
+        }
+        window.onresize = function(){
+            for (var i = 0; i < echartsInstances.length; i++) {
+                echartsInstances[i].resize();
+            }
+        }
+    });
+</script>
+</body>
+</html>

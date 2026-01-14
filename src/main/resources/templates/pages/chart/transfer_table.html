@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>transfer_table</title>
+    <link rel="stylesheet" href="/static/lib/layui-v2.6.3/css/layui.css" media="all">
+    <style>
+        /* 基本的表格样式 */
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            position: sticky;
+            top: 0;
+        }
+
+        /* 设置固定的列宽 */
+        th:nth-child(1),
+        td:nth-child(1) {
+            width: 10%;
+        }
+
+        th:nth-child(2),
+        td:nth-child(2) {
+            width: 15%;
+        }
+
+        th:nth-child(3),
+        td:nth-child(3) {
+            width: 20%;
+        }
+
+        /* ... 可以继续为其他列设置宽度 ... */
+
+        /* 鼠标悬停行高亮 */
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        /* 表格容器样式，使其可滚动 */
+        .table-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        /* SAB转入ZAB的备注用一个颜色表示 */
+        .sab-to-zab {
+            background-color: #ffffff; /* 金色 */
+        }
+
+        /* ZAB转入SAB的备注用另一个颜色表示 */
+        .zab-to-sab {
+            background-color: rgb(147, 143, 143); /* 天蓝色 */
+        }
+
+    </style>
+</head>
+<body>
+<div class="layui-container" style="margin-top: 20px;">
+    <form class="layui-form" action="/api/export/report" method="get">
+        <div class="layui-form-item">
+            <div class="layui-input-inline" style="display: none">
+                <select name="depository_id" hidden="hidden">
+                    <option value="1">SAB</option>
+                    <option value="2">ZAB</option>
+                </select>
+            </div>
+            <label class="layui-form-label">开始日期</label>
+            <div class="layui-input-inline">
+                <input type="text" class="layui-input" id="startDatePicker" placeholder="选择开始日期">
+            </div>
+            <label class="layui-form-label">结束日期</label>
+            <div class="layui-input-inline">
+                <input type="text" class="layui-input" id="endDatePicker" placeholder="选择结束日期">
+            </div>
+            <div class="layui-input-inline">
+                <button type="button" class="layui-btn" onclick="loadReport()">查看</button>
+                <button type="button" class="layui-btn layui-btn-primary" onclick="exportReport()">导出</button>
+            </div>
+        </div>
+    </form>
+</div>
+<div class="table-container">
+    <table id="reportTable" border="1">
+        <!-- 表格数据由JavaScript动态生成 -->
+    </table>
+</div>
+<script src="/static/lib/layui-v2.6.3/layui.js" charset="utf-8"></script>
+<script>
+    layui.use(['form', 'laydate'], function() {
+        var form = layui.form;  // 添加这行
+        var laydate = layui.laydate;
+
+        // 初始化日期选择器
+        laydate.render({
+            elem: '#startDatePicker'
+        });
+        laydate.render({
+            elem: '#endDatePicker'
+        });
+    });
+    function loadReport() {
+        const startDate = document.getElementById('startDatePicker').value;
+        const endDate = document.getElementById('endDatePicker').value;
+        if (!startDate || !endDate) {
+            alert("请确保选择了开始和结束日期!");
+            return;
+        }
+        const depositorySelect = document.querySelector("[name='depository_id']");
+        const depositoryId = depositorySelect.value;
+        fetch(`/api/transfer?depositoryId=${depositoryId}&startDate=${startDate}&endDate=${endDate}`)
+            .then(response => response.json())
+            .then(data => {
+                let table = document.getElementById('reportTable');
+                table.innerHTML = ''; // 清除旧数据
+                // 创建表头
+                let thead = document.createElement('thead');
+                let headerRow = document.createElement('tr');
+                Object.keys(data[0]).forEach(colName => {
+                    let th = document.createElement('th');
+                    th.textContent = colName;
+                    headerRow.appendChild(th);
+                });
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+                // 创建表格主体数据
+                let tbody = document.createElement('tbody');
+                data.forEach(row => {
+                    let tr = document.createElement('tr');
+                    let remarkClass = ''; // 用于存储备注对应的类
+                    Object.entries(row).forEach(([colName, cellData]) => {
+                        let td = document.createElement('td');
+                        td.textContent = cellData;
+                        // 如果列名为“备注”，则根据备注内容添加相应的类
+                        if (colName === '备注') {
+                            if (cellData === 'SAB转入ZAB') {
+                                td.classList.add('sab-to-zab');
+                                remarkClass = 'sab-to-zab';//整行
+                            } else if (cellData === 'ZAB转入SAB') {
+                                td.classList.add('zab-to-sab');
+                                remarkClass = 'zab-to-sab';//整行
+                            }
+                        }
+                        tr.appendChild(td);
+                    });
+                    if (remarkClass) {
+                        tr.classList.add(remarkClass);
+                    }
+                    tbody.appendChild(tr);
+                });
+                table.appendChild(tbody);
+
+            })
+            .catch(error => console.error('Error fetching data:', error));
+    }
+    function exportReport() {
+        const startDate = document.getElementById('startDatePicker').value;
+        const endDate = document.getElementById('endDatePicker').value;
+        if (!startDate || !endDate) {
+            alert("请确保选择了开始和结束日期!");
+            return;
+        }
+        const depositorySelect = document.querySelector("[name='depository_id']");
+        const depositoryId = depositorySelect.value;
+        window.location.href = `/api/export/transfer?depositoryId=${depositoryId}&startDate=${startDate}&endDate=${endDate}`;
+    }
+</script>
+</body>
+</html>

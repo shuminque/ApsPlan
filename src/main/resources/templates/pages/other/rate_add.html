@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>汇率</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="/static/lib/layui-v2.6.3/css/layui.css" media="all">
+    <link rel="stylesheet" href="/static/css/public.css" media="all">
+</head>
+<body>
+<div class="layuimini-container">
+    <div class="layuimini-main">
+        <fieldset class="table-search-fieldset">
+            <legend>搜索信息</legend>
+            <div style="margin: 10px 10px 10px 10px">
+                <form class="layui-form layui-form-pane" action="">
+                    <div class="layui-form-item">
+                        <div class="layui-inline">
+                            <label class="layui-form-label">日期</label>
+                            <div class="layui-input-block">
+                                <input type="text" name="date" id="date1"  placeholder="请选择日期"
+                                       autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <button type="submit" class="layui-btn layui-btn-primary" lay-submit
+                                    lay-filter="data-search-btn"><i class="layui-icon"></i> 搜 索
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </fieldset>
+        <button id="addRateBtn" class="layui-btn">添加汇率</button>
+        <table class="layui-hide" id="currentTableId" lay-filter="currentTableFilter">  </table>
+        <div id="rateAddForm" style="display: none;">
+            <fieldset class="table-search-fieldset">
+                <div class="layui-fluid">
+                    <div class="layui-card">
+                        <div class="layui-card-body" style="padding-top: 40px;">
+                            <div>
+                                <form class="layui-form" lay-filter="form1" style="margin: 0 auto;max-width: 460px;padding-top: 100px; padding-bottom: 200px">
+                                    <div class="layui-form-item">
+                                        <label class="layui-form-label">日期:</label>
+                                        <div class="layui-input-block">
+                                            <input type="text" placeholder="请填写日期" name="date" id="date2" class="layui-input"
+                                                   lay-verify="required" required>
+                                            <input name="currency_from" type="hidden" id="currency_from" value="JPY"/>
+                                            <input name="currency_to" type="hidden" id="currency_to"  value="CNY"/>
+                                        </div>
+                                    </div>
+                                    <div class="layui-form-item">
+                                        <label class="layui-form-label">汇率:</label>
+                                        <div class="layui-input-block">
+                                            <input type="text" placeholder="请填写汇率" name="rate" class="layui-input"
+                                                   lay-verify="required" required>
+                                        </div>
+                                    </div>
+                                    <div class="layui-form-item">
+                                        <div class="layui-input-block">
+                                            <button class="layui-btn" lay-submit lay-filter="formStep">
+                                                &emsp;增加汇率&emsp;
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        <hr>
+                    </div>
+                </div>
+            </fieldset>
+        </div>
+        <script type="text/html" id="operation-bar">
+<!--            <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>-->
+            <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="delete">删除</a>
+        </script>
+    </div>
+</div>
+    <script src="/static/lib/layui-v2.6.3/layui.js" charset="utf-8"></script>
+    <script>
+        var data;
+        layui.use(['form', 'table','layer','laydate'], function () {
+            var $ = layui.jquery,
+                form = layui.form,
+                table = layui.table,
+                laydate = layui.laydate,
+                layer = layui.layer;
+            laydate.render({
+                elem: '#date1',
+                type: 'month'
+            });
+            laydate.render({
+                elem: '#date2', // 指定元素
+            });
+            $.ajax({
+                url: '/get_user_depository',
+                type: 'GET',
+                dataType: 'json',
+                success: function(data) {
+                    var userDepositoryId = data.depositoryId;
+                    var authority = data.authority;
+                    if (userDepositoryId === 0 || authority === '审核人') {
+                        toolbarTemplate = `
+                        <a class="layui-btn layui-btn-xs layui-btn-danger data-count-delete" lay-event="delete">删除</a>
+                    `;
+                    } else {
+                        toolbarTemplate = ` `;
+                    }
+                    $("#operation-bar").html(toolbarTemplate);
+                    table.render({
+                        elem: "#currentTableId",
+                        url: '/rate',
+                        initSort: {field: 'date', type: 'desc'},
+                        parseData: function (res) { //res 即为原始返回的数据
+                            return {
+                                "status": res.status, //解析接口状态
+                                "message": res.statusInfo.message, //解析提示文本
+                                "count": res.count, //解析数据长度
+                                "data": res.data //解析数据列表
+                            };
+                        },
+
+                        response: {
+                            statusName: 'status' //规定数据状态的字段名称，默认：code
+                            ,statusCode: 200 //规定成功的状态码，默认：0
+                            ,msgName: 'message' //规定状态信息的字段名称，默认：msg
+                            ,countName: 'count' //规定数据总数的字段名称，默认：count
+                            ,dataName: 'data' //规定数据列表的字段名称，默认：data
+                        },
+                        toolbar: ['filter', 'exports', 'print'],
+                        cols: [ [
+                            // {field: 'id',  title: '编号'},
+                            {field: 'date',  title: '日期', sort: true,templet: function(d) {
+                                    // 以下是一个简单的例子，根据实际的日期格式进行调整
+                                    var date = new Date(d.date);
+                                    return date.getFullYear() + '-' + (date.getMonth() + 1).toString().padStart(2, '0');
+                                }},
+                            {field: 'rate',  title: '汇率', sort: true},
+                            {title: ' ', align: 'center', toolbar: '#operation-bar'}
+                        ]]
+                    });
+                    form.on('submit(data-search-btn)', function (data) {
+                        var req = {};
+                        data = data.field;
+                        if (data.date !== '') {
+                            var yearMonth = data.date.split('-');
+                            var year = parseInt(yearMonth[0], 10);
+                            var month = parseInt(yearMonth[1], 10);
+                            var startDate = new Date(year, month - 1, 1);
+                            req.startDate = startDate.toISOString().split('T')[0];
+                            var endDate = new Date(year, month, 0);
+                            req.endDate = endDate.toISOString().split('T')[0];
+                        }
+                        table.reload('currentTableId', {
+                            url: '/rate',
+                            page: {
+                                curr: 1
+                            },
+                            where: req
+                        }, 'data');
+                        return false;
+                    });
+                    $('#addRateBtn').on('click', function() {
+                        layer.open({
+                            type: 1,  // 页面层
+                            title: '汇率增加',  // 标题
+                            area: ['500px', '400px'],  // 宽高
+                            content: $('#rateAddForm'),  // 内容，这里是一个jQuery选择器，选择ID为rateAddForm的元素
+                            success: function(layero, index) {
+                                // 这里可以添加一些弹出层打开后的初始化代码，如果需要的话
+                            }
+                        });
+                    });
+                    form.on('submit(formStep)', function (data) {
+                        $.ajax({
+                            url:"/rate",
+                            type:'post',
+                            dataType:'json',
+                            contentType: "application/json;charset=utf-8",
+                            data:JSON.stringify(data.field),
+                            beforeSend:function () {
+                                this.layerIndex = layer.load(0, { shade: [0.5, '#393D49'] });
+                            },
+                            success:function(data){
+                                layer.close(this.layerIndex);
+                                if(data.status >= 300){
+                                    layer.msg(data.statusInfo.message); // 这里已经有了一个错误提示
+                                    return;
+                                }else{
+                                    layer.msg("添加成功！", {
+                                        icon: 6, //成功的表情
+                                        time: 1000 //1秒关闭（如果不配置，默认是3秒）
+                                    });
+                                    table.reload('currentTableId'); // 重新加载表格
+                                }
+                            },
+                            error: function(jqXHR, textStatus, errorThrown) {
+                                layer.close(this.layerIndex);
+                                layer.msg('错误的操作，错误信息：' + errorThrown, {
+                                    icon: 5, //失败的表情
+                                    time: 3000 //3秒关闭
+                                });
+                            },
+                            complete: function () {
+                                form.val("form1", {
+                                    'id': ""
+                                    ,"tname": ""
+                                    ,"introduce": ""
+                                })
+                            }
+                        })
+                        return false;
+                    });
+
+                    table.on('tool(currentTableFilter)', function(obj) {
+                        var data = obj.data; // 获取当前行的数据
+                        var layEvent = obj.event; // 获取当前事件名称
+
+                        if (layEvent === 'edit') {
+                            // 执行编辑操作
+                            editModel(data);
+                        } else if (layEvent === 'delete') {
+                            // 执行删除操作
+                            deleteModel(data.id);
+                        }
+                    });
+
+                    function deleteModel(id) {
+                        layer.confirm('确定要删除吗？', function(index) {
+                            $.ajax({
+                                url: "/rate/" + id,
+                                type: 'DELETE',
+                                success: function(data) {
+                                    layer.msg('删除成功！');
+                                    table.reload('currentTableId'); // 重新加载表格
+                                },
+                                error: function() {
+                                    layer.msg('删除失败！');
+                                }
+                            });
+                            layer.close(index);
+                        });
+                    }
+                },
+                error: function() {
+                    // 处理错误，例如显示一个消息
+                    layer.msg('无法获取用户的厂区信息');
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>

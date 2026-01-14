@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>返库管理系统</title>
+    <link rel="stylesheet" href="/static/css/http_cdn.jsdelivr.net_npm_bootstrap@5.1.0_dist_css_bootstrap.css">
+    <!--    <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">-->
+    <script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
+    <!--    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>-->
+    <script src="/static/js/http_cdnjs.cloudflare.com_ajax_libs_bootstrap-3-typeahead_4.0.2_bootstrap3-typeahead.js"></script>
+    <link rel="stylesheet" href="/static/css/__cdnjs.cloudflare.com_ajax_libs_toastr.js_latest_toastr.css">
+    <script src="/static/js/__cdnjs.cloudflare.com_ajax_libs_toastr.js_latest_toastr.min.js"></script>
+    <style>
+        body {
+            padding-top: 50px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 600px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .form-title {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .btn-custom {
+            background-color: #0056b3;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="form-title">
+        <h2>成品返库操作</h2>
+    </div>
+    <form id="stockInForm">
+        <div class="mb-3">
+            <label for="boxText" class="form-label">箱号</label>
+            <input type="text" class="form-control" id="boxText" placeholder="请输入箱号" required autocomplete="off">
+        </div>
+        <div class="mb-3">
+            <label for="boxNumber" class="form-label">箱号编号</label>
+            <input type="text" class="form-control" id="boxNumber" placeholder="请输入箱号编号" required autocomplete="off">
+        </div>
+        <div class="mb-3">
+            <label for="quantity" class="form-label">数量</label>
+            <input type="number" class="form-control" id="quantity" placeholder="确认数量" readonly autocomplete="off">
+        </div>
+        <button type="submit" class="btn btn-custom w-100">提交返库</button>
+    </form>
+</div>
+<script src="/static/js/bootstrap@5.1.0_dist_js_bootstrap.bundle.js"></script>
+<script>
+    var userReviewGroupId;var userAuthority;var userDepositoryId;var userDepository;var depositoryId;var newiter;
+    function getUserDepository() {
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                console.log(data);
+                userDepositoryId = data.depositoryId;userAuthority = data.authority;userReviewGroupId = data.review_group_id;
+                if (userDepositoryId ===1){
+                    userDepository='SAB';depositoryId=1;
+                } else if (userDepositoryId===2){
+                    userDepository='ZAB';depositoryId=2;
+                }else{
+                    userDepository="ALL";depositoryId=0;
+                }
+            },
+            error: function() {
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+    }
+    document.addEventListener('DOMContentLoaded', function() {getUserDepository();});
+    $(document).ready(function() {
+        $('#boxText').typeahead({
+            source: function(query, process) {
+                return $.ajax({
+                    url: '/bearings/search',
+                    type: 'GET',
+                    data: { query: query, depository: userDepository },
+                    dataType: 'json',
+                    success: function(data) {
+                        return process(data);
+                    }
+                });
+            },
+            minLength: 1, autoSelect: true
+        });
+        //当用户选择一个选项或填写箱号时更新输入框并获取最新的箱号编号
+        $('#boxText').on('typeahead:select change', function(event) {
+            // 获取选择或输入的箱号
+            const boxText = $(this).val();
+            fetchLatestBoxNumberAndQuantity(boxText);
+        });
+        // 监听箱号编号输入框的变化
+        $('#boxNumber').on('input', function() {
+            const boxText = $('#boxText').val();
+            const boxNumber = $(this).val();
+            fetchQuantityForBoxNumber(boxText, boxNumber);
+        });
+    });
+    // 获取最新的箱号编号和数量
+    function fetchLatestBoxNumberAndQuantity(boxText) {
+        $.ajax({
+            url: "/productIds/",
+            type: "GET",
+            data: { boxText: boxText, depositoryId: depositoryId },
+            success: function(response) {
+                // 填充最新的箱号编号和数量到对应输入框
+                $('#boxNumber').val(response.boxNumber);
+                $('#quantity').val(response.quantity);
+                newiter= response.iter;
+            },
+            error: function() {
+                $('#boxNumber').val('');
+                $('#quantity').val('');
+            }
+        });
+    }
+    // 根据箱号和箱号编号获取数量
+    function fetchQuantityForBoxNumber(boxText, boxNumber) {
+        if (!boxNumber) return; // 如果箱号编号为空，则不执行操作
+        $.ajax({
+            url: "/productIds/quantity",
+            type: "GET",
+            data: { boxText: boxText, boxNumber: boxNumber, depositoryId: depositoryId },
+            success: function(response) {
+                // 更新数量到输入框
+                $('#quantity').val(response.quantity);
+                newiter= response.iter;
+            },
+            error: function() {
+                $('#quantity').val('');
+            }
+        });
+    }
+    document.getElementById('stockInForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+        const boxText = document.getElementById('boxText').value;
+        const boxNumber = document.getElementById('boxNumber').value;
+        const quantity = document.getElementById('quantity').value;
+        // 检查数量是否已输入
+        if (!quantity || quantity <= 0) {
+            toastr.error('数量为0，请再次检查！');
+            return; // 如果没有数量或数量为零，阻止表单提交
+        }
+        stockOut(boxText, boxNumber, quantity, '返库', depositoryId,newiter);
+    });
+    function stockOut(boxText, boxNumber, quantity, operationType, depositoryId,newiter) {
+        const operationTypeChinese = getOperationTypeInChinese(operationType);
+        var inventoryDto = {
+            boxText: boxText,
+            boxNumber: boxNumber,
+            quantityInStock: quantity,
+            operationType: operationTypeChinese,
+            depositoryId: depositoryId,
+            iter:newiter
+        };
+        fetch('/bearingInventory/stockOutForPC', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(inventoryDto),
+        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.message);
+                    });
+                }
+                return response.json();
+            })
+            .then(
+                data => {
+                    console.log("返库成功", data);
+                    toastr.success('返库操作成功');
+                    clearForm();
+                    return addBearingRecord(operationTypeChinese, boxText, boxNumber, quantity, depositoryId,newiter);
+                })
+            .catch(error => {
+                console.error('返库操作失败:', error);
+                toastr.error(`返库操作失败: ${error.message}`);
+            });
+    }
+    function clearForm() {
+        document.getElementById('boxText').value = '';
+        document.getElementById('boxNumber').value = '';
+        document.getElementById('quantity').value = '';
+        $('#boxText').focus(); // 重新聚焦到箱号输入框
+    }
+    function addBearingRecord(transactionType, boxText, boxNumber, quantity, depositoryId,newiter) {
+        var depositoryText = convertDepositoryIdToText(depositoryId);
+        var recordDto = {
+            transactionType: transactionType, boxText: boxText, boxNumber: boxNumber, quantity: quantity, depository: depositoryText,iter:newiter
+        };
+        return fetch('/bearingRecords', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(recordDto)
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('记录库操作失败');
+                }
+                return response.json();
+            });
+    }
+    function convertDepositoryIdToText(depositoryId) {switch (depositoryId) {case 1: return "SAB";case 2: return "ZAB";default: return "Unknown";}}
+
+    function getOperationTypeInChinese(operationType) {
+        const operationTypeMap = {'stockIn': '入库', 'stockOut': '出库', 'transferIn': '转入', 'transferOut': '转出', 'return': '返库', 'panKu': '盘库'};
+        return operationTypeMap[operationType] || operationType;
+    }
+</script>
+</body>
+</html>

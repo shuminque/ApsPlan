@@ -1,0 +1,483 @@
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>库存记录</title>
+        <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+        <script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+        <!-- jQuery 库 -->
+        <script src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js"></script>
+        <script src="/static/js/http_cdnjs.cloudflare.com_ajax_libs_bootstrap-3-typeahead_4.0.2_bootstrap3-typeahead.js"></script>
+        <script src="/static/js/http_cdnjs.cloudflare.com_ajax_libs_xlsx_0.17.3_xlsx.full.min.js"></script>
+        <style>
+            .container {
+                margin: 20px;
+            }
+        </style>
+    </head>
+    <body>
+    <div class="container">
+        <form class="layui-form"  id="searchForm">
+            <div class="layui-form-item">
+                <div class="layui-input-inline">
+                    <input type="text" name="time" id="date" placeholder="请选择日期" autocomplete="off" class="layui-input">
+                </div>
+                <div class="layui-input-inline">
+                    <input type="text" name="boxText" id="boxText" placeholder="搜索箱号" class="layui-input">
+                </div>
+                <div class="layui-input-inline">
+                    <input type="text" name="boxNumber" placeholder="搜索箱号编号" class="layui-input">
+                </div>
+                <div class="layui-input-inline">
+                    <input type="text" name="model" placeholder="搜索型号" class="layui-input">
+                </div>
+                <div>
+                    <div class="layui-input-inline">
+                        <select name="currentDepository" id="depositorySelect" lay-search>
+                            <!-- 初始值，稍后会根据用户信息进行更新 -->
+                        </select>
+                    </div>
+                </div>
+                <div class="layui-inline">
+                    <button type="button" class="layui-btn" id="advancedSearchToggle">高级搜索</button>
+                </div>
+                <div class="layui-inline" id="advancedSearchForm" style="display: none;">
+                    <div class="layui-input-inline">
+                        <div class="layui-input-inline">
+                            <select name="customer">
+                                <option value="" selected>搜索客户</option>
+                                <option th:each="customer : ${customers}"
+                                        th:value="${customer.name}"
+                                        th:text="${customer.name}"></option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="layui-input-inline">
+                        <select name="outerInnerRing">
+                            <option value="" selected>搜索内/外轮</option>
+                            <option value="LA" >LA</option>
+                            <option value="LB" >LB</option>
+                            <option value="LAB" >LAB</option>
+                        </select>
+                    </div>
+                    <div class="layui-input-inline">
+                        <select name="productCategory">
+                            <option value="" selected>搜索制品分类</option>
+                            <option th:each="product_category : ${productCategorys}"
+                                    th:value="${product_category.name}"
+                                    th:text="${product_category.name}"></option>
+                        </select>
+                    </div>
+                    <div class="layui-input-inline">
+                        <select name="steelType">
+                            <option value="" selected>搜索钢种</option>
+                            <option th:each="steel_type : ${steelTypes}"
+                                    th:value="${steel_type.name}"
+                                    th:text="${steel_type.name}"></option>
+                        </select>
+                    </div>
+                    <div class="layui-input-inline">
+                        <select name="steelGrade">
+                            <option value="" selected>搜索钢材等级</option>
+                            <option th:each="steel_grade : ${steelGrades}"
+                                    th:value="${steel_grade.grade}"
+                                    th:text="${steel_grade.grade}"></option>
+                        </select>
+                    </div>
+                </div>
+                <div class="layui-inline">
+                    <button type="submit" class="layui-btn layui-btn-primary" lay-submit lay-filter="data-search-btn">
+                        <i class="layui-icon"></i> 搜 索
+                    </button>
+                </div>
+                <div class="layui-input-inline">
+                    <select name="state">
+                        <option value="">搜索状态</option>
+                        <option value="正常">正常</option>
+                        <option value="死库">死库</option>
+                    </select>
+                </div>
+            </div>
+        </form>
+
+        <table id="recordTable" lay-filter="recordTableFilter"></table>
+
+    </div>
+    <script>
+        document.getElementById('boxText').addEventListener('input', function() {
+            this.value = this.value.toUpperCase();
+        });
+    </script>
+    <script>
+        var userReviewGroupId;var userAuthority;var userDepositoryId;var userDepository;var depositoryId;
+        function getUserDepository() {
+            $.ajax({
+                url: '/get_user_depository',
+                type: 'GET',
+                dataType: 'json',
+                success: function(data) {
+                    console.log(data);
+                    userDepositoryId = data.depositoryId;userAuthority = data.authority;userReviewGroupId = data.review_group_id;
+                    if (userDepositoryId ===1){
+                        userDepository='SAB';depositoryId=1;
+                    } else if (userDepositoryId===2){
+                        userDepository='ZAB';depositoryId=2;
+                    }else{
+                        userDepository="ALL";depositoryId=0;
+                    }
+                    let selectElem = document.getElementById('depositorySelect');
+                    // 定义选项模板
+                    var options = {"": "请选择仓库", "SAB": "SAB", "ZAB": "ZAB"};
+                    // 生成HTML选项字符串
+                    var optionsHTML = Object.keys(options).map(function(key) {
+                        return '<option value="' + key + '">' + options[key] + '</option>';
+                    }).join('');
+                    // 设置默认选中的选项
+                    var selectedOption = "";
+                    switch (userDepositoryId) {
+                        case 1:selectedOption = "SAB";break;
+                        case 2:selectedOption = "ZAB";break;
+                        case 0:selectedOption = "";break;
+                    }
+                    // 更新HTML字符串，设置选中的选项
+                    optionsHTML = optionsHTML.replace('value="' + selectedOption + '"', 'value="' + selectedOption + '" selected');
+                    // 最后，将生成的HTML设置到select元素中
+                    selectElem.innerHTML = optionsHTML;
+                    layui.form.render('select');
+                },
+                error: function() {
+                    layer.msg('无法获取用户的厂区信息');
+                }
+            });
+        }
+        document.addEventListener('DOMContentLoaded', function() {getUserDepository();});
+        $(document).ready(function() {
+            $('#boxText').typeahead({
+                source: function(query, process) {
+                    return $.ajax({
+                        url: '/bearings/search',
+                        type: 'GET',
+                        data: { query: query, depository: userDepository },
+                        dataType: 'json',
+                        success: function(data) {
+                            return process(data);
+                        },
+                        error: function (data) {
+                            console.log(data);
+                        }
+                    });
+                },
+                minLength: 1, autoSelect: true
+            });
+        });
+        layui.use(['table', 'form', 'laydate'], function(){
+            var table = layui.table;
+            var form = layui.form;
+            var laydate=layui.laydate;
+
+            // 初始化日期范围选择器
+            laydate.render({
+                elem: '#date',
+                value: new Date() // 设置默认值为当前日期
+            });
+            var recordTable =  table.render({
+                elem: '#recordTable',
+                url: '/bearingRecords/inventory', // 更新为正确的后端接口 URL
+                height: 600, // 设置表格高度
+                parseData: function(res) { // 将原始数据格式适配成 layui 表格组件所期望的格式
+                    var filteredData = res.filter(function(record) {
+                        return record.quantity > 0;
+                    });
+                    return {
+                        "code": 0, // 解析接口状态
+                        "msg": "", // 解析提示文本
+                        "count": filteredData.length, // Parse data length
+                        "data": filteredData // Parse data list
+                    };
+                },
+                request: {
+                    pageName:'page',
+                    limitName:'size'
+                },
+                totalRow: true, // 开启合计行
+                toolbar: ['filter', 'exports', 'print'],
+                cols: [ [
+                    {field: 'boxText', title: '箱号', sort:true},
+                    {field: 'boxNumber', title: '编号'},
+                    {field: 'outerInnerRing', title: '内外轮'},
+                    {field: 'model', title: '型号'},
+                    {field: 'productCategory', title: '制品分类'},
+                    {field: 'steelType', title: '钢种', totalRowText: '合计：'},
+                    // 这里：totalRowText 只是提示文字，真正的数值需要开启 totalRow: true
+                    {field: 'steelGrade', title: '钢等',totalRowText: '箱数'},
+                    {field: 'size', title: '尺寸', totalRow: true}, // 开启自动计算（如果是数字）
+                    {field: 'dissolve', title: '溶解号',totalRowText: '合计数'},
+                    {field: 'quantity', title: '数量', totalRow: true}, // 开启自动计算
+                    {field: 'customer', title: '客户'},
+                    {field: 'state', title: '状态'},
+                    {field: 'currentDepository', title: '仓库'},
+                    {field: 'lastRecordedTime', title: '最后入库时间', templet: function(d) {
+                            return formatDate(d.lastRecordedTime);
+                        }},
+                ]],
+                done: function(res, curr, count) {
+                    // 在这里计算合计值
+                    var total = 0;
+                    res.data.forEach(function(item) {
+                        total += parseInt(item.quantity);
+                    });
+                    // 更新合计行的值
+                    var totalRow = document.getElementsByClassName('layui-table-total')[0];
+                    if (totalRow) {
+                        var totalCell = totalRow.querySelector('td[data-field="quantity"]');
+                        if (totalCell) {
+                            totalCell.getElementsByClassName('layui-table-cell')[0].innerText = total.toString();
+                        }
+                        // 更新箱数
+                        var boxCountCell = totalRow.querySelector('td[data-field="size"]');
+                        if (boxCountCell) {
+                            boxCountCell.getElementsByClassName('layui-table-cell')[0].innerText = res.data.length.toString();
+                        }
+                    }
+                    addCustomExportButton(); // 确保在每次表格加载完成后添加按钮
+                },
+                limits:[20,200,2000,60000],
+                limit:60000,
+            });
+            function customExport() {
+                var data = table.cache['recordTable']; // 从表格缓存中获取当前表格的数据
+                // 按指定字段排序
+                data.sort((a, b) => {
+                    return (a.customer || "").localeCompare(b.customer || "") ||
+                        (a.outerInnerRing || "").localeCompare(b.outerInnerRing || "") ||
+                        (a.steelType || "").localeCompare(b.steelType || "") ||
+                        (a.steelGrade || "").localeCompare(b.steelGrade || "") ||
+                        (a.size || "").localeCompare(b.size || "") ||
+                        (a.boxText || "").localeCompare(b.boxText || "") ||
+                        (a.boxNumber || "").localeCompare(b.boxNumber || "");
+                });
+                // 分组并添加合计行
+                var groupedData = [];
+                var currentGroup = [];
+                var currentGroupTotal = 0;
+                for (var i = 0; i < data.length; i++) {
+                    if (i > 0 &&
+                        (data[i].customer !== data[i - 1].customer ||
+                            data[i].outerInnerRing !== data[i - 1].outerInnerRing ||
+                            data[i].steelType !== data[i - 1].steelType ||
+                            data[i].steelGrade !== data[i - 1].steelGrade ||
+                            data[i].size !== data[i - 1].size)) {
+                        // 当前组结束，添加合计行
+                        groupedData = groupedData.concat(currentGroup);
+                        groupedData.push({
+                            boxText: '合计',
+                            boxNumber: '',
+                            quantity: currentGroupTotal,
+                            // depository: '',
+                            // pair: '',
+                            // currentDepository: '',
+                            customer: '',
+                            outerInnerRing: '',
+                            model: '',
+                            // productCategory: '',
+                            steelType: '',
+                            steelGrade: '',
+                            size: '',
+                            // dissolve: '',
+                            state: '',
+                            lastRecordedTime: '',
+                            // iter: '',
+                            // singleEight: '',
+                            // mode: '',
+                            // remarks: ''
+                        });
+                        // 重置当前组
+                        currentGroup = [];
+                        currentGroupTotal = 0;
+                    }
+                    // 添加当前记录到当前组
+                    currentGroup.push(data[i]);
+                    currentGroupTotal += parseInt(data[i].quantity);
+                }
+                // 添加最后一组及其合计行
+                groupedData = groupedData.concat(currentGroup);
+                groupedData.push({
+                    boxText: '合计',
+                    boxNumber: '',
+                    quantity: currentGroupTotal,
+                    // depository: '',
+                    // pair: '',
+                    // currentDepository: '',
+                    customer: '',
+                    outerInnerRing: '',
+                    model: '',
+                    // productCategory: '',
+                    steelType: '',
+                    steelGrade: '',
+                    size: '',
+                    // dissolve: '',
+                    state: '',
+                    lastRecordedTime: '',
+                    // iter: '',
+                    // singleEight: '',
+                    // mode: ''
+                    // remarks: ''
+                });
+                // 生成导出文件
+                exportTable(groupedData);
+            }
+            function exportTable(data) {
+                // 移除不需要导出的字段
+                data = data.map(row => {
+                    return {
+                        boxText: row.boxText,
+                        boxNumber: row.boxNumber,
+                        quantity: row.quantity,
+                        customer: row.customer,
+                        outerInnerRing: row.outerInnerRing,
+                        model: row.model,
+                        // productCategory: row.productCategory,
+                        steelType: row.steelType,
+                        steelGrade: row.steelGrade,
+                        size: row.size,
+                        // dissolve: row.dissolve,
+                        state: row.state,
+                        lastRecordedTime: row.lastRecordedTime,
+                        // iter: row.iter,
+                        // singleEight: row.singleEight,
+                        // mode: row.mode,
+                        // remarks: row.remarks
+                    };
+                });
+                var ws = XLSX.utils.json_to_sheet(data, {
+                    header: [
+                        // "transactionType",
+                        "boxText", "boxNumber", "quantity",
+                        // "depository",
+                        // "pair",
+                        // "currentDepository",
+                        "customer", "outerInnerRing", "model",
+                        // "productCategory",
+                        "steelType", "steelGrade", "size",
+                        // "dissolve",
+                        "state", "lastRecordedTime",
+                        // "iter",
+                        // "singleEight", "mode"
+                        // "remarks"
+                    ]
+                });
+                // 添加标题行
+                var headers = [
+                    // "交易类型",
+                    "箱号", "箱号编号", "数量",
+                    // "厂区", "配对号",
+                    // "仓库",
+                    "客户", "外/内轮", "型号",
+                    // "制品分类",
+                    "钢种", "钢材等级", "尺寸",
+                    // "溶解号",
+                    "状态", "时间",
+                    // "轮数",
+                    // "单重", "贸易方式"
+                    // "备注"
+                ];
+                XLSX.utils.sheet_add_aoa(ws, [headers], { origin: "A1" });
+                // 创建工作簿并添加工作表
+                var wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "在库记录");
+                // 导出 Excel 文件
+                XLSX.writeFile(wb, "在库分类汇总.xlsx");
+            }
+            function formatDate(dateStr) {
+                if (!dateStr) return '';
+                let date = new Date(dateStr);
+                let year = date.getFullYear();
+                let month = (date.getMonth() + 1).toString().padStart(2, '0');
+                let day = date.getDate().toString().padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+            form.on('submit(data-search-btn)', function(data) {
+                var req = {};
+                var formData = data.field;
+                console.log(formData)
+                formData.transactionType = $('#transactionType').val(); // 读取交易类型的值
+                if (formData.boxText !== '') {
+                    req.boxText = formData.boxText;
+                }
+                if (formData.boxNumber !== '') {
+                    req.boxNumber = formData.boxNumber;
+                }
+                if (formData.customer !== '') {
+                    req.customer = formData.customer;
+                }
+                if (formData.productCategory !== '') {
+                    req.productCategory = formData.productCategory;
+                }
+                if (formData.model !== '') {
+                    req.model = formData.model;
+                }
+                if (formData.outerInnerRing !== '') {
+                    req.outerInnerRing = formData.outerInnerRing;
+                }
+                if (formData.steelType !== '') {
+                    req.steelType = formData.steelType;
+                }
+                if (formData.steelGrade !== '') {
+                    req.steelGrade = formData.steelGrade;
+                }
+                if (formData.state !== '') {
+                    req.state = formData.state;
+                }
+                if (formData.currentDepository !== '') {
+                    req.currentDepository = formData.currentDepository;
+                }
+                req.cutoffDate = formData.time;
+                // 执行搜索重载
+                recordTable.reload({
+                    url: '/bearingRecords/inventory', // 更新为正确的后端接口 URL
+                    page: { curr: 1 },
+                    where: req,
+                    done: function(res, curr, count) {
+                        // 在这里计算合计值
+                        var total = 0;
+                        res.data.forEach(function(item) {
+                            total += parseInt(item.quantity);
+                        });
+                        // 更新合计行的值
+                        var totalRow = document.getElementsByClassName('layui-table-total')[0];
+                        if (totalRow) {
+                            var totalCell = totalRow.querySelector('td[data-field="quantity"]');
+                            if (totalCell) {
+                                totalCell.getElementsByClassName('layui-table-cell')[0].innerText = total.toString();
+                            }
+                            // 更新箱数
+                            var boxCountCell = totalRow.querySelector('td[data-field="size"]');
+                            if (boxCountCell) {
+                                boxCountCell.getElementsByClassName('layui-table-cell')[0].innerText = res.data.length.toString();
+                            }
+                        }
+                        addCustomExportButton(); // 确保在每次表格加载完成后添加按钮
+                    }
+                });
+                return false;
+            });
+
+            function addCustomExportButton() {
+                if ($('#customExportButton').length === 0) {
+                    var customExportButton = $('<button class="layui-btn layui-btn-primary layui-btn-sm" id="customExportButton"><i class="layui-icon layui-icon-export"></i> 分类导出</button>');
+                    $('.layui-table-tool-temp').append(customExportButton);
+
+                    // 绑定自定义导出按钮点击事件
+                    $('#customExportButton').on('click', function() {
+                        customExport();
+                    });
+                }
+            }
+            // 高级搜索开关逻辑
+            $('#advancedSearchToggle').click(function() {
+                $('#advancedSearchForm').slideToggle();
+            });
+        });
+    </script>
+    </body>
+    </html>

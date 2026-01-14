@@ -1,0 +1,65 @@
+server:
+  port: 9090
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: beans,health
+
+spring:
+  mail:
+    host: smtp.qq.com
+    username: ######@qq.com
+    password: ######
+    properties:
+      mail:
+        smtp:
+          ssl:
+            enable: true
+    default-encoding: utf-8
+  datasource:
+    username: root
+#    password: xuriroot!@Xuri
+#    url: jdbc:mysql://localhost:3306/cpck?serverTimezone=Asia/Shanghai&zeroDateTimeBehavior=convertToNull
+    password: 123456
+    url: jdbc:mysql://localhost:3308/cpck?serverTimezone=Asia/Shanghai&zeroDateTimeBehavior=convertToNull
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.alibaba.druid.pool.DruidDataSource
+    initialSize: 5
+    minIdle: 5
+    maxActive: 10
+    maxWait: 60000
+    timeBetweenEvictionRunsMillis: 60000
+    minEvictableIdleTimeMillis: 300000
+    validationQuery: SELECT 1 FROM DUAL
+    useGlobalDataSourceStat: true
+    testWhileIdle: true
+    testOnReturn: false
+    testOnBorrow: false
+    poolPreparedStatements: true
+    maxPoolPreparedStatementPerConnectionSize: 206
+    filters: stat, wall, log4j
+    connectionProperties: druid.stat.mergeSql=true;druid.stat.slowSqlMillis=5000
+    removeAbandoned: true
+    removeAbandonedTimeout: 1800
+    logAbandoned: true
+  banner:
+    location: banner.txt
+  thymeleaf:
+    cache: false
+    mode: HTML
+  mvc:
+    hiddenMethod:
+      filter:
+        enabled: true
+    view:
+      prefix: /templates/
+      suffix: .html
+    static-path-pattern: /static/**
+
+mybatis:
+  type-aliases-package: com.dreamchaser.depository_manage.entity
+  configuration:
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+    log-prefix: mapper.

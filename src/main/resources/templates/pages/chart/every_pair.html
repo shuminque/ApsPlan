@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>every_pair</title>
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <style>
+        .loader {
+            border: 5px solid #f3f3f3; /* Light grey */
+            border-top: 5px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <form class="layui-form" action="/bearingRecords/everyPair" method="get">
+        <div class="layui-form-item">
+            <label class="layui-form-label">厂区选择</label>
+            <div class="layui-input-inline">
+                <select name="depository_id" id="depositorySelect" lay-search>
+                    <!-- 初始值，稍后会根据用户信息进行更新 -->
+                </select>
+            </div>
+            <label class="layui-form-label">状态选择</label>
+            <div class="layui-input-inline">
+                <select name="state" id="stateSelect">
+                    <option value="正常">正常</option>
+                    <option value="死库">死库</option>
+                    <option value="ALL">全部</option>
+                </select>
+            </div>
+            <div class="layui-input-inline">
+                <input type="text" class="layui-input" id="startDatePicker" placeholder="选择开始日期" autocomplete="off">
+            </div>
+            <div class="layui-input-inline">
+                <input type="text" class="layui-input" id="endDatePicker" placeholder="选择结束日期" autocomplete="off">
+            </div>
+            <div class="layui-input-inline">
+                <button type="button" class="layui-btn" onclick="loadReport()">查看</button>
+<!--                <button type="button" class="layui-btn layui-btn-primary" onclick="exportReport()">导出</button>-->
+            </div>
+        </div>
+    </form>
+</div>
+<table class="layui-hide" id="currentTableId" lay-filter="currentTableFilter"></table>
+<script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+<script type="text/javascript" src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js" charset="utf-8"></script>
+<script>
+    var tableInstance;  // 定义一个全局table变量
+    function loadReport() {
+        var depositoryMap = {
+            '1': 'SAB',
+            '2': 'ZAB'
+        };
+        // 获取选择框和日期选择器的值
+        var depositoryId = document.getElementById('depositorySelect').value;
+        var depository = depositoryMap[depositoryId] || '未知'; // 如果没有匹配到，可以设置一个默认值
+        var startDate = document.getElementById('startDatePicker').value;
+        var endDate = document.getElementById('endDatePicker').value;
+        var state = document.getElementById('stateSelect').value;  // 获取状态选择器的值
+        // 创建新的URL
+        var url = `/bearingRecords/everyPair?depository=${depository}&state=${state}&startDate=${startDate}&endDate=${endDate}`;
+        // 更新表格的URL
+        tableInstance.render({
+            elem: "#currentTableId",
+            url: url    ,
+            height: "full-50", // 设置表格高度并固定表头
+            parseData: function(res) { // 将原始数据格式适配成 layui 表格组件所期望的格式
+                var filteredData = res.filter(function(record) {
+                    return record.pair > 0;
+                });
+                return {
+                    "code": 0, // 解析接口状态
+                    "msg": "", // 解析提示文本
+                    "count": filteredData.length, // Parse data length
+                    "data": filteredData // Parse data list
+                };
+            },
+            request: {
+                pageName: 'page', //页码的参数名称，默认：page
+                limitName: 'size' //每页数据量的参数名，默认：limit
+            },
+            toolbar: ['filter', 'exports', 'print'],
+            cols: [ [
+                {field: 'pair', title: 'Pair',hide:true,sort:true},
+                {field: '型号', title: '型号'},
+                {field: '钢厂', title: '钢厂'},
+                {field: '客户', title: '客户'},
+                {field: '前月末在库_LA', title: '前月末在库 LA'},
+                {field: '前月末在库_LB', title: '前月末在库 LB'},
+                {field: '入库_LA', title: '入库LA'},
+                {field: '入库_LB', title: '入库LB'},
+                {field: '出库_LA', title: '出库LA'},
+                {field: '出库_LB', title: '出库LB'},
+                {field: '返库_LA', title: '返库LA'},
+                {field: '返库_LB', title: '返库LB'},
+                {field: '转入_LA', title: '转入LA'},
+                {field: '转入_LB', title: '转入LB'},
+                {field: '转出_LA', title: '转出LA'},
+                {field: '转出_LB', title: '转出LB'},
+                {field: '当月在库_LA', title: '当月在库 LA'},
+                {field: '当月在库_LB', title: '当月在库 LB'}
+            ]],
+            limits: [ 500, 2000, 100000],
+            limit: 500,
+            page: true,
+            skin: 'line',
+            done: function(res, curr, count) {
+                var totalFields = [
+                    '前月末在库_LA', '前月末在库_LB', '入库_LA', '入库_LB',
+                    '出库_LA', '出库_LB', '返库_LA', '返库_LB',
+                    '转入_LA', '转入_LB', '转出_LA', '转出_LB',
+                    '当月在库_LA', '当月在库_LB'
+                ];
+
+                var totals = {};
+                totalFields.forEach(function(field) {
+                    totals[field] = 0;
+                });
+
+                res.data.forEach(function(item) {
+                    totalFields.forEach(function(field) {
+                        totals[field] += item[field];
+                    });
+                });
+
+                var totalRow = { '型号': '合计' };
+                totalFields.forEach(function(field) {
+                    totalRow[field] = totals[field];
+                });
+
+                res.data.push(totalRow);
+
+                tableInstance.reload({
+                    data: res.data
+                });
+            }
+        });
+    }
+    layui.use(['form', 'laydate', 'table'], function() {
+        var form = layui.form;  // 添加这行
+        var laydate = layui.laydate;
+        var table = layui.table;
+        tableInstance = table;  // 将table对象赋值给全局变量
+        // 初始化日期选择器
+        laydate.render({
+            elem: '#startDatePicker'
+        });
+        laydate.render({
+            elem: '#endDatePicker'
+        });
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                let depositoryId = data.depositoryId;
+                let userAuthority = data.authority;
+                let selectElem = document.getElementById('depositorySelect');
+                if (depositoryId ===0 || userAuthority === '仅查看'){
+                    selectElem.innerHTML =
+                        '<option value="" selected>请选择厂区</option>'+
+                        '<option value="1">SAB</option>' +
+                        '<option value="2">ZAB</option>'
+                }else if (depositoryId === 2) {
+                    selectElem.innerHTML = '<option value="2">ZAB</option>';
+                } else if (depositoryId === 1) {
+                    selectElem.innerHTML = '<option value="1">SAB</option>';
+                }
+                const startDate = document.getElementById('startDatePicker').value;
+                const endDate = document.getElementById('endDatePicker').value;
+                const depositorySelect = document.querySelector("[name='depository_id']");
+                // 如果还有其他的depository_id, 可以继续添加其他分支
+                layui.form.render('select'); // 重新渲染 select 元素
+            },
+            error: function() {
+                // 处理错误，例如显示一个消息
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+
+    });
+
+    // document.addEventListener("DOMContentLoaded", function() {
+    //     fetch('/get_user_depository')
+    //         .then(response => {
+    //             if (!response.ok) {
+    //                 throw new Error('Network response was not ok');
+    //             }
+    //             return response.json();
+    //         })
+    //         .then(data => {
+    //             let depositoryId = data.depositoryId;
+    //             let selectElem = document.getElementById('depositorySelect');
+    //
+    //             if (depositoryId === 1) {
+    //                 selectElem.innerHTML = '<option value="1">SAB</option>';
+    //             } else if (depositoryId === 2) {
+    //                 selectElem.innerHTML = '<option value="2">ZAB</option>';
+    //             } else if (depositoryId ===0){
+    //                 selectElem.innerHTML = '<option value="1">SAB</option>' +
+    //                     '<option value="2">ZAB</option>'
+    //             }
+    //             // 如果还有其他的depository_id, 可以继续添加其他分支
+    //             layui.form.render('select'); // 重新渲染 select 元素
+    //         })
+    //         .catch(error => {
+    //             console.error('Error fetching data:', error);
+    //         });
+    // });
+    // function loadReport() {
+    //     const startDate = document.getElementById('startDatePicker').value;
+    //     const endDate = document.getElementById('endDatePicker').value;
+    //     if (!startDate || !endDate) {
+    //         alert("请确保选择了开始和结束日期!");
+    //         return;
+    //     }
+    //     const depositorySelect = document.querySelector("[name='depository_id']");
+    //     const depositoryId = depositorySelect.value;
+    //     fetch(`/bearingRecords/everyPair?&startDate=${startDate}&endDate=${endDate}`)
+    //         .then(response => response.json())
+    //         .then(data => {
+    //             let table = document.getElementById('reportTable');
+    //             table.innerHTML = ''; // 清除旧数据
+    //             // 创建表头
+    //             let thead = document.createElement('thead');
+    //             let headerRow = document.createElement('tr');
+    //             Object.keys(data[0]).forEach(colName => {
+    //                 let th = document.createElement('th');
+    //                 th.textContent = colName;
+    //                 headerRow.appendChild(th);
+    //             });
+    //             thead.appendChild(headerRow);
+    //             table.appendChild(thead);
+    //             // 创建表格主体数据
+    //             let tbody = document.createElement('tbody');
+    //             data.forEach(row => {
+    //                 let tr = document.createElement('tr');
+    //                 Object.values(row).forEach(cellData => {
+    //                     let td = document.createElement('td');
+    //                     td.textContent = cellData;
+    //                     tr.appendChild(td);
+    //                 });
+    //                 tbody.appendChild(tr);
+    //             });
+    //             table.appendChild(tbody);
+    //         })
+    //         .catch(error => console.error('Error fetching data:', error));
+    // }
+    //
+    // function exportReport() {
+    //     const startDate = document.getElementById('startDatePicker').value;
+    //     const endDate = document.getElementById('endDatePicker').value;
+    //     if (!startDate || !endDate) {
+    //         alert("请确保选择了开始和结束日期!");
+    //         return;
+    //     }
+    //     const depositorySelect = document.querySelector("[name='depository_id']");
+    //     const depositoryId = depositorySelect.value;
+    //     window.location.href = `/api/export/every?depositoryId=${depositoryId}&startDate=${startDate}&endDate=${endDate}`;
+    // }
+</script>
+</body>
+</html>

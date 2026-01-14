@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>领用信息</title>
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <link rel="preload" href="/static/lib/layui-v2.8.17/font/iconfont.woff2?v=282" as="font" type="font/woff2" crossorigin>
+</head>
+<body>
+<div class="layui-container">
+    <div class="layui-row">
+        <div class="layui-col-md6">
+            <h3>SAB 数据</h3>
+            <table id="categoryTreeSAB" class="layui-table" lay-filter="categoryTreeSAB"></table>
+        </div>
+        <div class="layui-col-md6">
+            <h3>ZAB 数据</h3>
+            <table id="categoryTreeZAB" class="layui-table" lay-filter="categoryTreeZAB"></table>
+        </div>
+    </div>
+</div>
+<script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+<script>
+    layui.use(['treeTable', 'jquery','tree'], function() {
+        var $ = layui.jquery;
+        var tree = layui.tree;
+        var treeTable = layui.treeTable;
+        var authority;
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                var userDepositoryId = data.depositoryId;
+                authority = data.authority;
+                // 根据userDepositoryId显示/隐藏表格
+                if (userDepositoryId === 1) {
+                    // 如果userDepositoryId为1，显示SAB表格并隐藏ZAB表格的容器
+                    $('#categoryTreeSAB').parent().show();
+                    $('#categoryTreeZAB').parent().hide();
+                } else if (userDepositoryId === 2) {
+                    // 如果userDepositoryId为2，显示ZAB表格并隐藏SAB表格的容器
+                    $('#categoryTreeZAB').parent().show();
+                    $('#categoryTreeSAB').parent().hide();
+                } else {
+                    // 如果userDepositoryId为其他值，显示两个表格的容器
+                    $('#categoryTreeSAB').parent().show();
+                    $('#categoryTreeZAB').parent().show();
+                }
+            },
+        });
+        function renderTreeTable(elem, url) {
+            $.get(url, function(response) {
+                var originalData = response.data;
+                function markParentNodes(data) {
+                    data.forEach(function (item) {
+                        if (item.children && item.children.length > 0) {
+                            item.title = '<strong>' + '► ' + item.title + '</strong>'; // 如果节点有子节点，则加粗标题
+                            markParentNodes(item.children); // 递归处理子节点
+                        }
+                    });
+                }
+                markParentNodes(originalData); // 调用函数来修改具有子节点的节点的标题
+                var colsArray = [
+                    {field: 'title', title: '分类名称', minWidth: 200, templet: function(d) { return d.title; } } // 使用templet来渲染HTML
+                ];
+                if (authority === "系统管理员") {
+                    colsArray.push({fixed: 'right', title: '操作', toolbar: '#barDemo'});
+                }
+                treeTable.render({
+                    elem: elem,
+                    data: originalData,
+                    cols: [colsArray]
+                });
+                tree.renderer({
+
+                })
+            });
+        }
+        renderTreeTable('#categoryTreeSAB', "/api/categories/sab");
+        renderTreeTable('#categoryTreeZAB', "/api/categories/zab");
+        // 绑定 categoryTreeSAB 表格的工具按钮事件
+        treeTable.on('tool(categoryTreeSAB)', function (obj) {
+            var layEvent = obj.event;
+            var data = obj.data; // 获取当前行数据
+            // 这里处理 categoryTreeSAB 表格的添加、编辑和删除按钮点击事件
+            handleToolEvent(layEvent, data, 'SAB');
+        });
+
+        // 绑定 categoryTreeZAB 表格的工具按钮事件
+        treeTable.on('tool(categoryTreeZAB)', function (obj) {
+            var layEvent = obj.event;
+            var data = obj.data; // 获取当前行数据
+            // 这里处理 categoryTreeZAB 表格的添加、编辑和删除按钮点击事件
+            handleToolEvent(layEvent, data, 'ZAB');
+        });
+
+        // 处理工具按钮事件的函数
+        function handleToolEvent(layEvent, data, tableType) {
+            var urlPrefix = '/api/categories/' + tableType.toLowerCase();
+            if (layEvent === 'add') {
+                layer.prompt({title: '请输入新分类名称', formType: 0}, function(value, index){
+                    $.ajax({
+                        url: '/api/categories/add',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ title: value, parentId: data.id ,depositoryId: data.depositoryId}), // 将对象转换为JSON字符串
+                        success: function(response) {
+                            if(response.success) {
+                                layer.msg('添加成功!');
+                                renderTreeTable('#categoryTree' + tableType, "/api/categories/" + tableType.toLowerCase());
+                            } else {
+                                layer.msg('添加失败: ' + response.message);
+                                renderTreeTable('#categoryTree' + tableType, "/api/categories/" + tableType.toLowerCase());
+                            }
+                        }
+                    });
+                    layer.close(index);
+                });
+            } else if (layEvent === 'edit') {
+                // 处理编辑事件
+                layer.prompt({title: '修改分类名称', formType: 0, value: data.title}, function(value, index){
+                    // 调用更新 API
+                    $.ajax({
+                        url: '/api/categories/update',
+                        type: 'PUT',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ id: data.id,title: value }),
+                        success: function(response) {
+                            if(response.success) {
+                                layer.msg('修改成功!');
+                                renderTreeTable('#categoryTree' + tableType, "/api/categories/" + tableType.toLowerCase());
+                            } else {
+                                layer.msg('修改失败: ' + response.message);
+                            }
+                        }
+                    });
+                    layer.close(index);
+                });
+            } else if (layEvent === 'del') {
+                // 处理删除事件
+                layer.confirm('确定要删除吗?', function(index){
+                    // 调用删除 API
+                    $.ajax({
+                        url: '/api/categories/delete/' + data.id,
+                        type: 'DELETE',
+                        success: function(response) {
+                            if(response.success) {
+                                layer.msg('删除成功!');
+                                renderTreeTable('#categoryTree' + tableType, "/api/categories/" + tableType.toLowerCase());
+                            }
+                            else {
+                                layer.msg('删除失败: ' + response.message);
+                            }
+                        }
+                    });
+                    layer.close(index);
+                });
+            }
+        }
+    });
+</script>
+<script type="text/html" id="barDemo">
+    <a class="layui-btn layui-btn-xs" lay-event="add">添加</a>
+    <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+    <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>
+</script>
+
+</body>
+</html>

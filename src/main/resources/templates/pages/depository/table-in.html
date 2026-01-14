@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <title>layui</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <link rel="stylesheet" href="/static/css/public.css" media="all">
+</head>
+<body>
+<div class="layuimini-container">
+    <div class="layuimini-main">
+        <fieldset class="table-search-fieldset">
+            <legend>搜索信息</legend>
+            <div style="margin: 10px 10px 10px 10px">
+                <form class="layui-form layui-form-pane" action="">
+                    <div class="layui-form-item">
+                        <div class="layui-inline">
+                            <label class="layui-form-label">日期</label>
+                            <div class="layui-input-block">
+                                <input type="text" name="applyTime" id="date"  placeholder="请选择起止日期"
+                                       autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <select id="state" name="state">
+                                    <option value="" selected>请选择状态</option>
+                                    <option value="已入库">已入库</option>
+                                    <option value="审核未通过">审核未通过</option>
+                                    <option value="待审核">待审核</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="mname" autocomplete="off" class="layui-input" placeholder="搜索品名">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="model" autocomplete="off" class="layui-input" placeholder="搜索规格">
+                            </div>
+                        </div>
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <input type="text" name="atId" autocomplete="off" class="layui-input" placeholder="搜索AT号">
+                            </div>
+                        </div>
+
+                        <div class="layui-inline">
+                            <div class="layui-input-inline">
+                                <select name="depositoryId" id="depositorySelect" lay-search>
+                                    <!-- 初始值，稍后会根据用户信息进行更新 -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="layui-inline">
+                            <button type="submit" class="layui-btn layui-btn-primary" lay-submit
+                                    lay-filter="data-search-btn"><i class="layui-icon"></i> 搜 索
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </fieldset>
+        <script type="text/html" id="toolbarDemo">
+            <div class="layui-btn-container">
+<!--                <button class="layui-btn layui-btn-normal layui-btn-sm data-add-btn" lay-event="add"> 添加</button>-->
+<!--                <button class="layui-btn layui-btn-sm layui-btn-danger data-delete-btn" lay-event="delete"> 删除</button>-->
+            </div>
+        </script>
+        <div class="layui-hide" id="currentTableId" style="display: none;" lay-filter="currentTableFilter"></div>
+    </div>
+</div>
+<script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+<script>
+    var data;
+    layui.use(['form', 'table','laydate'], function () {
+        var $ = layui.jquery,
+            form = layui.form,
+            table = layui.table,
+            laydate=layui.laydate;
+        //日期
+        laydate.render({
+            elem: '#date',
+            range: true,
+            rangeLinked: true,
+            shortcuts: [
+                {
+                    text: "上个月",
+                    value: function(){
+                        var value = [];
+                        var date1 = new Date();
+                        date1.setMonth(date1.getMonth() - 1);
+                        date1.setDate(1);
+                        date1.setHours(0, 0, 0, 0);
+                        value.push(date1);
+                        var date2 = new Date();
+                        date2.setDate(1);
+                        date2.setHours(0, 0, 0, 0);
+                        date2 = date2.getTime() - 1;
+                        value.push(new Date(date2));
+                        return value;
+                    }
+                },
+                {
+                    text: "这个月",
+                    value: function(){
+                        var value = [];
+                        var date1 = new Date();
+                        date1.setDate(1);//1号
+                        date1.setHours(0, 0, 0, 0);
+                        value.push(date1);
+
+                        var date2 = new Date();
+                        date2.setMonth(date2.getMonth() + 1);
+                        date2.setDate(0); // 设置为当前月的最后一天
+                        date2.setHours(23, 59, 59, 999); // 设置为当天的最后一刻
+                        value.push(date2);
+
+                        return value;
+                    }
+
+                },
+                {
+                    text: "下个月",
+                    value: function(){
+                        var value = [];
+                        var date1 = new Date();
+                        date1.setMonth(date1.getMonth() + 1);
+                        date1.setDate(1);
+                        date1.setHours(0, 0, 0, 0);
+                        value.push(date1);
+                        var date2 = new Date();
+                        date2.setMonth(date2.getMonth() + 2);
+                        date2.setDate(1);
+                        date2.setHours(0, 0, 0, 0);
+                        date2 = date2.getTime() - 1;
+                        value.push(new Date(date2));
+                        return value;
+                    }
+                }
+            ]
+        });
+        var userReviewGroupId;
+        var userAuthority;
+        //用户区分
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                let pp;
+                var userDepositoryId = data.depositoryId;
+                var toolbarTemplate;
+                var globalToolbarTemplate;
+                userAuthority = data.authority;
+                userReviewGroupId = data.review_group_id;
+                let selectElem = document.getElementById('depositorySelect');
+
+                if (userDepositoryId === 1) {
+                    selectElem.innerHTML = '<option value="1">SAB</option>';
+                } else if (userDepositoryId === 2) {
+                    selectElem.innerHTML = '<option value="2">ZAB</option>';
+                } else if (userDepositoryId ===0){
+                    selectElem.innerHTML =
+                        '<option value="" selected>请选择厂区</option>'+
+                        '<option value="1">SAB</option>' +
+                        '<option value="2">ZAB</option>'
+                }
+                layui.form.render('select');
+//                 if (userDepositoryId === 1 || userDepositoryId === 2) {
+//                     // 不包含删除按钮的模板
+//                     toolbarTemplate = `
+//                 <a class="layui-btn layui-btn-normal layui-btn-xs data-count-edit" lay-event="detail">详情</a>
+// <!--                <a class="layui-btn layui-btn-xs" lay-event="edit">修改</a>-->
+//             `;      globalToolbarTemplate = `
+//                 <div class="layui-btn-container">
+//                     <!-- 其他按钮可以放在这里 -->
+//                 </div>
+//             `;
+//                 } else {
+//                     // 包含删除按钮的模板
+//                     toolbarTemplate = `
+//                 <a class="layui-btn layui-btn-normal layui-btn-xs data-count-edit" lay-event="detail">详情</a>
+//                 <a class="layui-btn layui-btn-xs" lay-event="edit">修改</a>
+//                 <a class="layui-btn layui-btn-xs layui-btn-danger data-count-delete" lay-event="delete">删除</a>
+//             `;      globalToolbarTemplate = `
+//                 <div class="layui-btn-container">
+//                     <!-- 其他按钮可以放在这里 -->
+// <!--                    <button class="layui-btn layui-btn-sm layui-btn-danger data-delete-btn" lay-event="delete"> 删除</button>-->
+//                 </div>
+//             `;
+//                 }
+//                 $("#currentTableId").html(toolbarTemplate);
+//                 $("#toolbarDemo").html(globalToolbarTemplate);
+                // 如果depositoryId为0，则允许访问两个厂区
+                if (userDepositoryId === 0) {
+                    pp = '/depositoryRecord';
+                } else {
+                    pp = '/depositoryRecord?depositoryId=' + userDepositoryId;
+                }
+                table.render({
+                    elem: "#currentTableId",
+                    url: pp,
+                    parseData: function (res) { //res 即为原始返回的数据
+                        return {
+                            "status": res.status, //解析接口状态
+                            "message": res.statusInfo.message, //解析提示文本
+                            "count": res.count, //解析数据长度
+                            "data": res.data //解析数据列表
+                        };
+                    },
+                    request: {
+                        pageName: 'page', //页码的参数名称，默认：page
+                        limitName: 'size' //每页数据量的参数名，默认：limit
+                    },
+                    where: {
+                        type:"1"
+                    },
+                    response: {
+                        statusName: 'status' //规定数据状态的字段名称，默认：code
+                        ,statusCode: 200 //规定成功的状态码，默认：0
+                        ,msgName: 'message' //规定状态信息的字段名称，默认：msg
+                        ,countName: 'count' //规定数据总数的字段名称，默认：count
+                        ,dataName: 'data' //规定数据列表的字段名称，默认：data
+                    },
+                    toolbar: '#toolbarDemo',
+                    defaultToolbar: ['filter', 'exports', 'print'],
+                    //这里layui和thymeleaf冲突了，要加个空格
+                    cols: [ [
+                        // {type: "checkbox", width: 50},
+                        // {field: 'id', width: 60, title: '序号'},
+                        // {field: 'depositoryName', width: 60, title: '厂区'},
+                        {field: 'atId', width: '5%', title: 'AT'},
+                        {field: 'mname',width: '12%', title: '品名'},
+                        {field: 'model', width: '10%', title: '规格'},
+                        {field: 'typeName',width: '18%', title: '分类'},
+                        {field: 'enginName', width:'10%', title: '工程'},
+                        {field: 'quantity',  width: '5%', title: '数量'},
+                        {field: 'price', title: '单价', width: '8%', templet: function(d) {
+                                return parseFloat(d.price).toFixed(2);  // 格式化为两位小数
+                            }},
+                        {field: 'applyRemark', title: '类型', width: '10%'},
+                        {field: 'state', width:'6%', title: '流程'},
+                        {field: 'applicantName', width:'8%', title: '申请人'},
+                        // {field: 'applyTime', width: 170, title: '申请时间', sort: true},
+                        {field: 'applyTime',title: '日期', width:'10%', sort: true, templet: function(d){
+                                return formatDate(d.applyTime);
+                            }},
+                        {
+                            title: '操作',
+                            minWidth: 200,
+                            align: "center",
+                                templet: function (row) {
+                                // 初始化按钮字符串
+                                let buttons = '<a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="detail">详情</a>';
+
+                                // 获取当前日期
+                                const today = new Date();
+                                const currentMonth = today.getMonth() + 1; // JavaScript中，月份是从0开始的
+                                const currentYear = today.getFullYear();
+
+                                // 获取数据的日期
+                                const [year, month] = (typeof row.applyTime === 'string' && row.applyTime.includes('-')) ?
+                                    row.applyTime.split('-').map(Number) : [null, null];
+
+                                // 根据userAuthority和其他条件判断是否添加修改和删除按钮
+                                    if (userAuthority === '仓管员') {
+                                        if (row.state === '待审核' || row.state === '审核未通过') {
+                                            buttons += '<a class="layui-btn layui-btn-xs" lay-event="edit">修改</a>';
+                                            if(row.state !== '审核未通过') {
+                                                buttons += '<a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="delete">删除</a>';
+                                            }
+                                        }
+                                    } else if (userAuthority === '审核人' && year === currentYear && month === currentMonth) {
+                                        buttons += '<a class="layui-btn layui-btn-xs" lay-event="edit">修改</a>';
+                                        buttons += '<a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="delete">删除</a>';
+                                    } else if (userAuthority === '系统管理员') {
+                                        buttons += '<a class="layui-btn layui-btn-xs" lay-event="edit">修改</a>';
+                                        buttons += '<a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="delete">删除</a>';
+                                    }
+                                    return buttons;
+                            }
+                        }
+                    ]],
+                    limits: [10, 54, 100, 500, 100000],
+                    limit: 10,
+                    page: true,
+                    skin: 'line'
+                });
+                function formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    let date = new Date(dateStr);
+                    let year = date.getFullYear();
+                    let month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    let day = date.getDate().toString().padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+                // 监听搜索操作
+                form.on('submit(data-search-btn)', function (data) {
+                    var req={};
+                    data=data.field;
+                    req.type=1;
+                    if (data.atId!==''){
+                        req.atId=data.atId;
+                    }
+                    if (data.mname!==''){
+                        req.mname=data.mname;
+                    }
+                    if (data.state!==''){
+                        req.state=data.state;
+                    }
+                    if (data.depositoryId!==''){
+                        req.depositoryId=data.depositoryId;
+                    }
+                    if (data.model!==''){
+                        req.model=data.model;
+                    }
+                    if (data.applyTime!==''){
+                        var dates = data.applyTime.split(' - ');
+                        req.startDate = dates[0];
+                        req.endDate = dates[1];
+                    }
+                    //执行搜索重载
+                    table.reload('currentTableId', {
+                        url: pp,
+                        page: {
+                            curr: 1
+                        },
+                        where: req
+                    }, 'data');
+                    return false;
+                });
+            },
+            error: function() {
+                // 处理错误，例如显示一个消息
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+
+
+        /**
+         * toolbar监听事件
+         */
+        table.on('toolbar(currentTableFilter)', function (obj) {
+            if (obj.event === 'add') {  // 监听添加操作
+                var index = layer.open({
+                    title: '申请提交',
+                    type: 2,
+                    shade: 0.2,
+                    maxmin: true,
+                    shadeClose: true,
+                    area: ['100%', '100%'],
+                    content: '/application_in',
+                });
+                $(window).on("resize", function () {
+                    layer.full(index);
+                });
+            } else if (obj.event === 'delete') {  // 监听删除操作
+                var checkStatus = table.checkStatus('currentTableId')
+                    , data = checkStatus.data;
+                var req={};
+                req.ids=[];
+                for (i=0,len=data.length;i<len;i++){
+                    req.ids[i]=data[i].id;
+                }
+                console.log(data.type);
+                console.log(data.status);
+                $.ajax({
+                    url: '/depositoryRecord',
+                    type: 'delete',
+                    dataType:'json',
+                    contentType: "application/json;charset=utf-8",
+                    data:JSON.stringify(req),
+                    beforeSend:function () {
+                        this.layerIndex = layer.load(0, { shade: [0.5, '#393D49'] });
+                    },
+                    success:function(data){
+                        layer.close(this.layerIndex);
+                        if(data.status >= 300){
+                            layer.msg(data.statusInfo.message);//失败的表情
+                            return;
+                        }else{
+                            layer.msg("删除成功", {
+                                icon: 6,//成功的表情
+                                time: 500 //1秒关闭（如果不配置，默认是3秒）
+                            });
+                            //执行搜索重载
+                            table.reload('currentTableId', {
+                                url: '/depositoryRecord',
+                                page: {
+                                    curr: 1
+                                }
+                            }, 'data');
+                            return false;
+                        }
+                    }
+                })
+            }
+        });
+
+        //监听表格复选框选择
+        table.on('checkbox(currentTableFilter)', function (obj) {
+            console.log(obj)
+        });
+
+        table.on('tool(currentTableFilter)', function (obj) {
+            let data = obj.data;
+            if (obj.event === 'detail') {
+                var index = layer.open({
+                    title: '入库信息详情',
+                    type: 2,
+                    shade: 0.2,
+                    maxmin: true,
+                    shadeClose: true,
+                    area: ['100%', '100%'],
+                    content: '/form_step_look?id='+data.id,
+                });
+                $(window).on("resize", function () {
+                    layer.full(index);
+                });
+                return false;
+            } else if (obj.event === 'delete') {
+                var req={};
+                req.id=data.id;
+                layer.confirm('确认删除', {icon: 2, title: '提示'}, function (index) {
+                    $.ajax({
+                        url: '/depositoryRecord',
+                        type: 'delete',
+                        dataType:'json',
+                        contentType: "application/json;charset=utf-8",
+                        data:JSON.stringify(req),
+                        beforeSend:function () {
+                            this.layerIndex = layer.load(0, { shade: [0.5, '#393D49'] });
+                        },
+                        success:function(data){
+                            layer.close(this.layerIndex);
+                            if(data.status >= 300){
+                                layer.msg(data.statusInfo.message);//失败的表情
+                                return;
+                            }else{
+                                obj.del();
+                                layer.msg("删除成功", {
+                                    icon: 6,//成功的表情
+                                    time: 500 //1秒关闭（如果不配置，默认是3秒）
+                                });
+                            }
+                        }
+                    })
+                });
+            } else if (obj.event === 'edit') {
+                // 检查流程状态是否为待审核
+                if (userReviewGroupId !== '') {
+                    var index = layer.open({
+                        title: '入库信息编辑',
+                        type: 2,
+                        shade: 0.2,
+                        maxmin: true,
+                        shadeClose: true,
+                        area: ['100%', '100%'],
+                        content: '/application_in?id=' + data.id + '&action=edit', // 添加一个 action 参数，表示这是一个编辑操作
+                        end: function() {
+                            // 弹窗关闭后刷新当前页面
+                            location.reload();
+                        }
+                    });
+                    $(window).on("resize", function () {
+                        layer.full(index);
+                    });
+                    // 重定向到提交申请页面，并通过查询参数传递记录的ID
+                    // window.location.href = '/application_in?id=' + data.id;
+                } else {
+                    layer.alert('请求出错', {icon: 5});
+                }
+                return false;
+            }
+        });
+    });
+</script>
+
+</body>
+</html>

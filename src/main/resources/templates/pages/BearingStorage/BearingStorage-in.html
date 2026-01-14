@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>入库管理系统</title>
+    <link rel="stylesheet" href="/static/css/http_cdn.jsdelivr.net_npm_bootstrap@5.1.0_dist_css_bootstrap.css">
+    <script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
+    <script src="/static/js/http_cdnjs.cloudflare.com_ajax_libs_bootstrap-3-typeahead_4.0.2_bootstrap3-typeahead.js"></script>
+    <link rel="stylesheet" href="/static/css/__cdnjs.cloudflare.com_ajax_libs_toastr.js_latest_toastr.css">
+    <script src="/static/js/__cdnjs.cloudflare.com_ajax_libs_toastr.js_latest_toastr.min.js"></script>
+    <style>
+        body {
+            padding-top: 50px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 600px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .form-title {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .btn-custom {
+            background-color: #0056b3;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+<div class="container" hidden="hidden">
+    <h3 style="text-align: center;color: red">提示:到昨日为止，有如下未入库。请抓紧确认处理</h3>
+    <div style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd;">
+        <table class="table table-striped">
+            <thead>
+            <tr>
+                <th>箱号</th>
+                <th>编号</th>
+                <th>数量</th>
+                <th>生成时间</th>
+            </tr>
+            </thead>
+            <tbody id="productTableBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="container">
+    <div class="form-title">
+        <h2>成品入库操作</h2>
+    </div>
+    <form id="stockInForm">
+        <div class="mb-3">
+            <label for="boxText" class="form-label">箱号</label>
+            <input type="text" class="form-control" id="boxText" placeholder="请输入箱号" required autocomplete="off">
+        </div>
+        <div class="mb-3">
+            <label for="boxNumber" class="form-label">箱号编号</label>
+            <input type="text" class="form-control" id="boxNumber" placeholder="请输入箱号编号" required autocomplete="off">
+        </div>
+        <div class="mb-3">
+            <label for="quantity" class="form-label">数量</label>
+            <input type="text" class="form-control" id="quantity" placeholder="确认数量" pattern="\d*" readonly autocomplete="off">
+        </div>
+        <button type="submit" class="btn btn-custom w-100">提交入库</button>
+    </form>
+</div>
+<script>
+    document.getElementById('boxText').addEventListener('input', function() {
+        this.value = this.value.toUpperCase();
+    });
+</script>
+<script src="/static/js/bootstrap@5.1.0_dist_js_bootstrap.bundle.js"></script>
+<script>
+    var userReviewGroupId;var userAuthority;var userDepositoryId;var userDepository;var depositoryId;var newiter;let latestBoxNumber = ''; // 预先定义一个变量来存储预生成的最新箱号编号
+    function formatDate(isoString) {
+        let date = new Date(isoString);
+        let yyyy = date.getFullYear();
+        let MM = String(date.getMonth() + 1).padStart(2, '0');
+        let dd = String(date.getDate()).padStart(2, '0');
+        let HH = String(date.getHours()).padStart(2, '0');
+        let mm = String(date.getMinutes()).padStart(2, '0');
+        return `${yyyy}-${MM}-${dd} ${HH}:${mm}`;
+    }
+    $(document).ready(function() {
+        $.ajax({
+            url: "/productIds/unrecorded",
+            type: "GET",
+            dataType: "json",
+            success: function(data) {
+                let tableBody = $("#productTableBody");
+                tableBody.empty();
+                data.forEach(function(product) {
+                    let formattedTime = formatDate(product.creationTime);
+
+                    let row = `<tr>
+                        <td>${product.boxText}</td>
+                        <td>${product.boxNumber}</td>
+                        <td>${product.quantity}</td>
+                        <td>${formattedTime}</td>
+                    </tr>`;
+                    tableBody.append(row);
+                });
+            },
+            error: function() {
+                toastr.error("无法加载未记录的成品列表");
+            }
+        });
+    });
+    function getUserDepository() {
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                console.log(data);
+                userDepositoryId = data.depositoryId;userAuthority = data.authority;userReviewGroupId = data.review_group_id;
+                if (userDepositoryId ===1){
+                    userDepository='SAB';depositoryId=1;
+                } else if (userDepositoryId===2){
+                    userDepository='ZAB';depositoryId=2;
+                }else{
+                    userDepository="ALL";depositoryId=0;
+                }
+            },
+            error: function() {
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+    }
+    document.addEventListener('DOMContentLoaded', function() {getUserDepository();});
+    $(document).ready(function() {
+        $('#boxText').typeahead({
+            source: function(query, process) {
+                return $.ajax({
+                    url: '/bearings/search',
+                    type: 'GET',
+                    data: { query: query, depository: userDepository },
+                    dataType: 'json',
+                    success: function(data) {
+                        return process(data);
+                    },
+                    error: function (data) {
+                        console.log(data);
+                    }
+                });
+            },
+            minLength: 1, autoSelect: true
+        });
+        // 当用户选择一个选项或填写箱号时更新输入框并获取最新的箱号编号
+        $('#boxText').on('typeahead:select change', function(event) {
+            // 获取选择或输入的箱号
+            const boxText = $(this).val();
+            const depositoryId = userDepositoryId// 逻辑来确定仓库ID, 可能是固定值或基于其他输入字段的值
+            // 确保箱号输入不为空
+            if (!boxText.trim()) {
+                return;
+            }
+            // 调用预生成新产品ID的后端接口
+            $.ajax({
+                url: `/bearings/preGenerate/${boxText}/${depositoryId}`,
+                type: 'GET',
+                success: function(response) {
+                    // 使用返回的下一个可用的产品ID填充编号输入框
+                    $('#boxNumber').val(response.boxNumber);
+                    // 如果您的逻辑需要，还可以填充数量
+                    $('#quantity').val(response.quantity);
+                    latestBoxNumber = response.boxNumber;
+                    newiter= response.iter;
+                },
+                error: function(xhr, status, error) {
+                    console.error("无法获取下一个产品ID", error);
+                    // 根据需要处理错误，比如显示提示信息
+                }
+            });
+            // fetchLatestBoxNumberAndQuantity(boxText);
+        });
+        // 监听箱号编号输入框的变化
+        $('#boxNumber').on('input', function() {
+            const boxText = $('#boxText').val();
+            const boxNumber = $(this).val();
+            fetchQuantityForBoxNumber(boxText, boxNumber);
+        });
+    });
+    // 获取最新的箱号编号和数量
+    function fetchLatestBoxNumberAndQuantity(boxText) {
+        $.ajax({
+            url: "/productIds/",
+            type: "GET",
+            data: { boxText: boxText, depositoryId: depositoryId },
+            success: function(response) {
+                // 填充最新的箱号编号和数量到对应输入框
+                $('#boxNumber').val(response.boxNumber);
+                $('#quantity').val(response.quantity);
+                newiter= response.iter;
+            },
+            error: function() {
+                $('#boxNumber').val('');
+                $('#quantity').val('');
+            }
+        });
+    }
+    // 根据箱号和箱号编号获取数量
+    function fetchQuantityForBoxNumber(boxText, boxNumber) {
+        if (!boxNumber) return; // 如果箱号编号为空，则不执行操作
+        $.ajax({
+            url: "/productIds/quantity",
+            type: "GET",
+            data: { boxText: boxText, boxNumber: boxNumber, depositoryId: depositoryId },
+            success: function(response) {
+                // 更新数量到输入框
+                $('#quantity').val(response.quantity);
+                newiter = response.iter;
+            },
+            error: function() {
+                $('#quantity').val('');
+            }
+        });
+    }
+    // 箱号编号输入框变化时的逻辑
+    document.getElementById('boxNumber').addEventListener('change', function() {
+        const boxNumber = this.value;
+        // 判断是否为零箱
+        const isZeroBox = parseInt(boxNumber) >= 1001 && parseInt(boxNumber) <= 1999;
+        // 如果是零箱，允许编辑数量
+        document.getElementById('quantity').readOnly = !isZeroBox;
+    });
+
+    document.getElementById('stockInForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+        const boxText = document.getElementById('boxText').value.toUpperCase();
+        const boxNumber = document.getElementById('boxNumber').value;
+        const quantity = document.getElementById('quantity').value;
+        // 检查数量是否已输入
+        if (!quantity || quantity <= 0) {
+            toastr.error('请前往生成对应箱号和编号及其数量！');
+            return; // 如果没有数量或数量为零，阻止表单提交
+        }
+        // 确定箱号类型并保存新的产品ID
+        checkIfStocked(boxText, boxNumber, depositoryId,newiter)
+            .then(isStocked => {
+                if (isStocked) {
+                    // 如果已入库，直接提示用户
+                    throw new Error('该箱号编号已入库');
+                } else if (boxNumber === latestBoxNumber || boxNumber>1000) {
+                    // 如果未入库且编号为预生成的最新，则尝试保存新的产品ID
+                    return determineAndSaveProductId(boxText, boxNumber, depositoryId, quantity, newiter);
+                } else {
+                    // 如果未入库但编号不是预生成的最新，直接进行入库操作
+                    return Promise.resolve();
+                }
+            })
+            .then(() => {
+                // 保存成功后进行入库操作
+                return stockIn(boxText, boxNumber, quantity, '入库', depositoryId, newiter);
+            })
+            .catch(error => {
+                console.error('编号生成失败:', error);
+                toastr.error(`编号生成失败: ${error.message}`);
+            });
+        // stockIn(boxText, boxNumber, quantity, '入库', depositoryId, newiter);
+    });
+    function checkIfStocked(boxText, boxNumber, depositoryId, iter) {
+        return fetch(`/productIds/checkStocked?boxText=${boxText}&boxNumber=${boxNumber}&depositoryId=${depositoryId}&iter=${iter}`)
+            .then(response => response.json())
+            .then(data => data.isStocked)
+            .catch(error => {
+                console.error('检查入库状态失败:', error);
+                throw new Error('检查入库状态失败');
+            });
+    }
+
+    // 保存新的产品ID的函数
+    function determineAndSaveProductId(boxText, boxNumber, depositoryId, quantity, newiter) {
+        // 判断箱号类型
+        let isZeroBox = parseInt(boxNumber) >= 1001 && parseInt(boxNumber) <= 1999;
+        let apiEndpoint = isZeroBox ? `/bearings/zero/${boxText}/${depositoryId}` : `/bearings/${boxText}/${depositoryId}`;
+
+        // 调用相应的API保存产品ID
+        return fetch(apiEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quantity: quantity, iter: newiter }) // 确保传递正确的数据
+        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.message); });
+                }
+                return response.json();
+            })
+            .catch(error => {
+                // 如果是因为非该仓库箱号导致的错误
+                    toastr.error('编号生成失败:非该仓库箱号，请确认');
+                throw error; // 重新抛出，以便后续的catch可以处理
+            })
+            .then(data => {
+                console.log("产品ID保存成功", data);
+                // 可以在这里根据需要执行更多操作
+            });
+    }
+
+    function stockIn(boxText, boxNumber, quantity, operationType, depositoryId, newiter) {
+        const operationTypeChinese = getOperationTypeInChinese(operationType);
+        var inventoryDto = {
+            boxText: boxText,
+            boxNumber: boxNumber,
+            quantityInStock: quantity,
+            operationType: operationTypeChinese,
+            depositoryId: depositoryId,
+            iter:newiter
+        };
+        console.log(inventoryDto);
+        fetch('/bearingInventory/stockIn', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(inventoryDto),
+        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {throw new Error(err.message);});
+                }
+                return response.json();
+            })
+            .then(
+                data => {
+                    console.log("入库成功", data);
+                    toastr.success('入库操作成功');
+                    clearForm(); // 清空表单
+                    return addBearingRecord(operationTypeChinese, boxText, boxNumber, quantity, depositoryId,newiter);
+                })
+            .catch(error => {
+                console.error('入库操作失败:', error);
+                toastr.error(`入库操作失败: ${error.message}`);
+            });
+    }
+    function addBearingRecord(transactionType, boxText, boxNumber, quantity, depositoryId,newiter) {
+        var depositoryText = convertDepositoryIdToText(depositoryId);
+        var recordDto = {
+            transactionType: transactionType, boxText: boxText, boxNumber: boxNumber, quantity: quantity, depository: depositoryText,iter:newiter
+        };
+        return fetch('/bearingRecords', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(recordDto)
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('记录库操作失败');
+                }
+                return response.json();
+            });
+    }
+    // 清空表单的函数
+    function clearForm() {
+        document.getElementById('boxText').value = '';
+        document.getElementById('boxNumber').value = '';
+        document.getElementById('quantity').value = '';
+        $('#boxText').focus(); // 重新聚焦到箱号输入框
+    }
+    function convertDepositoryIdToText(depositoryId) {switch (depositoryId) {case 1: return "SAB";case 2: return "ZAB";default: return "Unknown";}}
+
+    function getOperationTypeInChinese(operationType) {
+        const operationTypeMap = {'stockIn': '入库', 'stockOut': '出库', 'transferIn': '转入', 'transferOut': '转出', 'return': '返库', 'panKu': '盘库'};
+        return operationTypeMap[operationType] || operationType;
+    }
+</script>
+</body>
+</html>

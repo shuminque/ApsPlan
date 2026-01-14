@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>成品数据表</title>
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+    <!-- jQuery 库 -->
+    <script src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-beta.1/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-beta.1/dist/js/select2.min.js"></script>
+
+    <style>
+        body {
+            /*padding-top: 50px;*/
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin: 10px;
+        }
+        .layui-table-view .layui-table { /* 调整表格样式 */
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <form class="layui-form"  id="searchForm">
+        <div class="layui-form-item">
+            <div>
+                <div class="layui-input-inline">
+                    <select name="depository" id="depositorySelect" lay-search>
+                        <!-- 初始值，稍后会根据用户信息进行更新 -->
+                    </select>
+                </div>
+            </div>
+            <div class="layui-input-inline">
+                <input type="text" name="boxText" id="boxText" placeholder="搜索箱号" class="layui-input" oninput="this.value = this.value.toUpperCase()">
+            </div>
+            <div class="layui-input-inline">
+                <select name="customer">
+                    <option value="" selected>搜索客户</option>
+                    <option th:each="customer : ${customers}"
+                            th:value="${customer.name}"
+                            th:text="${customer.name}"></option>
+                </select>
+            </div>
+            <div class="layui-input-inline">
+                <select name="outerInnerRing">
+                    <option value="" selected>搜索内/外轮</option>
+                    <option value="LA" >LA</option>
+                    <option value="LB" >LB</option>
+                    <option value="LAB" >LAB</option>
+                </select>
+            </div>
+            <div class="layui-input-inline">
+                <select name="state">
+                    <option value="">搜索状态</option>
+                    <option value="正常">正常</option>
+                    <option value="死库">死库</option>
+                </select>
+            </div>
+            <div class="layui-inline">
+                <button type="button" class="layui-btn" id="advancedSearchToggle">高级搜索</button>
+            </div>
+            <div class="layui-inline" id="advancedSearchForm" style="display: none;">
+                <div class="layui-input-inline">
+                    <input type="text" name="model" placeholder="搜索型号" class="layui-input">
+                </div>
+                <div class="layui-input-inline">
+                    <select name="steelType">
+                        <option value="" selected>搜索钢种</option>
+                        <option th:each="steel_type : ${steelTypes}"
+                                th:value="${steel_type.name}"
+                                th:text="${steel_type.name}"></option>
+                    </select>
+                </div>
+                <div class="layui-input-inline">
+                    <select name="steelGrade">
+                        <option value="" selected>搜索钢材等级</option>
+                        <option th:each="steel_grade : ${steelGrades}"
+                                th:value="${steel_grade.grade}"
+                                th:text="${steel_grade.grade}"></option>
+                    </select>
+                </div>
+                <div class="layui-input-inline">
+                    <select name="mode" id="mode" >
+                        <option value="" selected>搜索方式</option>
+                        <option th:each="trade_mode : ${tradeModes}"
+                                th:value="${trade_mode.mode}"
+                                th:text="${trade_mode.mode}"></option>
+                    </select>
+                </div>
+                <div class="layui-input-inline">
+                    <select name="size" id="size">
+                        <option value="" selected>搜索尺寸</option>
+                        <option th:each="steel_size : ${steelSizes}"
+                                th:value="${steel_size.size}"
+                                th:text="${steel_size.size}"></option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-inline">
+                <button type="submit" class="layui-btn layui-btn-primary" lay-submit lay-filter="data-search-btn">
+                    <i class="layui-icon"></i> 搜 索
+                </button>
+            </div>
+        </div>
+    </form>
+    <div class="container">
+        <div class="layui-row" style="margin-top: 20px;">
+            <div class="layui-col-xs12">
+                <form class="layui-form">
+                    <div class="layui-form-item">
+                        <div class="layui-input-inline">
+                            <button type="button" class="layui-btn" id="addBearingBtn">添加新型号</button>
+                        </div>
+                        <div id="dynamicContent">
+                            <!-- JavaScript将在这里动态添加内容 -->
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <table class="layui-hide" id="recordTable" lay-filter="recordTableFilter"></table>
+    </div>
+</div>
+<!-- 工具栏模板 -->
+<script type="text/html" id="actionBar">
+    <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+    <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="delete">删除</a>
+</script>
+<script type="text/template" id="addBearingsForm">
+    <form class="layui-form" lay-filter="addForm">
+        <!-- 外/内轮 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">外/内轮：</label>
+            <div class="layui-input-block">
+                <select name="outerInnerRing" required lay-verify="required">
+                    <option value="" selected></option>
+                    <option value="LA" >LA</option>
+                    <option value="LB" >LB</option>
+                    <option value="LAB" >LAB</option>
+                </select>
+            </div>
+        </div>
+        <!-- 客户 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">客户：</label>
+            <div class="layui-input-block">
+                <select name="customer" required lay-verify="required">
+                    <option value="" selected>搜索客户</option>
+                    <option th:each="customer : ${customers}"
+                            th:value="${customer.name}"
+                            th:text="${customer.name}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 型号 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">型号：</label>
+            <div class="layui-input-block" >
+                <input type="text" name="model" placeholder="请输入型号" autocomplete="off" class="layui-input" required lay-verify="required">
+            </div>
+        </div>
+        <!-- 关联 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">配对号：</label>
+            <div class="layui-input-block">
+                <input type="text" name="pair" placeholder="请输入内外轮配对号" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 制品分类 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">制品分类：</label>
+            <div class="layui-input-block">
+                <select name="productCategory" required lay-verify="required">
+                    <option value="" selected>搜索制品分类</option>
+                    <option th:each="product_category : ${productCategorys}"
+                            th:value="${product_category.name}"
+                            th:text="${product_category.name}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 钢种 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">钢种：</label>
+            <div class="layui-input-block">
+                <select name="steelType" required lay-verify="required">
+                    <option value="" selected></option>
+                    <option th:each="steel_type : ${steelTypes}"
+                            th:value="${steel_type.name}"
+                            th:text="${steel_type.name}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 钢材等级 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">钢材等级：</label>
+            <div class="layui-input-block">
+                <select name="steelGrade" required lay-verify="required">
+                    <option value="" selected></option>
+                    <option th:each="steel_grade : ${steelGrades}"
+                            th:value="${steel_grade.grade}"
+                            th:text="${steel_grade.grade}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 箱号 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">箱号：</label>
+            <div class="layui-input-block">
+                <input type="text" id="boxText1" name="boxText" required lay-verify="required" placeholder="请输入以Z开头的箱号"
+                       autocomplete="off" class="layui-input" oninput="this.value = this.value.toUpperCase()">
+            </div>
+        </div>
+        <!-- 数量 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">装箱数：</label>
+            <div class="layui-input-block">
+                <input type="text" name="quantity" required lay-verify="required" placeholder="请输入装箱数" autocomplete="off" class="layui-input" >
+            </div>
+        </div>
+        <!-- 材料尺寸 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">材料尺寸：</label>
+            <div class="layui-input-block">
+                <select name="size"  required lay-verify="required">
+                    <option value="" selected>搜索尺寸</option>
+                    <option th:each="steel_size : ${steelSizes}"
+                            th:value="${steel_size.size}"
+                            th:text="${steel_size.size}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 厂区 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">厂区：</label>
+            <div class="layui-input-block">
+                <select name="depository">
+                    <option value="" ></option>
+                    <option value="SAB" >SAB</option>
+                    <option value="ZAB" selected>ZAB</option>
+                </select>
+            </div>
+        </div>
+        <!-- 备注 -->
+        <!--        <div class="layui-form-item">-->
+        <!--            <label class="layui-form-label">库位：</label>-->
+        <!--            <div class="layui-input-block">-->
+        <!--                <input type="text" name="storageLocation" placeholder="请输入库位" autocomplete="off" class="layui-input">-->
+        <!--            </div>-->
+        <!--        </div>-->
+        <div class="layui-form-item">
+            <label class="layui-form-label">状态：</label>
+            <div class="layui-input-block">
+                <select name="state" required lay-verify="required">
+                    <option value="">选择状态</option>
+                    <option value="正常" selected>正常</option>
+                    <option value="死库">死库</option>
+                </select>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">单重：</label>
+            <div class="layui-input-block">
+                <input type="text" name="singleEight" placeholder="请输入单重" autocomplete="off" class="layui-input" required lay-verify="required">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">贸易方式：</label>
+            <div class="layui-input-block">
+                <select name="mode" required lay-verify="required">
+                    <option value="" selected>选择方式</option>
+                    <option th:each="trade_mode : ${tradeModes}"
+                            th:value="${trade_mode.mode}"
+                            th:text="${trade_mode.mode}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 提交按钮 -->
+        <div class="layui-form-item">
+            <div class="layui-input-block">
+                <button type="submit" class="layui-btn" lay-submit lay-filter="submitAddForm">添加</button>
+            </div>
+        </div>
+    </form>
+</script>
+<!-- 编辑bearings的表单（在弹出层中显示） -->
+<script type="text/template" id="editBearingsForm" >
+    <form class="layui-form" lay-filter="editForm">
+        <!-- ID字段，只读 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">ID：</label>
+            <div class="layui-input-block">
+                <input type="text" name="id" required lay-verify="required" placeholder="请输入ID" autocomplete="off" class="layui-input" readonly>
+            </div>
+        </div>
+        <!-- 箱号 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">箱号：</label>
+            <div class="layui-input-block">
+                <input type="text" name="boxText" required lay-verify="required" placeholder="请输入箱号" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 数量 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">装箱数：</label>
+            <div class="layui-input-block">
+                <input type="text" name="quantity" required lay-verify="required" placeholder="请输入装箱数" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 厂区 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">厂区：</label>
+            <div class="layui-input-block">
+                <select name="depository">
+                    <option value="" selected></option>
+                    <option value="SAB" >SAB</option>
+                    <option value="ZAB" >ZAB</option>
+                </select>
+            </div>
+        </div>
+        <!-- 型号 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">型号：</label>
+            <div class="layui-input-block">
+                <input type="text" name="model" placeholder="请输入型号" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 客户 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">客户：</label>
+            <div class="layui-input-block">
+                <select name="customer">
+                    <option value="" selected>搜索客户</option>
+                    <option th:each="customer : ${customers}"
+                            th:value="${customer.name}"
+                            th:text="${customer.name}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 外/内轮 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">外/内轮：</label>
+            <div class="layui-input-block">
+                <select name="outerInnerRing">
+                    <option value="" selected></option>
+                    <option value="LA" >LA</option>
+                    <option value="LB" >LB</option>
+                    <option value="LAB" >LAB</option>
+                </select>
+            </div>
+        </div>
+        <!-- 制品分类 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">制品分类：</label>
+            <div class="layui-input-block">
+                <select name="productCategory">
+                    <option value="" selected>搜索制品分类</option>
+                    <option th:each="product_category : ${productCategorys}"
+                            th:value="${product_category.name}"
+                            th:text="${product_category.name}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 钢种 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">钢种：</label>
+            <div class="layui-input-block">
+                <select name="steelType">
+                    <option value="" selected></option>
+                    <option th:each="steel_type : ${steelTypes}"
+                            th:value="${steel_type.name}"
+                            th:text="${steel_type.name}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 钢材等级 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">钢材等级：</label>
+            <div class="layui-input-block">
+                <select name="steelGrade">
+                    <option value="" selected></option>
+                    <option th:each="steel_grade : ${steelGrades}"
+                            th:value="${steel_grade.grade}"
+                            th:text="${steel_grade.grade}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 材料尺寸 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">材料尺寸：</label>
+            <div class="layui-input-block">
+<!--                <select id="multiSelectSize" name="joinedSize" multiple lay-ignore="true">-->
+<!--                    <option value="" disabled>选择尺寸</option>-->
+<!--                    <option th:each="steel_size : ${steelSizes}" th:value="${steel_size.size}" th:text="${steel_size.size}"></option>-->
+<!--                </select>-->
+<!--                <input type="hidden" name="size" id="joinedSize">-->
+                <select name="size"  required lay-verify="required">
+                    <option value="" selected>选择尺寸</option>
+                    <option th:each="steel_size : ${steelSizes}"
+                            th:value="${steel_size.size}"
+                            th:text="${steel_size.size}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 关联 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">内外轮配对号：</label>
+            <div class="layui-input-block">
+                <input type="text" name="pair" placeholder="请输入内外轮配对号" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 备注 -->
+<!--        <div class="layui-form-item">-->
+<!--            <label class="layui-form-label">库位：</label>-->
+<!--            <div class="layui-input-block">-->
+<!--                <input type="text" name="storageLocation" placeholder="请输入库位" autocomplete="off" class="layui-input">-->
+<!--            </div>-->
+<!--        </div>-->
+        <div class="layui-form-item">
+            <label class="layui-form-label">状态：</label>
+            <div class="layui-input-block">
+                <select name="state">
+                    <option value="">选择状态</option>
+                    <option value="正常">正常</option>
+                    <option value="死库">死库</option>
+                </select>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">单重：</label>
+            <div class="layui-input-block">
+                <input type="text" name="singleEight" placeholder="请输入单重" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">贸易方式：</label>
+            <div class="layui-input-block">
+                <select name="mode">
+                    <option value="" selected>选择方式</option>
+                    <option th:each="trade_mode : ${tradeModes}"
+                            th:value="${trade_mode.mode}"
+                            th:text="${trade_mode.mode}"></option>
+                </select>
+            </div>
+        </div>
+        <!-- 提交按钮 -->
+        <div class="layui-form-item">
+            <div class="layui-input-block">
+                <button type="submit" class="layui-btn" lay-submit lay-filter="submitEditForm">更新</button>
+            </div>
+        </div>
+    </form>
+</script>
+<script>
+    var userReviewGroupId;var userAuthority;var userDepositoryId;var userDepository;var depositoryId;
+    function getUserDepository() {
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                console.log(data);
+                userDepositoryId = data.depositoryId;userAuthority = data.authority;userReviewGroupId = data.review_group_id;
+                var dynamicContent = "";
+                if (userDepositoryId ===1){
+                    userDepository='SAB';depositoryId=1;
+                    // 隐藏添加新型号按钮
+                    $("#addBearingBtn").hide();
+                    // 显示特定文本
+                    dynamicContent += '<h2>新型号统一在ZAB界面进行添加!</h2>';
+                } else if (userDepositoryId===2){
+                    userDepository='ZAB';depositoryId=2;
+                    // 显示添加新型号按钮
+                    $("#addBearingBtn").show();
+                    // 显示特定文本
+                    dynamicContent += '<h2>按照ZAB的箱号规则，添加新产品型号（SAB无需再添加）。</h2>' +
+                        '<h2>配对的外圈和内圈，添加时请注意配对号一致！</h2>';
+                }else{
+                    userDepository="ALL";depositoryId=0;
+                }
+                $("#dynamicContent").html(dynamicContent);
+                let selectElem = document.getElementById('depositorySelect');
+                // 定义选项模板
+                var options = {"": "请选择厂区", "SAB": "SAB", "ZAB": "ZAB"};
+                // 生成HTML选项字符串
+                var optionsHTML = Object.keys(options).map(function(key) {
+                    return '<option value="' + key + '">' + options[key] + '</option>';
+                }).join('');
+                // 设置默认选中的选项
+                var selectedOption = "";
+                switch (userDepositoryId) {
+                    case 1:selectedOption = "SAB";break;
+                    case 2:selectedOption = "ZAB";break;
+                    case 0:selectedOption = "";break;
+                }
+                // 更新HTML字符串，设置选中的选项
+                optionsHTML = optionsHTML.replace('value="' + selectedOption + '"', 'value="' + selectedOption + '" selected');
+                // 最后，将生成的HTML设置到select元素中
+                selectElem.innerHTML = optionsHTML;
+                layui.form.render('select');
+            },
+            error: function() {
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+    }
+    document.addEventListener('DOMContentLoaded', function() {getUserDepository();});
+
+    layui.use(['table', 'form', 'layer'], function(){
+        var table = layui.table;
+        var form = layui.form;
+        var layer = layui.layer;
+        form.render();
+
+        // 渲染表格
+        var recordTable =  table.render({
+            elem: '#recordTable',
+            url: '/bearings/all', // 数据接口
+            height: 600, // 设置表格高度
+            parseData: function(res) { // 将原始数据格式适配成 layui 表格组件所期望的格式
+                return {
+                    "code": 0, // 解析接口状态
+                    "msg": "", // 解析提示文本
+                    "count": res.length, // 解析数据长度
+                    "data": res // 解析数据列表
+                };
+            },
+            toolbar: ['filter', 'exports', 'print'],
+            cols: [ [ // 表头
+                {field: 'id', title: 'ID',  hide:true},
+                {field: 'pair', title: '内外轮配对号'},
+                {field: 'boxText', title: '箱号'},
+                {field: 'quantity', title: '装箱数'},
+                {field: 'depository', title: '厂区'},
+                {field: 'customer', title: '客户'},
+                {field: 'outerInnerRing', title: '外/内轮'},
+                {field: 'model', title: '型号'},
+                {field: 'productCategory', title: '制品分类'},
+                {field: 'steelType', title: '钢种'},
+                {field: 'steelGrade', title: '钢材等级'},
+                {field: 'size', title: '材料尺寸'},
+                // {field: 'storageLocation', title: '库位',  hide:true},
+                {field: 'state', title: '状态'},
+                {field: 'singleEight', title: '单重'},
+                {field: 'mode', title: '贸易方式'},
+                {
+                    title: '操作',
+                    templet: function(d){
+                        let btns = '';
+                        // 只有 depositoryId === 0 或者 userAuthority === '仅查看' 时显示编辑按钮
+                        if (depositoryId === 0 || userAuthority === '系统管理员') {
+                            btns += '<a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>';
+                            btns += '<a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="delete">删除</a>';
+                        }
+                        // 删除按钮始终显示
+                        return btns;
+                    }
+                }
+            ]],
+            limits:[500,1000],
+            limit:500,
+            page: true //开启分页
+        });
+        // 统一搜索表单提交事件
+        form.on('submit(data-search-btn)', function(data) {
+            var req = {};
+            var formData = data.field;
+            if (formData.boxText !== '') {
+                req.boxText = formData.boxText;
+            }
+            if (formData.model !== '') {
+                req.model = formData.model;
+            }
+            if (formData.customer !== '') {
+                req.customer = formData.customer;
+            }
+            if (formData.productCategory !== '') {
+                req.productCategory = formData.productCategory;
+            }
+            if (formData.outerInnerRing !== '') {
+                req.outerInnerRing = formData.outerInnerRing;
+            }
+            if (formData.steelType !== '') {
+                req.steelType = formData.steelType;
+            }
+            if (formData.steelGrade !== '') {
+                req.steelGrade = formData.steelGrade;
+            }
+            if (formData.depository !== '') {
+                req.depository = formData.depository;
+            }
+            if (formData.state !== '') {
+                req.state = formData.state;
+            }
+            if (formData.singleEight !== '') {
+                req.singleEight = formData.singleEight;
+            }
+            if (formData.mode !== '') {
+                req.mode = formData.mode;
+            }
+            if (formData.size !== '') {
+                req.size = formData.size;
+            }
+            // 重新加载表格数据
+            recordTable.reload({
+                url: '/bearings/all', // 数据接口
+                where: req
+            });
+            return false;
+        });
+        // 添加按钮点击事件，整合获取配对号的逻辑
+        $('#addBearingBtn').click(function() {
+            $.ajax({
+                url: '/bearings/nextPairNumber', // 请求下一个配对号的API
+                type: 'GET',
+                success: function(response) {
+                    // 请求成功时，打开添加轴承的表单并自动填入配对号
+                    layer.open({
+                        type: 1,
+                        title: '添加轴承',
+                        content: $('#addBearingsForm').html(), // 使用添加表单的HTML内容
+                        area: ['500px', '80%'], // 调整弹窗大小
+                        success: function(layero, index) {
+                            form.render(); // 重新渲染表单
+                            $("input[name='pair']").val(response.pairNumber); // 自动填入配对号
+                        }
+                    });
+                },
+                error: function() {
+                    layer.msg('获取配对号失败');
+                    // 即使获取配对号失败，也提供给用户添加轴承的能力，但不自动填入配对号
+                    layer.open({
+                        type: 1,
+                        title: '添加轴承',
+                        content: $('#addBearingsForm').html(),
+                        area: ['500px', '80%'],
+                        success: function(layero, index) {
+                            form.render();
+                        }
+                    });
+                }
+            });
+        });
+        // 处理添加表单的提交事件
+        form.on('submit(submitAddForm)', function(data) {
+            var formData = data.field; // 获取表单数据
+            if (!formData.boxText.startsWith('Z')){
+                layer.msg('请输入Z开头的箱号');
+                return false; // 阻止表单默认提交
+            }
+            $.ajax({
+                url: '/bearings/add', // 假设这是添加轴承的API端点
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(formData),
+                success: function(response) {
+                    layer.msg('添加成功');
+                    table.reload('recordTable'); // 重新加载表格
+                    layer.closeAll(); // 关闭弹出层
+                    addSecondBearing(formData);
+                },
+                error: function() {
+                    layer.msg('添加失败');
+                }
+            });
+            return false; // 阻止表单默认提交
+        });
+        function addSecondBearing(originalFormData) {
+            var secondFormData = {...originalFormData}; // 复制原始表单数据
+            // 根据规则修改depository
+            secondFormData.depository = originalFormData.depository === 'SAB' ? 'ZAB' : 'SAB';
+            // 根据规则修改boxText
+            if (originalFormData.boxText.startsWith('Z')) {
+                secondFormData.boxText = originalFormData.boxText.substring(1); // 如果以Z开头，去掉Z
+            } else {
+                secondFormData.boxText = 'Z' + originalFormData.boxText; // 如果不以Z开头，加上Z
+            }
+            // 发送第二个轴承的添加请求
+            $.ajax({
+                url: '/bearings/add',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(secondFormData),
+                success: function(response) {
+                    layer.msg('第二个轴承添加成功');
+                    table.reload('recordTable'); // 重新加载表格
+                    layer.closeAll(); // 关闭所有弹出层
+                },
+                error: function() {
+                    layer.msg('第二个轴承添加失败');
+                }
+            });
+        }
+        // 监听表格的编辑按钮事件
+        table.on('tool(recordTableFilter)', function(obj){
+            var data = obj.data; // 获取当前行的数据
+            var layEvent = obj.event; // 获得 lay-event 对应的值（也就是自定义的事件名）
+            if(layEvent=== 'edit'){
+                // 编辑操作
+                editBearings(data);
+            } else if(layEvent === 'delete'){
+                // 删除操作
+                console.log("sc删除删除删除")
+                // 监听表格的工具条事件
+                table.on('tool(recordTableFilter)', function(obj) {
+                    var data = obj.data; // 获取当前行的数据
+                    var layEvent = obj.event; // 获得 lay-event 对应的值（也就是自定义的事件名）
+                    if (layEvent === 'edit') {
+                        // 编辑操作
+                        editBearings(data);
+                    } else if (layEvent === 'delete') {
+                        // 删除操作
+                        layer.confirm('确定删除这条记录吗？', function(index) {
+                            // 发送AJAX请求到后端进行删除操作
+                            $.ajax({
+                                url: '/bearings/delete/' + data.id, // 假设后端删除接口的URL，需根据实际情况修改
+                                type: 'DELETE', // 使用DELETE方法，根据后端要求可能是POST
+                                success: function(res) {
+                                    // 删除成功后的UI处理
+                                    layer.close(index);
+                                    layer.msg('删除成功', {icon: 1});
+                                    table.reload('recordTable'); // 重新加载表格数据
+                                },
+                                error: function(xhr, textStatus, errorThrown) {
+                                    // 删除失败的UI处理
+                                    layer.msg('删除失败: ' + errorThrown, {icon: 2});
+                                }
+                            });
+                        });
+                    }
+                });
+            }
+        });
+
+        // 编辑bearings的函数
+        function editBearings(data) {
+            layer.open({
+                type: 1,
+                title: '编辑成品数据',
+                content: $('#editBearingsForm').html(),
+                area: ['550px', '90%'], // 根据需要调整弹窗大小
+                success: function(layero, index){
+                    // 填充表单数据
+                    form.val('editForm', {
+                        'id': data.id, // ID，假设这是从表格行数据获取的
+                        'boxText': data.boxText, // 箱号
+                        'quantity': data.quantity, // 装箱数
+                        'depository': data.depository, // 厂区
+                        'customer': data.customer, // 客户
+                        'outerInnerRing': data.outerInnerRing, // 外/内轮
+                        'model': data.model, // 型号
+                        'productCategory': data.productCategory, // 制品分类
+                        'steelType': data.steelType, // 钢种
+                        'steelGrade': data.steelGrade, // 钢材等级
+                        'size': data.size, // 材料尺寸
+                        // 'joinedSize': data.size.split('|'), // 设置多选尺寸
+                        'pair': data.pair,
+                        'storageLocation': data.storageLocation, // 备注
+                        'state': data.state,
+                        'singleEight': data.singleEight,
+                        'mode': data.mode
+                    });
+
+                    // // 初始化多选下拉框
+                    // $('#multiSelectSize').select2({
+                    //     placeholder: '选择尺寸',
+                    //     allowClear: true
+                    // }).val(data.size.split('|')).trigger('change'); // 设置初始值
+                    //
+                    // // 点击其他地方关闭下拉框
+                    // $(document).on('click', function(e) {
+                    //     if (!$(e.target).closest('#multiSelectSize').length) {
+                    //         $('#multiSelectSize').select2('close');
+                    //     }
+                    // });
+                    //
+                    // // 关闭下拉框时触发的事件
+                    // $('#multiSelectSize').on('select2:close', function(e) {
+                    //     // 获取选择的值
+                    //     var selectedValues = $(this).val();
+                    //     // 将选择的值用 | 连接
+                    //     var joinedValues = selectedValues ? selectedValues.join('|') : '';
+                    //     // 设置到隐藏的输入字段中
+                    //     $('#joinedSize').val(joinedValues);
+                    // });
+                    layui.form.render();
+
+                }
+            });
+        }
+        // 处理表单提交事件
+        form.on('submit(submitEditForm)', function(data){
+            var formData = data.field; // 获取表单数据
+            console.log(formData); // 调试输出，检查formData中的id值
+
+            // 确保formData.id存在且不是undefined
+            if(formData.id === undefined) {
+                layer.msg('ID值未定义');
+                return false; // 阻止表单提交
+            }
+
+            // 发送AJAX请求更新数据
+            $.ajax({
+                url: '/bearings/' + formData.id, // 使用formData中的id
+                type: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify(formData),
+                success: function(response){
+                    layer.msg('更新成功');
+                    table.reload('recordTable'); // 重新加载表格数据
+                    layer.closeAll(); // 关闭弹出层
+                },
+                error: function(){
+                    layer.msg('更新失败');
+                }
+            });
+
+            return false; // 阻止表单跳转。
+        });
+
+        // 高级搜索开关
+        $('#advancedSearchToggle').click(function() {
+            $('#advancedSearchForm').slideToggle();
+        });
+        // table.on('edit(recordTableFilter)', function(obj) {
+        //     var value = obj.value; // 获取编辑后的值
+        //     var data = obj.data; // 获取整行数据
+        //     var field = obj.field; // 获取编辑的字段
+        //
+        //     if (field !== 'depository') {
+        //         // 只有当编辑的字段是“溶解号”时才处理
+        //         data.dissolve = value;
+        //         // 发送AJAX请求更新后端数据
+        //         layer.confirm('确定要更新吗？', function (index) {
+        //             $.ajax({
+        //                 url: '/bearings/' + data.id, // 更新API URL
+        //                 type: 'PUT',
+        //                 contentType: 'application/json',
+        //                 data: JSON.stringify(data), // 发送整个更新后的数据对象
+        //                 success: function(response) {
+        //                     layer.msg('更新成功');
+        //                 },
+        //                 error: function(xhr, status, error) {
+        //                     layer.msg('更新失败: ' + error);
+        //                     // 错误处理
+        //                 }
+        //             });
+        //             layer.close(index);
+        //         });
+        //     }
+        // });
+    });
+</script>
+</body>
+</html>

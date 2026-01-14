@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>登陆</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta http-equiv="Access-Control-Allow-Origin" content="*">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="stylesheet" href="/static/lib/layui-v2.6.3/css/layui.css" media="all">
+    <link rel="stylesheet"  href="/static/css/public.css">
+    <!--[if lt IE 9]>
+    <script src="/static/js/otherJs/cdn.staticfile.org_html5shiv_r29_html5.min.js"></script>
+    <script src="/static/js/otherJs/cdn.staticfile.org_respond.js_1.4.2_respond.min.js"></script>
+    <![endif]-->
+    <style>
+        html, body {width: 100%;height: 100%;overflow: hidden}
+        body {
+            background: linear-gradient(to right, #1E9FFF, #36D1DC); /* 背景渐变 */
+        }
+        body:after {content:'';background-repeat:no-repeat;background-size:cover;-webkit-filter:blur(3px);-moz-filter:blur(3px);-o-filter:blur(3px);-ms-filter:blur(3px);filter:blur(3px);position:absolute;top:0;left:0;right:0;bottom:0;z-index:-1;}
+        .layui-container {width: 100%;height: 100%;overflow: hidden}
+        .admin-login-background {width:360px;height:300px;position:absolute;left:50%;top:40%;margin-left:-180px;margin-top:-100px;}
+        .logo-title {text-align:center;letter-spacing:2px;padding:14px 0;}
+        .logo-title h1 {color: #0a6ab6;font-size: 25px;text-shadow: 2px 2px 4px rgba(0,0,0,0.1); /* 添加文字阴影 */}
+        .login-form {background-color:#fff;border:1px solid #fff;border-radius:3px;padding:14px 20px;box-shadow:0 0 8px #eeeeee;border-radius: 20px;}
+        .login-form .layui-form-item {position:relative;}
+        .layui-btn-normal {
+            background-color: #1E9FFF;
+            border: none;
+            transition: transform 0.2s; /* 添加过渡效果 */
+        }
+        .layui-btn-normal:hover {
+            transform: translateY(-2px); /* 悬停时上移按钮 */
+        }
+        .layui-form-item input {
+            background-color: #FFFFFF;
+            border-radius: 20px; /* 输入框圆角 */
+            transition: box-shadow 0.3s; /* 添加过渡效果 */
+        }
+        .layui-form-item input:focus {
+            box-shadow: 0 0 5px #ffffff; /* 输入框聚焦时的阴影效果 */
+        }
+        .login-form .layui-form-item label {position:absolute;left:1px;top:1px;width:38px;line-height:36px;text-align:center;color:#d2d2d2;}
+        .login-form .layui-form-item input {padding-left:36px;}
+        .captcha {width:60%;display:inline-block;}
+        .captcha-img {display:inline-block;width:34%;float:right;}
+        .captcha-img img {height:34px;border:1px solid #e6e6e6;height:36px;width:100%;}
+        .department-title {
+            font-size: 18px; /* 或者其他您需要的大小 */
+            color: #333; /* 或者其他您喜欢的颜色 */
+            text-align: center; /* 如果您希望文字居中 */
+        }
+        .department-logo {
+            width: 80px; /* 您可以根据需要调整尺寸 */
+            height: 80px;
+            background: url('/static/images/xuri-logo.ico') no-repeat center center; /* 替换为您的图片路径 */
+            background-size: cover;
+            border-radius: 50%; /* 使其成为圆形 */
+            margin: -70px auto -40px auto; /* 使用负的 margin-top 将其向上移动 */
+            position: relative; /* 使用 relative 定位 */
+            z-index: 1; /* 确保其在其他元素之上 */
+            padding: -10px ;  /* 调整 padding 来缩小白色背景 */
+        }
+        .logo-title {
+            text-align: center;
+            letter-spacing: 5px;
+        }
+        .logo-title h1 {
+            margin-top: 40px; /* 根据需要调整 */
+        }
+    </style>
+</head>
+<body>
+<div class="layui-container">
+    <div class="admin-login-background">
+        <div class="layui-form login-form">
+            <form class="layui-form" action="">
+                <div class="layui-form-item logo-title">
+                    <div class="department-logo"></div>
+                    <h1>生产管理部</h1>
+                    <div class="department-title">
+                        成品仓库系统
+                    </div>
+                </div>
+
+                <div class="layui-form-item">
+                    <label class="layui-icon layui-icon-username" ></label>
+                    <input type="text" name="principal" lay-verify="required|account" placeholder="请输入账号" autocomplete="off" class="layui-input" >
+                </div>
+                <div class="layui-form-item">
+                    <label class="layui-icon layui-icon-password" ></label>
+                    <input type="password" name="credentials" lay-verify="required|password" placeholder="请输入密码" autocomplete="off" class="layui-input">
+                </div>
+                <!-- 徒有其表的验证码 -->
+                <div class="layui-form-item">
+                    <button class="layui-btn layui-btn layui-btn-normal layui-btn-fluid" lay-submit="" lay-filter="login">登 入</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script  src="/static/lib/jquery-3.4.1/jquery-3.4.1.min.js" charset="utf-8"></script>
+<script  src="/static/lib/layui-v2.6.3/layui.js" charset="utf-8"></script>
+<script  src="/static/lib/jq-module/jquery.particleground.min.js" charset="utf-8"></script>
+<script  src="/static/js/cookie.js" charset="utf-8"></script>
+<script>
+    layui.use(['layer','form'], function () {
+        var form = layui.form,
+            layer = layui.layer;
+        // 粒子线条背景
+        $(document).ready(function(){
+            $('.layui-container').particleground({
+                dotColor:'#7ec7fd',
+                lineColor:'#7ec7fd'
+            });
+        });
+
+        // 进行登录操作
+        form.on('submit(login)', function (data) {
+            data = data.field;
+            if (data.principal === '') {
+                layer.msg('用户名不能为空');
+                return false;
+            }
+            if (data.credentials === '') {
+                layer.msg('密码不能为空');
+                return false;
+            }
+
+            data.loginType="email";
+            $.ajax({
+                url:"/login",
+                type:'post',
+                dataType:'json',
+                contentType: "application/json;charset=utf-8",
+                data:JSON.stringify(data),
+                beforeSend:function () {
+                    this.layerIndex = layer.load(0, { shade: [0.5, '#393D49'] });
+                },
+                success:function(data){
+                    layer.close(this.layerIndex);
+                    if(data.status !== 200){
+                        layer.msg(data.statusInfo.message, {
+                            icon: 5, //失败的表情
+                            time: 2000
+                        });
+                    } else {
+                        layer.msg("登录成功", {
+                            icon: 6,
+                            time: 1000
+                        }, function(){
+                            cookieUtil.createCookie("token",data.data)
+                            // 根据设备类型重定向到不同页面
+                            if (isMobileDevice()) { //判断函数放在js底部
+                                window.location = '/s1'; // 移动设备访问页面
+                            } else {
+                                window.location = '/index'; // 电脑访问页面
+                            }
+                        });
+                    }
+                },
+                error:function () {
+                    layer.msg("登录失败,请检查账号密码", {
+                        icon: 5,
+                        time: 1000
+                    });
+                },
+                complete: function () {
+                    layer.close(this.layerIndex);
+                }
+            })
+            return false;
+        });
+    });
+    function isMobileDevice() {
+        var userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        return /android|ipad|iphone|ipod|iemobile|opera mini|blackberry|windows phone/i.test(userAgent);
+    }
+</script>
+</body>
+</html>

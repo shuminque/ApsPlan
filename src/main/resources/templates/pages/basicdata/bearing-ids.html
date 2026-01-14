@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IDS数据表</title>
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+    <!-- jQuery 库 -->
+    <script src="/static/js/http_ajax.googleapis.com_ajax_libs_jquery_3.5.1_jquery.js"></script>
+    <style>
+        body {
+            /*padding-top: 50px;*/
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin: 10px;
+        }
+        .layui-table-view .layui-table { /* 调整表格样式 */
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <form class="layui-form"  id="searchForm">
+        <div class="layui-form-item">
+            <div class="layui-input-inline">
+                <input type="text" name="boxText" id="boxText" placeholder="搜索箱号" class="layui-input" oninput="this.value = this.value.toUpperCase()">
+            </div>
+            <div class="layui-input-inline">
+                <input type="text" name="boxNumber" id="boxNumber" placeholder="搜索编号" class="layui-input" >
+            </div>
+            <div class="layui-inline">
+                <button type="submit" class="layui-btn layui-btn-primary" lay-submit lay-filter="data-search-btn">
+                    <i class="layui-icon"></i> 搜 索
+                </button>
+            </div>
+        </div>
+    </form>
+    <div class="container">
+        <div class="layui-row" style="margin-top: 20px;">
+            <div class="layui-col-xs12">
+                <form class="layui-form">
+                    <div class="layui-form-item">
+                        <div class="layui-input-inline">
+                            <button type="button" class="layui-btn" id="addBearingBtn">添加ID</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <table class="layui-hide" id="recordTable" lay-filter="recordTableFilter"></table>
+    </div>
+</div>
+<!-- 工具栏模板 -->
+<script type="text/html" id="actionBar">
+    <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+    <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="delete">删除</a>
+</script>
+<script type="text/template" id="addBearingsForm">
+    <form class="layui-form" lay-filter="addForm">
+        <!-- 箱号 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">箱号：</label>
+            <div class="layui-input-block">
+                <input type="text" id="boxText1" name="boxText" required lay-verify="required" placeholder="请输入箱号"
+                       autocomplete="off" class="layui-input" oninput="this.value = this.value.toUpperCase()">
+            </div>
+        </div>
+        <!-- 箱号 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">编号：</label>
+            <div class="layui-input-block">
+                <input type="text" id="boxNumber1" name="boxNumber" required lay-verify="required" placeholder="请输入箱号"
+                       autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 数量 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">装箱数：</label>
+            <div class="layui-input-block">
+                <input type="text" name="quantity" required lay-verify="required" placeholder="请输入装箱数" autocomplete="off" class="layui-input" >
+            </div>
+        </div>
+        <!-- 材料尺寸 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">在库箱数：</label>
+            <div class="layui-input-block">
+                <input type="text" name="isStocked" placeholder="在库箱数" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 厂区 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">厂区：</label>
+            <div class="layui-input-block">
+                <input type="text" name="depositoryId" placeholder="厂区" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">轮次：</label>
+            <div class="layui-input-block">
+                <input type="text" name="iter" placeholder="轮次" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 提交按钮 -->
+        <div class="layui-form-item">
+            <div class="layui-input-block">
+                <button type="submit" class="layui-btn" lay-submit lay-filter="submitAddForm">添加</button>
+            </div>
+        </div>
+    </form>
+</script>
+<!-- 编辑bearings的表单（在弹出层中显示） -->
+<script type="text/template" id="editBearingsForm">
+    <form class="layui-form" lay-filter="editForm">
+        <!-- 箱号 (只读) -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">箱号：</label>
+            <div class="layui-input-block">
+                <input type="text" name="boxText" required lay-verify="required" placeholder="请输入箱号"
+                       autocomplete="off" class="layui-input" oninput="this.value = this.value.toUpperCase()" readonly>
+            </div>
+        </div>
+        <!-- 编号 (只读) -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">编号：</label>
+            <div class="layui-input-block">
+                <input type="text" name="boxNumber" required lay-verify="required" placeholder="请输入编号"
+                       autocomplete="off" class="layui-input" readonly>
+            </div>
+        </div>
+        <!-- 装箱数 (可编辑) -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">装箱数：</label>
+            <div class="layui-input-block">
+                <input type="text" name="quantity" required lay-verify="required" placeholder="请输入装箱数" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 在库箱数 (可编辑) -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">在库箱数：</label>
+            <div class="layui-input-block">
+                <input type="text" name="isStocked" placeholder="在库箱数" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <!-- 厂区 (只读) -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">厂区：</label>
+            <div class="layui-input-block">
+                <input type="text" name="depositoryId" placeholder="厂区" autocomplete="off" class="layui-input" readonly>
+            </div>
+        </div>
+        <!-- 轮次 (只读) -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">轮次：</label>
+            <div class="layui-input-block">
+                <input type="text" name="iter" placeholder="轮次" autocomplete="off" class="layui-input" readonly>
+            </div>
+        </div>
+        <!-- 提交按钮 -->
+        <div class="layui-form-item">
+            <div class="layui-input-block">
+                <button type="submit" class="layui-btn" lay-submit lay-filter="submitEditForm">更新</button>
+            </div>
+        </div>
+    </form>
+</script>
+
+<script>
+    var userReviewGroupId;var userAuthority;var userDepositoryId;var userDepository;var depositoryId;
+    function getUserDepository() {
+        $.ajax({
+            url: '/get_user_depository',
+            type: 'GET',
+            dataType: 'json',
+            success: function(data) {
+                console.log(data);
+                userDepositoryId = data.depositoryId;userAuthority = data.authority;userReviewGroupId = data.review_group_id;
+                if (userDepositoryId ===1){
+                    userDepository='SAB';depositoryId=1;
+                } else if (userDepositoryId===2){
+                    userDepository='ZAB';depositoryId=2;
+                }else{
+                    userDepository="ALL";depositoryId=0;
+                }
+                layui.form.render('select');
+            },
+            error: function() {
+                layer.msg('无法获取用户的厂区信息');
+            }
+        });
+    }
+    document.addEventListener('DOMContentLoaded', function() {getUserDepository();});
+
+    layui.use(['table', 'form', 'layer'], function(){
+        var table = layui.table;
+        var form = layui.form;
+        var layer = layui.layer;
+
+        // 渲染表格
+        var recordTable =  table.render({
+            elem: '#recordTable',
+            url: '/productIds/allIds', // 数据接口
+            height: 600, // 设置表格高度
+            request: {
+                pageName:'page',
+                limitName:'size'
+            },
+            toolbar: ['filter', 'exports', 'print'],
+            cols: [ [ // 表头
+                {field: 'boxText', title: '箱号'},
+                {field: 'boxNumber', title: '编号'},
+                {field: 'quantity', title: '具体装箱数'},
+                {field: 'depositoryId', title: '厂区'},
+                {field: 'isStocked', title: '在库箱数'},
+                {field: 'iter', title: '轮次'},
+                {title: '操作', toolbar: '#actionBar'} // 添加操作列
+            ]],
+            limits:[100,500,1000],
+            limit:100,
+            page: true //开启分页
+        });
+        // 统一搜索表单提交事件
+        form.on('submit(data-search-btn)', function(data) {
+            var req = {};
+            var formData = data.field;
+
+            if (formData.boxText !== '') {
+                req.boxText = formData.boxText;
+            }
+            if (formData.boxNumber !== '') {
+                req.boxNumber = formData.boxNumber;
+            }
+            if (formData.quantity !== '') {
+                req.quantity = formData.quantity;
+            }
+            if (formData.depositoryId !== '') {
+                req.depositoryId = formData.depositoryId;
+            }
+            if (formData.isStocked !== '') {
+                req.isStocked = formData.isStocked;
+            }
+            if (formData.iter !== '') {
+                req.iter = formData.iter;
+            }
+            // 重新加载表格数据
+            recordTable.reload({
+                url: '/productIds/allIds', // 数据接口
+                page: { curr: 1 },
+                where: req
+            });
+            return false;
+        });
+
+        $('#addBearingBtn').click(function() {
+            layer.open({
+                type: 1,
+                title: '添加id',
+                content: $('#addBearingsForm').html(),
+                area: ['50%', '80%px']
+            });
+        });
+
+        // 处理添加表单的提交事件
+        form.on('submit(submitAddForm)', function(data) {
+            var formData = data.field; // 获取表单数据
+            $.ajax({
+                url: '/productIds/', // 假设这是添加轴承的API端点
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(formData),
+                success: function(response) {
+                    layer.msg('添加成功');
+                    table.reload('recordTable'); // 重新加载表格
+                    layer.closeAll(); // 关闭弹出层
+                },
+                error: function() {
+                    layer.msg('添加失败');
+                }
+            });
+            return false; // 阻止表单默认提交
+        });
+        // 监听表格的编辑按钮事件
+        // 监听表格的工具条事件
+        table.on('tool(recordTableFilter)', function(obj) {
+            var data = obj.data; // 获取当前行的数据
+            var layEvent = obj.event; // 获得 lay-event 对应的值（也就是自定义的事件名）
+
+            if (layEvent === 'edit') {
+                // 编辑操作
+                editBearings(data);
+            } else if (layEvent === 'delete') {
+                // 删除操作
+                layer.confirm('确定删除这条记录吗？', function(index) {
+                    // 发送AJAX请求到后端进行删除操作
+                    $.ajax({
+                        url: '/productIds/delete', // 修改为你的删除API端点
+                        type: 'DELETE',
+                        data: {
+                            boxText: data.boxText,
+                            boxNumber: data.boxNumber,
+                            depositoryId: data.depositoryId,
+                            iter: data.iter
+                        }, // 传递所需的参数
+                        success: function(res) {
+                            // 删除成功后的UI处理
+                            layer.close(index);
+                            layer.msg('删除成功', {icon: 1});
+                            table.reload('recordTable'); // 重新加载表格数据
+                        },
+                        error: function(xhr, textStatus, errorThrown) {
+                            // 删除失败的UI处理
+                            layer.msg('删除失败: ' + errorThrown, {icon: 2});
+                        }
+                    });
+                });
+            }
+        });
+        // 编辑bearings的函数
+        function editBearings(data) {
+            layer.open({
+                type: 1,
+                title: '编辑ID数据',
+                content: $('#editBearingsForm').html(),
+                area: ['60%', '80%'], // 根据需要调整弹窗大小
+                success: function(layero, index){
+                    // 填充表单数据
+                    form.val('editForm', {
+                        'boxText': data.boxText, //
+                        'boxNumber': data.boxNumber,
+                        'quantity': data.quantity, //
+                        'depositoryId': data.depositoryId, //
+                        'isStocked': data.isStocked,
+                        'iter': data.iter,
+                    });
+                    layui.form.render();
+                }
+            });
+        }
+        form.on('submit(submitEditForm)', function(data) {
+            var formData = data.field; // 获取表单数据
+            console.log(formData); // 调试输出，检查formData中的数据
+
+            // 确保formData.boxText等关键数据存在且不是undefined
+            if (formData.boxText === undefined || formData.boxNumber === undefined) {
+                layer.msg('关键字段未定义');
+                return false; // 阻止表单提交
+            }
+
+            // 发送AJAX请求更新数据
+            $.ajax({
+                url: '/productIds/',
+                type: 'POST', // 使用POST方法
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    boxText: formData.boxText,
+                    boxNumber: formData.boxNumber,
+                    quantity: formData.quantity,
+                    depositoryId: formData.depositoryId,
+                    isStocked: formData.isStocked,
+                    iter: formData.iter
+                }),
+                success: function(response) {
+                    layer.msg('操作成功');
+                    table.reload('recordTable'); // 重新加载表格数据
+                    layer.closeAll(); // 关闭弹出层
+                },
+                error: function() {
+                    layer.msg('操作失败');
+                }
+            });
+
+            return false; // 阻止表单跳转。
+        });
+    });
+</script>
+</body>
+</html>

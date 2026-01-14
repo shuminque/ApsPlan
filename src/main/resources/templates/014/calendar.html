@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>生产班次日历</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <link href='/static/css/bootstrap-icons.css' rel='stylesheet'>
+    <link href='/static/css/bootstrap.min.css' rel='stylesheet'>
+
+    <style>
+        #calendar {
+            width: 100%;
+        }
+        #calendar a { color: inherit !important; text-decoration: none !important; }
+        .fc .fc-daygrid-day-number {
+            font-size: 1.2rem !important;  /* 字体大小，可以按需修改如 18px */
+            font-weight: bold !important;  /* 加粗 */
+            color: #333 !important;        /* 颜色（防止被 Bootstrap 变蓝） */
+            padding: 4px 8px !important;   /* 适当增加内边距让数字更美观 */
+            text-decoration: none !important; /* 去除下划线 */
+        }
+        .fc-event-title, .fc-event-main {
+            color: #262527 !important;
+        }
+        .fc .fc-col-header-cell-cushion {
+            font-size: 1.1rem !important;
+            font-weight: 800 !important;   /* 更粗的数值 */
+            color: #000 !important;
+            text-decoration: none !important;
+        }
+        .fc-daygrid-day-top {
+            flex-direction: row !important; /* 默认是 row-reverse，改为 row 让数字靠左或保持美观 */
+            padding: 5px !important;
+        }
+
+        /* 如果你想让“今天”的数字颜色不一样 */
+        .fc-day-today .fc-daygrid-day-number {
+            color: #ff5722 !important; /* Layui 经典的橙色 */
+            border-bottom: 2px solid #ff5722; /* 下方加个横线强调 */
+        }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div id="calendar"></div>
+</div>
+<script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
+<script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
+<script>
+    let calendar;
+    // --- 工具函数 ---
+    const formatTime = (dateTime) => {
+        if (!dateTime) return '';
+        const date = new Date(dateTime);
+        return date.toTimeString().slice(0, 5); // 快速获取 HH:mm
+    };
+
+    function openDayEditor(dateStr) {
+        fetch('/api/shift/day?date=' + dateStr)
+            .then(res => res.json())
+            .then(list => {
+                const rowsHtml = list.map((item, index) => buildRowHtml(item, index)).join('');
+                layer.open({
+                    type: 1,
+                    title: '编辑排班 - ' + dateStr,
+                    area: ['700px', '420px'],
+                    btn: ['确定', '取消'],
+                    content: `
+                    <div style="padding:15px;">
+                        <button class="layui-btn layui-btn-sm" onclick="addRow()">新增班次</button>
+
+                        <table class="layui-table" style="margin-top:10px;">
+                            <thead>
+                                <tr>
+                                    <th>班组</th>
+                                    <th style="width:260px;">时间范围</th>
+                                    <th style="width:80px;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="shiftTableBody">
+                                ${rowsHtml}
+                            </tbody>
+                        </table>
+                    </div>
+                `,
+                    yes: function (index) {
+                        saveDaySchedules(dateStr);
+                        layer.close(index);
+                    }
+                });
+            });
+    }
+
+    /* 构建一行 */
+    function buildRowHtml(item = {}, index = 0) {
+        return `
+        <tr data-id="${item.scheduleId || ''}">
+            <td>
+                <input type="text" class="layui-input teamName"
+                       value="${item.teamID || ''}"
+                       placeholder="班次名称">
+            </td>
+            <td>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <input type="time"
+                           class="layui-input startTime"
+                           style="width:100px;"
+                           value="${formatTime(item.startDateTime)}">
+
+                    <span style="color:#666;">至</span>
+
+                    <input type="time"
+                           class="layui-input endTime"
+                           style="width:100px;"
+                           value="${formatTime(item.endDateTime)}">
+                </div>
+            </td>
+            <td>
+                <button class="layui-btn layui-btn-danger layui-btn-xs"
+                        onclick="removeRow(this)">删除</button>
+            </td>
+        </tr>
+    `;
+    }
+    function addRow() {
+        const index = document.querySelectorAll('#shiftTableBody tr').length;
+        const newRowHtml = buildRowHtml({}, index);
+        document.getElementById('shiftTableBody').insertAdjacentHTML('beforeend', newRowHtml);
+    }
+
+    function removeRow(btn) {
+        layer.confirm('确定要移除这个班次吗？', {icon: 3, title:'提示'}, function(index){
+            // 找到当前按钮所在的行并删除
+            $(btn).closest('tr').remove();
+            layer.close(index);
+        });
+    }
+    function saveDaySchedules(dateStr) {
+        const rows = document.querySelectorAll('#shiftTableBody tr');
+
+        let schedules = [];
+
+        rows.forEach(tr => {
+            const scheduleId = tr.getAttribute('data-id'); // 获取 ID
+            const teamID = tr.querySelector('.teamName').value;
+            const startTime = tr.querySelector('.startTime').value;
+            const endTime = tr.querySelector('.endTime').value;
+
+            if (!teamID) return; // 空行跳过
+
+            schedules.push({
+                scheduleId: scheduleId ? parseInt(scheduleId) : null, // 传给后端
+                scheduleDate: dateStr,
+                teamID: teamID,
+                startTime: startTime,
+                endTime: endTime
+            });
+        });
+
+        console.log('要保存的数据：', schedules);
+
+        fetch('/api/shift/day/save', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(schedules)
+        }).then(res => {
+            if (!res.ok) throw new Error('保存失败');
+            layer.msg('保存成功');
+            calendar.refetchEvents(); // 刷新日历
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var calendarEl = document.getElementById('calendar');
+
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            locale: 'zh-cn',
+            displayEventTime: false,
+            buttonText: {today:    '今天', month:    '月', week:     '周', day:      '日', list:     '日程列表'},
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,timeGridDay,list'
+            },
+            height: 950,
+            selectable: true,
+            editable: false,
+
+            events: function(fetchInfo, successCallback, failureCallback) {
+                fetch('/api/shift/events?start=' + fetchInfo.startStr + '&end=' + fetchInfo.endStr)
+                    .then(res => res.json())
+                    .then(data => successCallback(data))
+                    .catch(err => failureCallback(err));
+            },
+
+            dayCellContent: function (arg) {
+                const d = arg.date;
+                const dateStr =
+                    d.getFullYear() + '-' +
+                    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                    String(d.getDate()).padStart(2, '0');
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // 清零时间
+                const cellDate = new Date(d);
+                cellDate.setHours(0, 0, 0, 0);
+                const canEdit = cellDate >= today;
+
+                return {
+                    html: `
+            <div style="display:flex;align-items:center;gap:4px;">
+                <span>${arg.dayNumberText}</span>
+                ${
+                        canEdit
+                            ? `<i class="layui-icon layui-icon-edit"
+                               style="cursor:pointer;color:#1E9FFF;"
+                               onclick="openDayEditor('${dateStr}')"></i>`
+                            : ''
+                    }
+            </div>
+        `
+                };
+            },
+            eventDataTransform: function(event) {
+                var sTime = event.shiftStartTime || '';
+                var eTime = event.shiftEndTime || '';
+                // 2. 重新组合标题： 一班 (08:00:00~17:00:00)
+                if (sTime && eTime) {
+                    // 显示小时分钟，用 sTime.substring(0, 5)
+                    event.title = event.title + " (" + sTime + "~" + eTime + ")";
+                }
+
+                // 3. 处理月视图不跨行显示
+                if (calendar.view.type === 'dayGridMonth') {
+                    event.end = null;
+                }
+                return event;
+            },
+
+            // eventClick: function(info) {
+            //     alert(
+            //         '班组：' + info.event.title + '\n' +
+            //         '开始：' + info.event.startStr + '\n' +
+            //         '结束：' + info.event.endStr
+            //     );
+            // },
+
+
+        });
+
+        // calendar.addEvent({
+        //     title: '6202',
+        //     start: '2025-12-20',
+        //     end: '2025-12-31',
+        //     allDay: true
+        // });
+
+        calendar.render();
+    });
+</script>
+
+
+</body>
+</html>

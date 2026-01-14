@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>转移记录查询</title>
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script></head>
+<body>
+
+<div class="container">
+    <div class="layui-row" style="margin-top: 20px;">
+        <div class="layui-col-xs12">
+            <form class="layui-form" id="searchForm">
+                <div class="layui-form-item">
+                    <label class="layui-form-label">选择日期</label>
+                    <div class="layui-input-inline">
+                        <input type="text" name="date" id="date" placeholder="请选择起止日期" autocomplete="off" class="layui-input">
+                    </div>
+                    <div class="layui-input-inline">
+                        <button type="button" class="layui-btn" id="searchBtn">搜索</button>
+                    </div>
+                    <h2 style="">转出后两天内没有转入，将以黄色预警</h2>
+                </div>
+            </form>
+        </div>
+    </div>
+    <table id="recordsTable" lay-filter="recordsTableFilter" class="layui-table" ></table>
+</div>
+<script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
+<script>
+    layui.use(['table', 'form', 'laydate'], function(){
+        var table = layui.table;
+        var form = layui.form;
+        var laydate = layui.laydate;
+// 获取当前日期并格式化为 YYYY-MM-DD
+        var currentDate = new Date();
+        var year = currentDate.getFullYear();
+        var month = ("0" + (currentDate.getMonth() + 1)).slice(-2); // 月份从0开始计算，需要加1
+        var day = ("0" + currentDate.getDate()).slice(-2);
+        var formattedDate = year + '-' + month + '-' + day;
+        // 初始化日期选择器
+        laydate.render({
+            elem: '#date'
+            ,range:true,
+            rangeLinked: true,
+            shortcuts: [
+                {
+                    text: "上个月",
+                    value: function(){
+                        var value = [];
+                        var date1 = new Date();
+                        date1.setMonth(date1.getMonth() - 1);
+                        date1.setDate(1);
+                        date1.setHours(0, 0, 0, 0);
+                        value.push(date1);
+                        var date2 = new Date();
+                        date2.setDate(1);
+                        date2.setHours(0, 0, 0, 0);
+                        date2 = date2.getTime() - 1;
+                        value.push(new Date(date2));
+                        return value;
+                    }
+                },
+                {
+                    text: "这个月",
+                    value: function(){
+                        var value = [];
+                        var date1 = new Date();
+                        date1.setDate(1);//1号
+                        date1.setHours(0, 0, 0, 0);
+                        value.push(date1);
+                        var date2 = new Date();
+                        date2.setMonth(date2.getMonth() + 1);
+                        date2.setDate(0); // 设置为当前月的最后一天
+                        date2.setHours(23, 59, 59, 999); // 设置为当天的最后一刻
+                        value.push(date2);
+
+                        return value;
+                    }
+
+                },
+                {
+                    text: "下个月",
+                    value: function(){
+                        var value = [];
+                        var date1 = new Date();
+                        date1.setMonth(date1.getMonth() + 1);
+                        date1.setDate(1);
+                        date1.setHours(0, 0, 0, 0);
+                        value.push(date1);
+                        var date2 = new Date();
+                        date2.setMonth(date2.getMonth() + 2);
+                        date2.setDate(1);
+                        date2.setHours(0, 0, 0, 0);
+                        date2 = date2.getTime() - 1;
+                        value.push(new Date(date2));
+                        return value;
+                    }
+                }
+            ]
+        });
+
+        // 初始化表格
+        table.render({
+            elem: '#recordsTable',
+            url: '/bearingRecords/comprehensiveTransfers', // 数据接口
+            height: 600, // 设置表格高度
+            // page: true, // 开启分页
+            toolbar: ['filter', 'exports', 'print'],
+            cols: [ [ // 表头
+                {field: 'out_id', title: '转出ID', hide:true},
+                {field: 'in_id', title: '转入ID', hide:true},
+                {field: 'out_box_text', title: '转出箱号',sort: true},
+                {field: 'out_box_number', title: '编号'},
+                {field: 'out_quantity', title: '数量'},
+                {field: 'out_depository', title: '转出地',sort: true},
+                {field: 'out_time', title: '转出时间', templet: function(d) {
+                        return formatDate(d.out_time);}},
+                {field: '', title: ''},
+                {field: 'in_box_text', title: '转入箱号'},
+                {field: 'in_box_number', title: '编号'},
+                {field: 'in_quantity', title: '数量'},
+                {field: 'in_depository', title: '转入地'},
+                {field: 'in_time', title: '转入时间', templet: function(d) {
+                        return formatDate(d.in_time);}},
+            ]],
+            done: function(res, curr, count) {
+                // 表格渲染完成后的回调
+                $('#recordsTable + div .layui-table-body tbody > tr').each(function() {
+                    var dataIndex = $(this).attr('data-index');
+                    var row = res.data[dataIndex];
+                    // 获取当前时间
+                    var now = new Date();
+                    // 获取转出时间
+                    var out_time = new Date(row.out_time);
+                    var in_time = new Date(row.in_time);
+                    // 计算时间差
+                    var diff = now - out_time;
+                    var diff2 = now - in_time;
+                    // 如果超过两天并且没有转入时间，则将这一行变黄
+                    if (diff > 2 * 24 * 60 * 60 * 1000 && !row.in_time) {
+                        $(this).find('td[data-field="in_box_text"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="in_box_number"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="in_quantity"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="in_depository"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="in_time"]').css('background-color', 'yellow');
+                    }
+                    if (diff2 > 2 * 24 * 60 * 60 * 1000 && !row.out_time) {
+                        $(this).find('td[data-field="out_box_text"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="out_box_number"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="out_quantity"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="out_depository"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="out_time"]').css('background-color', 'yellow');
+                    }
+
+                });
+            }
+        });
+        table.on('sort(recordsTableFilter)', function(obj){
+            // 等待表格渲染完成后再执行颜色设置的代码
+            setTimeout(function(){
+                $('#recordsTable + div .layui-table-body tbody > tr').each(function() {
+                    var dataIndex = $(this).attr('data-index');
+                    var row = table.cache.recordsTable[dataIndex];
+                    // 获取当前时间
+                    var now = new Date();
+                    // 获取转出时间
+                    var out_time = new Date(row.out_time);
+                    var in_time = new Date(row.in_time);
+                    // 计算时间差
+                    var diff = now - out_time;
+                    var diff2 = now - in_time;
+                    // 如果超过两天并且没有转入时间，则将这一行变黄
+                    if (diff > 2 * 24 * 60 * 60 * 1000 && !row.in_time) {
+                        $(this).find('td[data-field="in_box_text"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="in_box_number"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="in_quantity"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="in_depository"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="in_time"]').css('background-color', 'yellow');                    }
+                    if (diff2 > 2 * 24 * 60 * 60 * 1000 && !row.out_time) {
+                        $(this).find('td[data-field="out_box_text"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="out_box_number"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="out_quantity"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="out_depository"]').css('background-color', 'yellow');
+                        $(this).find('td[data-field="out_time"]').css('background-color', 'yellow');                   }
+                });
+            }, 0);
+        });
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            let date = new Date(dateStr);
+            let year = date.getFullYear();
+            let month = (date.getMonth() + 1).toString().padStart(2, '0');
+            let day = date.getDate().toString().padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+        // 监听搜索按钮点击事件
+        $('#searchBtn').on('click', function(){
+            // 重新加载表格数据
+            table.reload('recordsTable', {
+                where: {
+                    date: $('#date').val() // 获取日期选择器的值
+                }
+            });
+        });
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.depository_manage.mapper.BearingMapper">
+    <resultMap id="bearingMap" type="com.depository_manage.entity.Bearing">
+        <result property="id" column="id"/>
+        <result property="boxText" column="box_text"/>
+        <result property="model" column="model"/>
+        <result property="customer" column="customer"/>
+        <result property="quantity" column="quantity"/>
+        <result property="outerInnerRing" column="outer_inner_ring"/>
+        <result property="productCategory" column="product_category"/>
+        <result property="steelType" column="steel_type"/>
+        <result property="steelGrade" column="steel_grade"/>
+        <result property="depository" column="depository"/>
+        <result property="storageLocation" column="storage_location"/>
+        <result property="size" column="size"/>
+        <result property="pair" column="pair"/>
+        <result property="state" column="state"/>
+        <result property="currentDepository" column="current_depository"/>
+        <result property="singleEight" column="single_eight"/>
+        <result property="mode" column="mode"/>
+    </resultMap>
+
+    <select id="selectBearingByBoxTextAndDepository" resultMap="bearingMap">
+        SELECT * FROM bearings
+        WHERE box_text = #{boxText} AND depository = #{depository}
+    </select>
+    <update id="updateBearing">
+        UPDATE bearings
+        <set>
+            <if test="outerInnerRing != null">
+                outer_inner_ring = #{outerInnerRing},
+            </if>
+            <if test="customer != null">
+                customer = #{customer},
+            </if>
+            <if test="model != null">
+                model = #{model},
+            </if>
+            <if test="productCategory != null">
+                product_category = #{productCategory},
+            </if>
+            <if test="steelType != null">
+                steel_type = #{steelType},
+            </if>
+            <if test="steelGrade != null">
+                steel_grade = #{steelGrade},
+            </if>
+            <if test="boxText != null">
+                box_text = #{boxText},
+            </if>
+            <if test="quantity != null">
+                quantity = #{quantity},
+            </if>
+            <if test="size != null">
+                size = #{size},
+            </if>
+            <if test="depository != null">
+                depository = #{depository},
+            </if>
+            <if test="storageLocation != null">
+                storage_location = #{storageLocation},
+            </if>
+            <if test="pair != null">
+                pair = #{pair},
+            </if>
+            <if test="state != null">
+                state = #{state},
+            </if>
+            <if test="singleEight != null">
+                single_eight = #{singleEight},
+            </if>
+            <if test="mode != null">
+                mode = #{mode}
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    <select id="selectAllBearings" resultMap="bearingMap" parameterType="map">
+        SELECT * FROM bearings WHERE 1=1
+        <if test="boxText != null and boxText != ''">
+            AND box_text LIKE CONCAT(#{boxText},'%')
+        </if>
+        <if test="model != null and model != ''">
+            AND model  LIKE CONCAT('%',#{model},'%')
+        </if>
+        <if test="customer != null and customer != ''">
+            AND customer  LIKE CONCAT('%',#{customer},'%')
+        </if>
+        <if test="productCategory != null and productCategory != ''">
+            AND product_category = #{productCategory}
+        </if>
+        <if test="outerInnerRing != null and outerInnerRing != ''">
+            AND outer_inner_ring = #{outerInnerRing}
+        </if>
+        <if test="steelType != null and steelType != ''">
+            AND steel_type = #{steelType}
+        </if>
+        <if test="steelGrade != null and steelGrade != ''">
+            AND steel_grade = #{steelGrade}
+        </if>
+        <if test="depository != null and depository != ''">
+            AND depository = #{depository}
+        </if>
+        <if test="pair != null and pair != ''">
+            AND pair = #{pair}
+        </if>
+        <if test="state != null and state != ''">
+            AND state  LIKE CONCAT('%',#{state},'%')
+        </if>
+        <if test="mode != null and mode != ''">
+            AND mode  LIKE CONCAT('%',#{mode},'%')
+        </if>
+        <if test="size != null and size != ''">
+            AND size  LIKE CONCAT('%',#{size},'%')
+        </if>
+        ORDER BY pair
+    </select>
+    <select id="selectLatestBearingByBoxText" resultMap="bearingMap">
+        SELECT * FROM bearings
+        WHERE box_text = #{boxText}
+        ORDER BY box_text DESC
+            LIMIT 1
+    </select>
+    <insert id="insertBearing">
+        INSERT INTO bearings (
+            box_text,
+            model,
+            customer,
+            quantity,
+            outer_inner_ring,
+            product_category,
+            steel_type,
+            steel_grade,
+            depository,
+            storage_location,
+            size,
+            pair,
+            state,
+            current_depository,
+            single_eight,
+            mode
+        ) VALUES (
+                     #{boxText},
+                     #{model},
+                     #{customer},
+                     #{quantity},
+                     #{outerInnerRing},
+                     #{productCategory},
+                     #{steelType},
+                     #{steelGrade},
+                     #{depository},
+                     #{storageLocation},
+                     #{size},
+                     #{pair},
+                     #{state},
+                     #{depository},
+                     #{singleEight},
+                     #{mode}
+                 )
+    </insert>
+    <select id="calculateTotalQuantityByBoxText" resultType="java.lang.Integer">
+        SELECT SUM(quantity) FROM bearings WHERE box_text = #{boxText} AND depository = #{depository}
+    </select>
+
+    <select id="searchBoxText" resultType="string">
+        SELECT box_text FROM bearings
+        WHERE box_text LIKE CONCAT(#{query}, '%')
+          AND depository = #{depository}
+    </select>
+    <delete id="deleteBearingById" parameterType="java.lang.Integer">
+        DELETE FROM bearings WHERE id = #{id}
+    </delete>
+    <select id="getMaxPairNumber" resultType="string">
+        SELECT MAX(pair) FROM bearings
+    </select>
+
+    <select id="findModelsByCustomerAndRing" resultType="java.lang.String">
+        SELECT DISTINCT model
+        FROM bearings
+        WHERE customer = #{customer}
+          AND outer_inner_ring = #{ring}
+          AND model IS NOT NULL
+          AND model != ''
+    </select></mapper>
+

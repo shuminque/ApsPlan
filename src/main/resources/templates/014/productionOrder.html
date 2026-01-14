@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>新增生产订单</title>
+  <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+  <link href='/static/css/bootstrap-icons.css' rel='stylesheet'>
+  <link href='/static/css/bootstrap.min.css' rel='stylesheet'>
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+  <style>
+    body { background-color: #f8f9fa; padding: 20px; }
+    .order-card { max-width: 800px; margin: 0 auto; border: none; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15); }
+    .card-header { background-color: #0d6efd; color: white; font-weight: bold; }
+    .required::after { content: " *"; color: red; }
+  </style>
+</head>
+<body>
+
+<div class="container-fluid mt-4">
+  <div class="card shadow">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">生产订单提交表</h5>
+      <button type="button" class="btn btn-light btn-sm" id="addRow">
+        添加一行
+      </button>
+    </div>
+    <div class="card-body">
+      <form id="batchOrderForm">
+        <div class="table-responsive">
+          <table class="table table-bordered align-middle" id="orderTable">
+            <thead class="table-light">
+            <tr>
+              <th style="width: 15%">客户 <span class="text-danger">*</span></th>
+              <th style="width: 12%">内外轮 <span class="text-danger">*</span></th>
+              <th style="width: 20%">产品型号 <span class="text-danger">*</span></th>
+              <th style="width: 10%">数量 <span class="text-danger">*</span></th>
+              <th style="width: 12%">交货期</th>
+              <th style="width: 10%">优先级</th>
+              <th style="width: 10%">备注</th>
+              <th style="width: 5%">操作</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr class="order-row">
+              <td>
+                <select class="form-select customer-select" required>
+                  <option value="" selected>搜索客户</option>
+                  <option th:each="customer : ${customers}"
+                          th:value="${customer.name}"
+                          th:text="${customer.name}"></option>
+                </select>
+              </td>
+              <td>
+                <select class="form-select ring-select" required>
+                  <option value="">请选择</option>
+                  <option value="LA" >LA</option>
+                  <option value="LB" >LB</option>
+                  <option value="LAB" >LAB</option>
+                </select>
+              </td>
+              <td>
+                <select class="form-select model-select" required disabled>
+                  <option value="">请先选择前两项</option>
+                </select>
+              </td>
+              <td><input type="number" class="form-control" name="quantity" required autocomplete="off"></td>
+              <td><input type="text" class="form-control date-input" readonly></td>
+              <td>
+                <select class="form-select priority-select" required>
+                  <option value="">请选择</option>
+                  <option value="0" selected>普通</option>
+                  <option value="1" >加急</option>
+                </select>
+              </td>
+              <td><input type="text" class="form-control" name="remark"></td>
+              <td class="text-center">
+                <button type="button" class="btn btn-outline-danger btn-sm delRow">删除</button>
+              </td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="text-end mt-3">
+          <button type="submit" class="btn btn-success px-5">提交订单</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
+<script src="/static/lib/layui-v2.8.17/layui.js"></script>
+
+<script>
+  var $rowTemplate = $('.order-row:first').clone(true);
+  layui.use(['laydate', 'layer'], function(){
+    var laydate = layui.laydate, layer = layui.layer;
+    function initSelect2(element) {
+      $(element).select2({
+        theme: 'bootstrap-5',
+        placeholder: '输入型号搜索...',
+        width: '100%'
+      });
+    }
+    // 绑定日期选择器的函数
+    function bindDate() {
+      $('.date-input').each(function(){
+        if(!$(this).attr('lay-key')){ // 避免重复绑定
+          laydate.render({ elem: this, trigger: 'click' });
+        }
+      });
+    }
+    bindDate();
+
+    $('#addRow').click(function() {
+      var newRow = $rowTemplate.clone(true);
+
+      // input 清空
+      newRow.find('input').val('');
+
+      // select 处理
+      newRow.find('.customer-select').val('');
+      newRow.find('.ring-select').val('');
+      newRow.find('.model-select')
+              .val('')
+              .prop('disabled', true)
+              .html('<option value="">请先选择前两项</option>');
+
+      // ⭐ 优先级默认普通
+      newRow.find('.priority-select').val('0');
+
+      // 日期重置
+      newRow.find('.date-input')
+              .removeAttr('lay-key')
+              .val('');
+
+      $('#orderTable tbody').append(newRow);
+      bindDate();
+    });
+
+
+
+    // 删除行逻辑
+    $(document).on('click', '.delRow', function() {
+      if ($('.order-row').length > 1) {
+        $(this).closest('tr').remove();
+      } else {
+        layer.msg("至少保留一行");
+      }
+    });
+
+    // 级联逻辑 (由于是动态生成的，使用事件委托)
+    $(document).on('change', '.customer-select, .ring-select', function() {
+      var row = $(this).closest('tr');
+      var customer = row.find('.customer-select').val();
+      var ring = row.find('.ring-select').val();
+      var $modelSelect = row.find('.model-select');
+
+      // 只有当两个都选择了才触发
+      if(customer && ring) {
+        $.ajax({
+          url: '/bearings/find-models',
+          type: 'GET',
+          data: {
+            customer: customer,
+            ring: ring
+          },
+          success: function(res) {
+            if(res.code === 200) {
+              var options = '<option value="">请选择型号</option>';
+              if(res.data && res.data.length > 0) {
+                res.data.forEach(function(model) {
+                  options += '<option value="' + model + '">' + model + '</option>';
+                });
+                $modelSelect.prop('disabled', false).html(options);
+                // 关键：渲染完数据后调用 select2
+                initSelect2($modelSelect);
+              } else {
+                $modelSelect.prop('disabled', true).html('<option value="">暂无对应型号</option>');
+              }
+            } else {
+              layer.msg('获取型号失败：' + res.msg);
+            }
+          },
+          error: function() {
+            layer.msg('网络异常，无法获取型号');
+          }
+        });
+      } else {
+        // 如果信息不全，重置并禁用型号选择框
+        $modelSelect.prop('disabled', true).html('<option value="">请先选择前两项</option>');
+      }
+    });
+
+    // 提交逻辑
+    $('#batchOrderForm').submit(function(e) {
+      e.preventDefault();
+      var dataList = [];
+      $('.order-row').each(function() {
+        var row = $(this);
+        dataList.push({
+          customer: row.find('.customer-select').val(),
+          outerInnerRing: row.find('.ring-select').val(),
+          model: row.find('.model-select').val(),
+          quantity: row.find('input[name="quantity"]').val(),
+          deliveryDate: row.find('.date-input').val(),
+          priority:row.find('.priority-select').val(),
+          remark: row.find('input[name="remark"]').val(),
+          orderDate: new Date().toISOString().split('T')[0] // 默认今天
+        });
+      });
+
+      $.ajax({
+        url: '/production-order/batch-add', // 注意后端接口也要改
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(dataList),
+        success: function(res) {
+          if(res.code === 200) {
+            layer.msg('批量提交成功');
+
+            // 1️⃣ 清空表格
+            $('#orderTable tbody').empty();
+
+            // 2️⃣ 用缓存的模板 clone 新行
+            var newRow = $rowTemplate.clone(true);
+
+            // 3️⃣ 重置内容（防止残留）
+            newRow.find('input').val('');
+            newRow.find('select').each(function(){
+              this.selectedIndex = 0;
+            });
+            newRow.find('.priority-select').val('0');
+
+            newRow.find('.model-select')
+                    .prop('disabled', true)
+                    .html('<option value="">请先选择前两项</option>');
+
+            newRow.find('.date-input')
+                    .removeAttr('lay-key')
+                    .val('');
+
+            // 4️⃣ 插回表格
+            $('#orderTable tbody').append(newRow);
+
+            // 5️⃣ 重新绑定日期
+            bindDate();
+          } else {
+            layer.alert(res.msg);
+          }
+        }
+      });
+    });
+  });
+</script></body>
+</html>
