@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.depository_manage.mapper.cpck.old.OnceFillMapper">
+
+    <resultMap id="BaseResultMap" type="com.depository_manage.entity.OnceFill">
+        <id column="id" property="id" jdbcType="INTEGER"/>
+        <result column="depositoryId" property="depositoryId" jdbcType="INTEGER"/>
+        <result column="name" property="name" jdbcType="VARCHAR"/>
+        <result column="model" property="model" jdbcType="VARCHAR"/>
+        <result column="type_id" property="typeId" jdbcType="INTEGER" />
+        <result column="unit_price" property="unitPrice" jdbcType="DOUBLE"/>
+        <result column="quantity" property="quantity" jdbcType="INTEGER"/>
+        <result column="price" property="price" jdbcType="DOUBLE"/>
+        <result column="time" property="time" jdbcType="TIMESTAMP"/>
+        <result column="apply_remark" property="applyRemark" jdbcType="VARCHAR"/>
+        <result column="introduce" property="introduce" jdbcType="VARCHAR"/>
+    </resultMap>
+
+    <!-- Insert operation -->
+    <insert id="insertOnceFill">
+        INSERT INTO once_fill (depositoryId, name, model, unit_price, quantity, price, time, apply_remark, type_id, introduce)
+        VALUES (#{depositoryId}, #{name}, #{model}, #{unitPrice}, #{quantity}, #{price}, #{time}, #{applyRemark}, #{typeId}, #{introduce})
+    </insert>
+    <insert id="insertBatch" parameterType="java.util.List">
+        INSERT INTO once_fill (depositoryId, name, model, type_id, unit_price, quantity, price, time, apply_remark, introduce)
+        VALUES
+        <foreach collection="list" item="record" separator=",">
+            (#{record.depositoryId}, #{record.name}, #{record.model}, #{record.typeId}, #{record.unitPrice}, #{record.quantity}, #{record.price}, #{record.time}, #{record.applyRemark}, #{record.introduce})
+        </foreach>
+    </insert>
+    <!-- Update operation -->
+    <update id="updateOnceFill" parameterType="map">
+        UPDATE once_fill
+        <set>
+            <if test="depositoryId != null">
+                depository_id = #{depositoryId},
+            </if>
+            <if test="name != null">
+                name = #{name},
+            </if>
+            <if test="model != null">
+                model = #{model},
+            </if>
+            <if test="typeId != null">
+                type_id = #{typeId},
+            </if>
+            <if test="unitPrice != null">
+                unit_price = #{unitPrice},
+            </if>
+            <if test="quantity != null">
+                quantity = #{quantity},
+            </if>
+            <if test="price != null">
+                price = #{price},
+            </if>
+            <if test="time != null">
+                time = #{time},
+            </if>
+            <if test="applyRemark != null">
+                apply_remark = #{applyRemark},
+            </if>
+            <if test="introduce != null">
+                introduce = #{introduce},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+
+    <!-- Delete operation -->
+    <delete id="deleteOnceFillById">
+        DELETE FROM once_fill WHERE id = #{id}
+    </delete>
+
+    <select id="findOnceFillByCondition" resultMap="BaseResultMap" parameterType="map">
+        SELECT * FROM once_fill
+        WHERE 1=1
+        <if test="id != null">
+            AND id = #{id}
+        </if>
+        <if test="depositoryId != null">
+            AND depositoryId = #{depositoryId}
+        </if>
+        <if test="unitPrice != null">
+            AND unit_price = #{unitPrice}
+        </if>
+        <if test="price != null">
+            AND price = #{price}
+        </if>
+        <if test="quantity != null">
+            AND quantity = #{quantity}
+        </if>
+        <if test="name != null and name != ''">
+            AND name LIKE CONCAT('%', #{name}, '%')
+        </if>
+        <if test="model != null and model != ''">
+            AND model LIKE CONCAT('%', #{model}, '%')
+        </if>
+        <if test="typeId != null and typeId.size > 0">
+            AND type_id IN
+            <foreach item="item" index="index" collection="typeId" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+        <if test="applyRemark != null and applyRemark != ''">
+            AND apply_remark LIKE CONCAT('%', #{applyRemark}, '%')
+        </if>
+        <if test="introduce != null and introduce != ''">
+            AND introduce LIKE CONCAT('%', #{introduce}, '%')
+        </if>
+        <if test="startDate != null and endDate != null">
+            AND DATE(time) BETWEEN #{startDate} AND #{endDate}
+        </if>
+        ORDER BY id DESC
+        <if test="begin != null and size != null">
+            LIMIT #{begin},#{size}
+        </if>
+    </select>
+
+    <select id="findCountByCondition" parameterType="map" resultType="integer">
+        SELECT
+        count(*)
+        FROM once_fill m WHERE 1 = 1
+        <if test="id != null">
+            AND m.id = #{id}
+        </if>
+        <if test="depositoryId != null">
+            AND m.depositoryId = #{depositoryId}
+        </if>
+        <if test="name != null and name != ''">
+            AND m.name LIKE CONCAT('%', #{name}, '%')
+        </if>
+        <if test="model != null and model != ''">
+            AND m.model LIKE CONCAT('%', #{model}, '%')
+        </if>
+        <if test="typeId != null and typeId.size > 0">
+            AND m.type_id IN
+            <foreach item="item" index="index" collection="typeId" open="(" separator="," close=")">
+                #{item}
+            </foreach>
+        </if>
+        <if test="quantity != null">
+            AND m.quantity = #{quantity}
+        </if>
+        <if test="unitPrice != null">
+            AND m.unit_price = #{unitPrice}
+        </if>
+        <if test="price != null">
+            AND m.price = #{price}
+        </if>
+        <if test="applyRemark != null and applyRemark != ''">
+            AND apply_remark LIKE CONCAT('%', #{applyRemark}, '%')
+        </if>
+        <if test="introduce != null and introduce != ''">
+            AND introduce LIKE CONCAT('%', #{introduce}, '%')
+        </if>
+        <if test="startDate != null and endDate != null">
+            AND DATE(m.time) BETWEEN #{startDate} AND #{endDate}
+        </if>
+    </select>
+
+    <select id="findOnceFillAll" resultType="com.depository_manage.entity.OnceFill">
+        SELECT * FROM once_fill
+    </select>
+
+    <select id="findOnceFillById" resultType="com.depository_manage.entity.OnceFill">
+        SELECT * FROM once_fill WHERE id = #{id}
+    </select>
+
+    <select id="findOnceFillCount" resultType="int">
+        SELECT COUNT(*) FROM once_fill
+    </select>
+
+    <select id="findCount" resultType="integer">
+        SELECT
+            count(*)
+        FROM once_fill
+    </select>
+</mapper>

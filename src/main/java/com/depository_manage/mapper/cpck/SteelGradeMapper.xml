@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.depository_manage.mapper.cpck.SteelGradeMapper">
+    <resultMap id="steelGradeMap" type="com.depository_manage.entity.SteelGrade">
+        <id property="id" column="id" />
+        <result property="grade" column="grade" />
+    </resultMap>
+
+    <select id="findAll" resultType="com.depository_manage.entity.SteelGrade">
+        SELECT * FROM steel_grade
+    </select>
+
+    <select id="findById" parameterType="Integer" resultType="com.depository_manage.entity.SteelGrade">
+        SELECT * FROM steel_grade WHERE id = #{id}
+    </select>
+
+    <insert id="insert" parameterType="com.depository_manage.entity.SteelGrade">
+        INSERT INTO steel_grade (grade) VALUES (#{grade})
+    </insert>
+
+    <update id="update" parameterType="com.depository_manage.entity.SteelGrade">
+        UPDATE steel_grade SET grade = #{grade} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById" parameterType="Integer">
+        DELETE FROM steel_grade WHERE id = #{id}
+    </delete>
+
+</mapper>

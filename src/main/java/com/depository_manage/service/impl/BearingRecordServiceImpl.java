@@ -2,16 +2,16 @@ package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.BearingInventory;
 import com.depository_manage.entity.BearingRecord;
-import com.depository_manage.mapper.BearingRecordMapper;
+import com.depository_manage.mapper.cpck.BearingRecordMapper;
 import com.depository_manage.service.BearingInventoryService;
 import com.depository_manage.service.BearingRecordService;
 import com.depository_manage.service.ProductIdService;
 import com.depository_manage.utils.ObjectFormatUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
-import javax.persistence.EntityNotFoundException;
-import javax.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
@@ -23,6 +23,7 @@ public class BearingRecordServiceImpl implements BearingRecordService {
     @Autowired
     private BearingRecordMapper bearingRecordMapper;
     @Autowired
+    @Lazy
     private BearingInventoryService bearingInventoryService;
     @Autowired
     private ProductIdService productIdService;
@@ -83,7 +84,7 @@ public class BearingRecordServiceImpl implements BearingRecordService {
                 productIdService.deleteProductIdsRecord(record.getBoxText(), record.getBoxNumber(), depositoryId, record.getIter());
             }
         } else {
-            throw new EntityNotFoundException("The record with ID " + id + " does not exist.");
+            throw new RuntimeException("数据不存在");
         }
     }
     @Override

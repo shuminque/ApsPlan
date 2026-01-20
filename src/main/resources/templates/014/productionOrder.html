@@ -205,20 +205,23 @@
           model: row.find('.model-select').val(),
           quantity: row.find('input[name="quantity"]').val(),
           deliveryDate: row.find('.date-input').val(),
-          priority:row.find('.priority-select').val(),
+          priority: row.find('.priority-select').val(),
           remark: row.find('input[name="remark"]').val(),
           orderDate: new Date().toISOString().split('T')[0] // 默认今天
         });
       });
 
       $.ajax({
-        url: '/production-order/batch-add', // 注意后端接口也要改
+        url: '/production-order/batch-add',
         type: 'POST',
         contentType: 'application/json',
         data: JSON.stringify(dataList),
         success: function(res) {
           if(res.code === 200) {
-            layer.msg('批量提交成功');
+
+            // ✅ 假设 res.data 返回生成的订单号数组
+            var orderNos = res.data;
+            layer.alert('本次订单录入已完成，生成的订单号为：\n' + orderNos.join(', '), {title: '提交成功'});
 
             // 1️⃣ 清空表格
             $('#orderTable tbody').empty();
@@ -232,11 +235,9 @@
               this.selectedIndex = 0;
             });
             newRow.find('.priority-select').val('0');
-
             newRow.find('.model-select')
                     .prop('disabled', true)
                     .html('<option value="">请先选择前两项</option>');
-
             newRow.find('.date-input')
                     .removeAttr('lay-key')
                     .val('');
@@ -249,6 +250,9 @@
           } else {
             layer.alert(res.msg);
           }
+        },
+        error: function() {
+          layer.msg('网络异常，提交失败');
         }
       });
     });

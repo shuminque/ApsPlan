@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.SteelSize;
-import com.depository_manage.mapper.SteelSizeMapper;
+import com.depository_manage.mapper.cpck.SteelSizeMapper;
 import com.depository_manage.service.SteelSizeService;
 import org.springframework.stereotype.Service;
 

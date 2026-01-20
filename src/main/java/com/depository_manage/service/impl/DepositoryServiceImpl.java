@@ -2,7 +2,7 @@ package com.depository_manage.service.impl;
 
 import com.depository_manage.service.DepositoryService;
 import com.depository_manage.entity.Depository;
-import com.depository_manage.mapper.DepositoryMapper;
+import com.depository_manage.mapper.cpck.DepositoryMapper;
 import com.depository_manage.pojo.DepositoryP;
 import com.depository_manage.utils.ObjectFormatUtil;
 import org.springframework.beans.factory.annotation.Autowired;

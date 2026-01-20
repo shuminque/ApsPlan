@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.SteelType;
-import com.depository_manage.mapper.SteelTypeMapper;
+import com.depository_manage.mapper.cpck.SteelTypeMapper;
 import com.depository_manage.service.SteelTypeService;
 import org.springframework.stereotype.Service;
 import java.util.List;

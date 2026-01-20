@@ -1,16 +1,16 @@
 {
     "homeInfo": {
-        "title": "首页",
-        "href": "/welcome"
+        "title": "生产日历",
+        "href": "/calendar"
     },
     "logoInfo": {
-        "title": "成品仓库",
+        "title": "生产计划",
         "image": "static/images/xuri-logo.jpeg",
-        "href": "/index#//welcome"
+        "href": "/index#//calendar"
     },
     "menuInfo": [
         {
-            "title": "仓库信息",
+            "title": "计划信息",
             "href": "/welcome",
             "icon": "fa fa-tachometer",
             "target": "_self",
@@ -19,7 +19,7 @@
             ],
             "child": [
                 {
-                    "title": "首页",
+                    "title": "库存概况",
                     "href": "/welcome",
                     "icon": "fa fa-home",
                     "target": "_self",
@@ -48,7 +48,7 @@
             ]
         },
         {
-            "title": "仓库管理",
+            "title": "计划管理",
             "icon": "fa fa-lemon-o",
             "href": "",
             "target": "_self",
@@ -56,116 +56,6 @@
                 "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
             ],
             "child": [
-                {
-                    "title": "操作提交",
-                    "icon": "fa fa-book",
-                    "target": "_self",
-                    "roles": [
-                        "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
-                    ],
-                    "child": [
-                        {
-                            "title": "二维码生成",
-                            "href": "/GenerateAndPrintQR",
-                            "icon": "fa fa-th-list",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
-                            ]
-                        },
-                        {
-                            "title": "入库操作",
-                            "href": "/BearingStorage-in",
-                            "icon": "fa fa-arrow-down",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
-                            ]
-                        },
-                        {
-                            "title": "出库操作",
-                            "href": "/BearingStorage-out",
-                            "icon": "fa fa-arrow-up",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
-                            ]
-                        },
-                        {
-                            "title": "返库操作",
-                            "href": "/BearingStorage-return",
-                            "icon": "fa fa-exchange",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
-                            ]
-                        },
-                        {
-                            "title": "转入操作",
-                            "href": "/BearingStorage-tranIn",
-                            "icon": "fa fa-exchange",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
-                            ]
-                        },
-                        {
-                            "title": "转出操作",
-                            "href": "/BearingStorage-tranOut",
-                            "icon": "fa fa-exchange",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
-                            ]
-                        }
-                    ]
-                },
-                {
-                    "title": "产品仓库管理",
-                    "icon": "fa fa-server",
-                    "target": "_self",
-                    "roles": [
-                        "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
-                    ],
-                    "child": [
-                        {
-                            "title": "进出查询",
-                            "href": "/Inquire-all",
-                            "icon": "fa fa-th-list",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
-                            ]
-                        },
-                        {
-                            "title": "在库查询",
-                            "href": "/Inquire-stock",
-                            "icon": "fa fa-th-list",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
-                            ]
-                        },
-                        {
-                            "title": "溶解号登记",
-                            "href": "/Inquire-dissolve",
-                            "icon": "fa fa-th-list",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL"
-                            ]
-                        },
-                        {
-                            "title": "产品转移确认",
-                            "href": "/compre_transfer",
-                            "icon": "fa fa-th-list",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
-                            ]
-                        }
-                    ]
-                },
                 {
                     "title": "基础数据",
                     "icon": "fa fa-wrench",
@@ -240,26 +130,7 @@
                     ]
                 },
                 {
-                    "title": "报表查看",
-                    "icon": "fa fa-map",
-                    "target": "_self",
-                    "roles": [
-                        "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
-                    ],
-                    "child": [
-                        {
-                            "title": "制品在库报表",
-                            "href": "/every_pair",
-                            "icon": "layui-icon layui-icon-list",
-                            "target": "_self",
-                            "roles": [
-                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
-                            ]
-                        }
-                    ]
-                },
-                {
-                    "title": "生产订单管理",
+                    "title": "生产计划管理",
                     "icon": "fa fa-server",
                     "target": "_self",
                     "roles": [
@@ -269,6 +140,15 @@
                         {
                             "title": "生产订单查询",
                             "href": "/production_order_list",
+                            "icon": "layui-icon layui-icon-list",
+                            "target": "_self",
+                            "roles": [
+                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+                            ]
+                        },
+                        {
+                            "title": "安全库存调整",
+                            "href": "/safety_stock",
                             "icon": "layui-icon layui-icon-list",
                             "target": "_self",
                             "roles": [

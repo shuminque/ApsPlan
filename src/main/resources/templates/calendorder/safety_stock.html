@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>客户安全库存管理</title>
+
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/css/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+
+    <style>
+        body { padding: 15px; background: #f8f9fa; }
+        .search-card { margin-bottom: 15px; }
+        .select2-container { width: 100% !important; }
+    </style>
+</head>
+<body>
+
+<!-- 查询条件 -->
+<div class="card search-card">
+    <div class="card-body">
+        <form id="searchForm">
+            <div class="row g-2 align-items-center">
+
+                <!-- 客户 -->
+                <div class="col-md-3">
+                    <select class="form-select customer-select" name="customer">
+                        <option value="">所有客户</option>
+                        <option th:each="customer : ${customers}"
+                                th:value="${customer.name}"
+                                th:text="${customer.name}">
+                        </option>
+                    </select>
+                </div>
+
+                <!-- 内外轮 -->
+                <div class="col-md-2">
+                    <select class="form-select" name="outerInnerRing">
+                        <option value="">全部内外轮</option>
+                        <option value="LA">LA</option>
+                        <option value="LB">LB</option>
+                        <option value="LAB">LAB</option>
+                    </select>
+                </div>
+
+                <!-- 型号 -->
+                <div class="col-md-3">
+                    <input type="text" class="form-control" name="model" placeholder="型号">
+                </div>
+
+                <!-- 按钮 -->
+                <div class="col-md-4 text-end">
+                    <button type="button" class="btn btn-primary" id="btnSearch">查询</button>
+<!--                    <button type="button" class="btn btn-success" id="btnAdd">新增</button>-->
+                    <button type="button" class="btn btn-warning" id="btnUpdateCustomerCycle">
+                        客户整体修改
+                    </button>
+                </div>
+
+            </div>
+        </form>
+    </div>
+</div>
+<div id="customerCycleTpl" style="display:none; padding: 20px;">
+    <form class="layui-form" lay-filter="customerCycleForm">
+        <div class="layui-form-item">
+            <label class="layui-form-label">客户</label>
+            <div class="layui-input-block">
+                <input type="text" name="customerName" class="layui-input layui-bg-gray" readonly>
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">周期</label>
+            <div class="layui-input-block">
+                <input type="number" name="stockCycle" class="layui-input"
+                       placeholder="请输入库存周期（月）" lay-verify="required">
+            </div>
+        </div>
+
+        <div class="layui-form-item" style="margin-top: 25px; text-align: center;">
+            <button class="layui-btn layui-btn-normal" lay-submit lay-filter="customerCycleSubmit">
+                确认修改
+            </button>
+        </div>
+    </form>
+</div>
+<!-- 新增/编辑弹窗 -->
+<div id="editStockTpl" style="display:none;padding:20px;">
+    <form class="layui-form" lay-filter="editStockForm">
+
+        <input type="hidden" name="id">
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">客户</label>
+            <div class="layui-input-block">
+                <select name="customer" lay-search required>
+                    <option value="">请选择客户</option>
+                    <option th:each="customer : ${customers}"
+                            th:value="${customer.name}"
+                            th:text="${customer.name}">
+                    </option>
+                </select>
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">内外轮</label>
+            <div class="layui-input-block">
+                <select name="outerInnerRing" required>
+                    <option value="">请选择</option>
+                    <option value="LA">LA</option>
+                    <option value="LB">LB</option>
+                    <option value="LAB">LAB</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">型号</label>
+            <div class="layui-input-block">
+                <input type="text" name="model" class="layui-input">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">库存周期(月)</label>
+            <div class="layui-input-block">
+                <input type="number" name="stockCycle" class="layui-input" required>
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <div class="layui-input-block">
+                <button class="layui-btn" lay-submit lay-filter="editSubmit">确认</button>
+            </div>
+        </div>
+
+    </form>
+</div>
+
+<!-- 表格 -->
+<table class="layui-table" id="safetyStockTable" lay-filter="stockTable"></table>
+
+<!-- 行操作模板（可选删除/编辑） -->
+<script type="text/html" id="rowBar">
+    <button class="btn btn-sm btn-outline-primary me-1" lay-event="edit">编辑</button>
+    <button class="btn btn-sm btn-outline-danger" lay-event="del">删除</button>
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
+<script src="/static/lib/layui-v2.8.17/layui.js"></script>
+
+<script>
+    function formatDate(dateStr) {
+        if (!dateStr) return '';
+        let date = new Date(dateStr);
+        let year = date.getFullYear();
+        let month = (date.getMonth() + 1).toString().padStart(2, '0');
+        let day = date.getDate().toString().padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function formatDateForInput(dateStr) {
+        if (!dateStr) return '';
+        return dateStr.substring(0, 10);
+    }
+    layui.use(['table','form','layer'], function(){
+        var table = layui.table;
+        var form  = layui.form;   // 🔥 必须加这一行
+        var layer = layui.layer;
+        table.render({
+            elem: '#safetyStockTable',
+            url: '/safety-stock/list',
+            method: 'get',
+            request: { pageName: 'page', limitName: 'size' },
+            parseData: function(res){
+                return {
+                    code: 0,
+                    msg: '',
+                    count: res.data.total,
+                    data: res.data.records
+                };
+            },
+            cols:[ [
+                {field:'customer', title:'客户'},
+                {field:'outerInnerRing', title:'内外轮'},
+                {field:'model', title:'型号'},
+                {field:'stockCycle', title:'库存周期(月)', edit:'text'},
+                {field:'updatedAt', title:'更新时间', templet: function(d){ return formatDate(d.updatedAt) },hide:true}
+            ]],
+            page:true
+        });
+
+        // 单元格编辑保存
+        table.on('edit(stockTable)', function(obj){
+            var data = { id: obj.data.id, stockCycle: obj.value };
+            fetch('/safety-stock/save', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify(data)
+            }).then(res => res.json())
+                .then(res => {
+                    if(res.code === 0){
+                        layer.msg('更新成功');
+                    } else {
+                        layer.msg('更新失败: ' + res.msg);
+                    }
+                });
+        });
+        $('#btnUpdateCustomerCycle').on('click', function () {
+            var customer = $('select[name="customer"]').val();
+            if (!customer) {
+                layer.msg('请先选择客户');
+                return;
+            }
+
+            layer.open({
+                type: 1,
+                title: '客户整体库存周期修改',
+                area: ['450px', 'auto'],
+                content: $('#customerCycleTpl'),
+                success: function () {
+                    form.val('customerCycleForm', {
+                        customerName: customer,
+                        stockCycle: ''
+                    });
+                    form.render();
+                }
+            });
+        });
+        form.on('submit(customerCycleSubmit)', function (data) {
+            var field = data.field; // 获得表单字段
+            var customer = field.customerName;
+            var stockCycle = parseFloat(field.stockCycle);
+            if (isNaN(stockCycle)) {
+                layer.msg('库存周期必须是数字');
+                return false;
+            }
+
+            if (stockCycle < 0) {
+                layer.msg('库存周期不能为负数');
+                return false;
+            }
+
+// 最多两位小数（和后端一致）
+            if (!/^\d+(\.\d{1,2})?$/.test(field.stockCycle)) {
+                layer.msg('库存周期最多支持两位小数');
+                return false;
+            }
+            // 显示加载层，防止重复提交
+            var loading = layer.load(2);
+
+            fetch('/safety-stock/updateCustomerCycle', {
+                method: 'PUT', // 确认你的后端接口是 PUT 还是 POST
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    customer: customer,
+                    stockCycle: stockCycle
+                })
+            })
+                .then(res => res.json())
+                .then(res => {
+                    layer.close(loading); // 关闭加载层
+                    if (res.code === 200) {
+                        // 1. 成功提示
+                        layer.msg('修改成功', {icon: 1, time: 1000}, function(){
+                            // 2. 关闭当前所有的 layer 弹窗
+                            layer.closeAll('page');
+
+                            // 3. 刷新表格
+                            // 注意：这里 reload 的 ID 必须与 table.render 中的 id 一致
+                            table.reload('safetyStockTable', {
+                                where: {
+                                    customer: customer // 如果希望刷新后只看该客户，保留此行
+                                },
+                                page: { curr: 1 } // 可选：回到第一页
+                            });
+                        });
+                    } else {
+                        layer.msg(res.msg || '修改失败', {icon: 2});
+                    }
+                })
+                .catch(err => {
+                    layer.close(loading);
+                    layer.msg('网络异常或服务器错误', {icon: 2});
+                });
+
+            return false; // 阻止表单原生跳转
+        });
+        // 查询按钮
+        $('#btnSearch').on('click', function(){
+            var formData = $('#searchForm').serializeArray();
+            var params = {};
+            formData.forEach(item => { params[item.name] = item.value; });
+            table.reload('safetyStockTable', { where: params, page: { curr: 1 } });
+        });
+
+
+        // 监听单元格编辑
+        table.on('edit(stockTable)', function(obj){
+            fetch('/safety-stock/save',{
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify(obj.data)
+            });
+        });
+    });
+</script>
+
+</body>
+</html>

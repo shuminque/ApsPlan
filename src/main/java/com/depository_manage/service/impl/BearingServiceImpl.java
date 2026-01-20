@@ -1,16 +1,13 @@
 package com.depository_manage.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.depository_manage.entity.Bearing;
-import com.depository_manage.entity.BearingRecord;
-import com.depository_manage.mapper.BearingMapper;
+import com.depository_manage.mapper.cpck.BearingMapper;
 import com.depository_manage.service.BearingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 public class BearingServiceImpl implements BearingService {

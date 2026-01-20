@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.ProductCategory;
-import com.depository_manage.mapper.ProductCategoryMapper;
+import com.depository_manage.mapper.cpck.ProductCategoryMapper;
 import com.depository_manage.service.ProductCategoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

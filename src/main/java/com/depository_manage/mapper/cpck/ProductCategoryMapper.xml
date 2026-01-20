@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.depository_manage.mapper.cpck.ProductCategoryMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="productCategoryMap" type="com.depository_manage.entity.ProductCategory">
+        <id property="id" column="id" />
+        <result property="name" column="name" />
+    </resultMap>
+
+    <!-- 查询所有制品分类 -->
+    <select id="findAll" resultMap="productCategoryMap">
+        SELECT * FROM product_category
+    </select>
+
+    <!-- 根据ID查询 -->
+    <select id="findById" resultMap="productCategoryMap">
+        SELECT * FROM product_category WHERE id = #{id}
+    </select>
+
+    <!-- 插入新的制品分类 -->
+    <insert id="insert">
+        INSERT INTO product_category (id,name)
+        VALUES (#{id}, #{name})
+    </insert>
+
+    <!-- 更新制品分类 -->
+    <update id="update">
+        UPDATE product_category
+        SET name = #{name}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 删除制品分类 -->
+    <delete id="deleteById">
+        DELETE FROM product_category WHERE id = #{id}
+    </delete>
+
+</mapper>

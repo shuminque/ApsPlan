@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.depository_manage.mapper.cpck.ProductIdMapper">
+    <resultMap id="productIdMap" type="com.depository_manage.entity.ProductId">
+        <result property="boxText" column="box_text"/>
+        <result property="boxNumber" column="box_number"/>
+        <result property="quantity" column="quantity"/>
+        <result property="depositoryId" column="depository_id"/>
+        <result property="isStocked" column="is_stocked"/> <!-- 新增字段映射 -->
+        <result property="iter" column="iter"/> <!-- 新增字段映射 -->
+        <result property="creationTime" column="creation_time"/> <!-- 新增字段映射 -->
+    </resultMap>
+
+    <select id="selectBoxNumberByBoxTextAndDepositoryId" resultType="com.depository_manage.entity.ProductId">
+        SELECT * FROM product_ids
+        WHERE box_text = #{boxText} AND depository_id = #{depositoryId} AND CAST(box_number as UNSIGNED) &lt; 1000
+        ORDER BY iter DESC, CAST(box_number as UNSIGNED) DESC
+            LIMIT 1
+    </select>
+    <select id="selectBoxNumberByBoxTextAndDepositoryIdForZero" resultType="com.depository_manage.entity.ProductId">
+        SELECT * FROM product_ids
+        WHERE box_text = #{boxText} AND depository_id = #{depositoryId} AND CAST(box_number as UNSIGNED) > 1000
+        ORDER BY iter DESC, CAST(box_number as UNSIGNED) DESC
+            LIMIT 1
+    </select>
+    <!-- 对于正常箱号 -->
+    <select id="selectLatestBoxNumberSharedAcrossDepositories" resultType="com.depository_manage.entity.ProductId">
+        SELECT * FROM product_ids
+        WHERE REPLACE(box_text, 'Z', '') = REPLACE(#{boxText}, 'Z', '')
+        AND CAST(box_number as UNSIGNED) &lt; 1000
+        ORDER BY iter DESC, CAST(box_number as UNSIGNED) DESC
+        LIMIT 1
+    </select>
+    <!-- 对于零箱号 -->
+    <select id="selectLatestBoxNumberSharedAcrossDepositoriesForZero" resultType="com.depository_manage.entity.ProductId">
+        SELECT * FROM product_ids
+        WHERE REPLACE(box_text, 'Z', '') = REPLACE(#{boxText}, 'Z', '')
+          AND CAST(box_number as UNSIGNED) > 1000
+        ORDER BY iter DESC, CAST(box_number as UNSIGNED) DESC
+            LIMIT 1
+    </select>
+
+    <select id="selectOldBoxNumberByBoxTextAndDepositoryId" resultType="com.depository_manage.entity.ProductId">
+        SELECT * FROM product_ids
+        WHERE box_text = #{boxText} AND depository_id = #{depositoryId} AND is_stocked =1
+        ORDER BY CAST(box_number as UNSIGNED)
+            LIMIT 1
+    </select>
+
+    <select id="selectProductIdByBoxTextAndDepositoryId" resultMap="productIdMap">
+        SELECT * FROM product_ids
+        WHERE box_text = #{boxText} AND box_number = #{boxNumber} AND depository_id = #{depositoryId}
+    </select>
+    <select id="findProductIdByCriteria" resultMap="productIdMap">
+        SELECT * FROM product_ids
+        WHERE box_text = #{boxText}
+          AND box_number = #{boxNumber}
+          AND depository_id = #{depositoryId}
+          AND iter = #{iter}
+    </select>
+    <select id="selectAllBoxNumbers" resultMap="productIdMap">
+        SELECT * FROM product_ids
+    </select>
+
+    <insert id="insertOrUpdateBoxNumber">
+        INSERT INTO product_ids (box_text, box_number, quantity, depository_id, is_stocked, iter, creation_time)
+        VALUES (#{boxText}, #{boxNumber}, #{quantity}, #{depositoryId}, #{isStocked}, #{iter}, #{creationTime})
+        ON DUPLICATE KEY UPDATE
+        box_number = VALUES(box_number),
+        quantity = VALUES(quantity),
+        depository_id = VALUES(depository_id),
+        is_stocked = VALUES(is_stocked),
+        iter = VALUES(iter),
+        creation_time = VALUES(creation_time);<!-- Update iter field -->
+    </insert>
+
+    <!-- 更新 is_stocked 状态 -->
+    <update id="updateStockedStatus">
+        UPDATE product_ids
+        SET is_stocked = #{isStocked}
+        WHERE box_text = #{boxText} AND box_number = #{boxNumber} AND depository_id = #{depositoryId} AND iter = #{iter}
+    </update>
+
+    <!-- 检查产品是否已入库 -->
+    <select id="checkIfStocked" resultType="java.lang.Integer">
+        SELECT is_stocked
+        FROM product_ids
+        WHERE box_text = #{boxText} AND box_number = #{boxNumber} AND depository_id = #{depositoryId} AND iter = #{iter}
+    </select>
+
+    <select id="selectQuantityByBoxTextAndBoxNumber" resultType="map">
+        SELECT *
+        FROM product_ids
+        WHERE box_text = #{boxText} AND box_number = #{boxNumber} AND depository_id = #{depositoryId}
+        order by iter DESC
+            LIMIT 1
+    </select>
+
+    <update id="updateQuantity">
+        UPDATE product_ids
+        SET quantity = #{quantity}
+        WHERE box_text = #{boxText} AND box_number = #{boxNumber} AND depository_id = #{depositoryId} AND iter = #{iter}
+    </update>
+
+    <delete id="deleteProductIdsRecord" parameterType="map">
+        DELETE FROM product_ids
+        WHERE box_text = #{boxText}
+          AND box_number = #{boxNumber}
+          AND depository_id = #{depositoryId}
+          AND iter = #{iter}
+    </delete>
+    <select id="selectAllIDs" resultMap="productIdMap" parameterType="map">
+        SELECT * FROM product_ids WHERE 1=1
+        <if test="boxText != null and boxText != ''">
+            AND box_text LIKE CONCAT('%',#{boxText},'%')
+        </if>
+        <if test="boxNumber != null and boxNumber != ''">
+            AND box_number  LIKE CONCAT('%',#{boxNumber},'%')
+        </if>
+        <if test="quantity != null and quantity != ''">
+            AND quantity  LIKE CONCAT('%',#{quantity},'%')
+        </if>
+        <if test="depositoryId != null and depositoryId != ''">
+            AND depository_id = #{depositoryId}
+        </if>
+        <if test="isStocked != null and isStocked != ''">
+            AND is_stocked = #{isStocked}
+        </if>
+        <if test="iter != null and iter != ''">
+            AND iter = #{iter}
+        </if>
+        <if test="begin != null and size != null">
+            LIMIT #{begin},#{size}
+        </if>
+    </select>
+    <select id="countIDs" resultType="int" parameterType="map">
+        SELECT COUNT(*) FROM product_ids WHERE 1=1
+        <if test="boxText != null and boxText != ''">
+            AND box_text LIKE CONCAT('%',#{boxText},'%')
+        </if>
+        <if test="boxNumber != null and boxNumber != ''">
+            AND box_number  LIKE CONCAT('%',#{boxNumber},'%')
+        </if>
+        <if test="quantity != null and quantity != ''">
+            AND quantity  LIKE CONCAT('%',#{quantity},'%')
+        </if>
+        <if test="depositoryId != null and depositoryId != ''">
+            AND depository_id = #{depositoryId}
+        </if>
+        <if test="isStocked != null and isStocked != ''">
+            AND is_stocked = #{isStocked}
+        </if>
+        <if test="iter != null and iter != ''">
+            AND iter = #{iter}
+        </if>
+    </select>
+    <select id="getUnrecordedProducts" resultType="com.depository_manage.entity.ProductId">
+        SELECT p.box_text, p.box_number, p.quantity,
+               p.creation_time
+        FROM product_ids p
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM bearing_records b
+            WHERE p.box_text = b.box_text
+              AND p.box_number = b.box_number
+        )
+          AND DATE(p.creation_time) &lt;&gt; CURDATE();
+    </select>
+
+
+</mapper>

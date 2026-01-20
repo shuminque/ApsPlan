@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.SteelGrade;
-import com.depository_manage.mapper.SteelGradeMapper;
+import com.depository_manage.mapper.cpck.SteelGradeMapper;
 import com.depository_manage.service.SteelGradeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

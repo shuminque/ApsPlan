@@ -1,8 +1,8 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.User;
-import com.depository_manage.mapper.DepositoryMapper;
-import com.depository_manage.mapper.UserMapper;
+import com.depository_manage.mapper.cpck.DepositoryMapper;
+import com.depository_manage.mapper.cpck.UserMapper;
 import com.depository_manage.pojo.UserP;
 import com.depository_manage.service.UserService;
 import com.depository_manage.utils.ObjectFormatUtil;

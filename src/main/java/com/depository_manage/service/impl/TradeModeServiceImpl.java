@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.TradeMode;
-import com.depository_manage.mapper.TradeModeMapper;
+import com.depository_manage.mapper.cpck.TradeModeMapper;
 import com.depository_manage.service.TradeModeService;
 import org.springframework.stereotype.Service;
 

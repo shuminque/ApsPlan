@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.Rate;
-import com.depository_manage.mapper.old.RateMapper;
+import com.depository_manage.mapper.cpck.old.RateMapper;
 import com.depository_manage.pojo.RateP;
 import com.depository_manage.service.RateService;
 import com.depository_manage.utils.ObjectFormatUtil;

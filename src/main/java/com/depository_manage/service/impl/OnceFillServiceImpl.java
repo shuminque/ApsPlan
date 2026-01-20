@@ -1,9 +1,9 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.OnceFill;
-import com.depository_manage.mapper.old.MaterialTypeMapper;
-import com.depository_manage.mapper.old.OnceFillMapper;
-import com.depository_manage.mapper.UserMapper;
+import com.depository_manage.mapper.cpck.old.MaterialTypeMapper;
+import com.depository_manage.mapper.cpck.old.OnceFillMapper;
+import com.depository_manage.mapper.cpck.UserMapper;
 import com.depository_manage.pojo.OnceFillP;
 import com.depository_manage.service.OnceFillService;
 import com.depository_manage.utils.ObjectFormatUtil;

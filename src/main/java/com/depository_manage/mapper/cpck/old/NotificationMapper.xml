@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- 通知记录(notifications) -->
+<mapper namespace="com.depository_manage.mapper.cpck.old.NotificationMapper">
+
+    <!-- 字段映射 -->
+    <resultMap id="notificationMap" type="com.depository_manage.entity.Notification">
+        <id column="id" property="id" jdbcType="INTEGER" />
+        <result column="user_id" property="userId" jdbcType="INTEGER" />
+        <result property="content" column="content" jdbcType="LONGVARCHAR" />
+        <result column="date_created" property="dateCreated" jdbcType="TIMESTAMP" />
+        <result column="is_read" property="isRead" jdbcType="INTEGER" />
+    </resultMap>
+
+    <!-- 表查询字段 -->
+    <sql id="notificationColumns">
+        id, user_id, content, date_created, is_read
+    </sql>
+
+    <!-- 插入一条通知记录 -->
+    <insert id="insertNotification" parameterType="com.depository_manage.entity.Notification">
+        INSERT INTO notifications (user_id, content, date_created, is_read)
+        VALUES (#{userId}, #{content}, #{dateCreated}, #{isRead})
+    </insert>
+
+    <!-- 根据id删除一条通知记录 -->
+    <delete id="deleteNotificationById">
+        DELETE FROM notifications WHERE id = #{id}
+    </delete>
+
+    <!-- 根据id修改通知记录 -->
+    <update id="updateNotification">
+        UPDATE notifications
+        SET user_id = #{userId}, content = #{content}, date_created = #{dateCreated}, is_read = #{isRead}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 根据id查询通知记录 -->
+    <select id="findNotificationById" resultMap="notificationMap">
+        SELECT <include refid="notificationColumns" />
+        FROM notifications WHERE id = #{id}
+    </select>
+
+    <!-- 查询所有通知记录 -->
+    <select id="findAllNotifications" resultMap="notificationMap">
+        SELECT <include refid="notificationColumns" />
+        FROM notifications
+    </select>
+
+    <!-- 根据条件查询通知记录 -->
+    <select id="findNotificationsByCondition" resultMap="notificationMap">
+        SELECT <include refid="notificationColumns" />
+        FROM notifications
+        WHERE 1=1
+        <if test="userId != null">
+            AND user_id = #{userId}
+        </if>
+    </select>
+
+    <!-- 根据用户ID查询未读的通知记录 -->
+    <select id="findUnreadNotificationsByUserId" resultMap="notificationMap">
+        SELECT <include refid="notificationColumns" />
+        FROM notifications WHERE user_id = #{userId} AND is_read = 0
+    </select>
+
+    <!-- 根据id标记通知为已读 -->
+    <update id="markNotificationAsRead">
+        UPDATE notifications SET is_read = 1 WHERE id = #{id}
+    </update>
+
+</mapper>

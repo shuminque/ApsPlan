@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.depository_manage.mapper.cpck.old.ProductInfoMapper">
+
+    <resultMap id="productInfoMap" type="com.depository_manage.entity.ProductInfo">
+        <id column="id" property="id" jdbcType="INTEGER" />
+        <result column="date" property="date" jdbcType="DATE" />
+        <result column="smallDiameter" property="smallDiameter" jdbcType="INTEGER" />
+        <result column="mediumDiameter" property="mediumDiameter" jdbcType="INTEGER" />
+        <result column="gimbal" property="gimbal" jdbcType="INTEGER" />
+        <result column="rab" property="rab" jdbcType="INTEGER" />
+        <result column="depositoryId" property="depositoryId" jdbcType="INTEGER" />
+    </resultMap>
+
+    <sql id="allColumns">
+        p.id, p.date, p.smallDiameter, p.mediumDiameter, p.gimbal, p.rab, p.depositoryId
+    </sql>
+
+    <select id="findProductInfoAll" resultMap="productInfoMap">
+        SELECT
+        <include refid="allColumns" />
+        FROM productInfo p
+    </select>
+
+    <select id="findProductInfoByCondition" resultMap="productInfoMap" parameterType="map">
+        SELECT
+        <include refid="allColumns" />
+        FROM productInfo p where 1 = 1
+        <if test="id != null">
+            AND p.id = #{id}
+        </if>
+        <if test="startDate != null and endDate != null">
+            AND p.date BETWEEN #{startDate} AND #{endDate}
+        </if>
+        <if test="smallDiameter != null">
+            AND p.smallDiameter = #{smallDiameter}
+        </if>
+        <if test="mediumDiameter != null">
+            AND p.mediumDiameter = #{mediumDiameter}
+        </if>
+        <if test="gimbal != null">
+            AND p.gimbal = #{gimbal}
+        </if>
+        <if test="rab != null">
+            AND p.rab = #{rab}
+        </if>
+        <if test="depositoryId != null">
+            AND p.depositoryId = #{depositoryId}
+        </if>
+    </select>
+
+
+    <select id="findProductInfoByDate" resultMap="productInfoMap" parameterType="date">
+        SELECT
+        <include refid="allColumns" />
+        FROM productInfo p WHERE p.date = #{date}
+    </select>
+
+    <select id="findProductInfoById" resultMap="productInfoMap" parameterType="integer">
+        SELECT
+        <include refid="allColumns" />
+        FROM productInfo p WHERE p.id = #{id}
+    </select>
+
+    <insert id="insertProductInfo" parameterType="map">
+        INSERT INTO productInfo (
+            date, smallDiameter, mediumDiameter, gimbal, rab, depositoryId
+        ) VALUES (
+                     #{date}, #{smallDiameter}, #{mediumDiameter}, #{gimbal}, #{rab}, #{depositoryId}
+                 )
+    </insert>
+
+    <update id="updateProductInfo" parameterType="map">
+        UPDATE productInfo
+        <set>
+            <if test="date != null">
+                date = #{date},
+            </if>
+            <if test="smallDiameter != null">
+                smallDiameter = #{smallDiameter},
+            </if>
+            <if test="mediumDiameter != null">
+                mediumDiameter = #{mediumDiameter},
+            </if>
+            <if test="gimbal != null">
+                gimbal = #{gimbal},
+            </if>
+            <if test="rab != null">
+                RAB = #{rab}
+            </if>
+            <if test="depositoryId != null">
+                depositoryId = #{depositoryId}
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteProductInfoById" parameterType="int">
+        DELETE FROM productInfo WHERE id = #{id}
+    </delete>
+
+    <select id="findCountByCondition" parameterType="map" resultType="integer">
+        SELECT
+        count(*)
+        FROM productInfo p WHERE 1=1
+        <if test="id != null">
+            AND p.id = #{id}
+        </if>
+        <if test="startDate != null and endDate != null">
+            AND p.date BETWEEN #{startDate} AND #{endDate}
+        </if>
+        <if test="smallDiameter != null">
+            AND p.smallDiameter = #{smallDiameter}
+        </if>
+        <if test="mediumDiameter != null">
+            AND p.mediumDiameter = #{mediumDiameter}
+        </if>
+        <if test="gimbal != null">
+            AND p.gimbal = #{gimbal}
+        </if>
+        <if test="rab != null">
+            AND p.rab = #{rab}
+        </if>
+        <if test="depositoryId != null">
+            AND p.depositoryId = #{depositoryId}
+        </if>
+    </select>
+
+</mapper>

@@ -2,8 +2,9 @@ package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.*;
 import com.depository_manage.exception.MyException;
-import com.depository_manage.mapper.*;
-import com.depository_manage.mapper.old.*;
+import com.depository_manage.mapper.cpck.DepositoryMapper;
+import com.depository_manage.mapper.cpck.UserMapper;
+import com.depository_manage.mapper.cpck.old.*;
 import com.depository_manage.pojo.CategoryOutboundDTO;
 import com.depository_manage.pojo.MonthlyAmountDTO;
 import com.depository_manage.service.DepositoryRecordService;

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.depository_manage.mapper.cpck.TradeModeMapper">
+    <resultMap id="TradeModeMap" type="com.depository_manage.entity.TradeMode">
+        <id property="id" column="id" />
+        <result property="mode" column="mode" />
+    </resultMap>
+
+    <select id="findAll" resultMap="TradeModeMap">
+        SELECT * FROM trade_mode
+    </select>
+
+    <select id="findById" parameterType="int" resultMap="TradeModeMap">
+        SELECT * FROM trade_mode WHERE id = #{id}
+    </select>
+
+    <insert id="insert" parameterType="com.depository_manage.entity.TradeMode">
+        INSERT INTO trade_mode (mode)
+        VALUES (#{mode})
+    </insert>
+
+    <update id="update" parameterType="com.depository_manage.entity.TradeMode">
+        UPDATE trade_mode
+        SET mode = #{mode}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById" parameterType="int">
+        DELETE FROM trade_mode WHERE id = #{id}
+    </delete>
+</mapper>

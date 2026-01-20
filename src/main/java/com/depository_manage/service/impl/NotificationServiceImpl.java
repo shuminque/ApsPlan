@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.Notification;
-import com.depository_manage.mapper.old.NotificationMapper;
+import com.depository_manage.mapper.cpck.old.NotificationMapper;
 import com.depository_manage.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.Customer;
-import com.depository_manage.mapper.CustomerMapper;
+import com.depository_manage.mapper.cpck.CustomerMapper;
 import com.depository_manage.service.CustomerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

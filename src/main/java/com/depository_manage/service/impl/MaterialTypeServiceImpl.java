@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.MaterialType;
-import com.depository_manage.mapper.old.MaterialTypeMapper;
+import com.depository_manage.mapper.cpck.old.MaterialTypeMapper;
 import com.depository_manage.pojo.MaterialTypeP;
 import com.depository_manage.service.MaterialTypeService;
 import com.depository_manage.utils.ObjectFormatUtil;

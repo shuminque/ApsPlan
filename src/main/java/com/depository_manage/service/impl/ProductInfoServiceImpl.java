@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.ProductInfo;
-import com.depository_manage.mapper.old.ProductInfoMapper;
+import com.depository_manage.mapper.cpck.old.ProductInfoMapper;
 import com.depository_manage.pojo.ProductInfoP;
 import com.depository_manage.service.ProductInfoService;
 import com.depository_manage.utils.ObjectFormatUtil;

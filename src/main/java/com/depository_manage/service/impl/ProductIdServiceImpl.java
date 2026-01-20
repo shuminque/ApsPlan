@@ -1,7 +1,7 @@
 package com.depository_manage.service.impl;
 
 import com.depository_manage.entity.ProductId;
-import com.depository_manage.mapper.ProductIdMapper;
+import com.depository_manage.mapper.cpck.ProductIdMapper;
 import com.depository_manage.service.ProductIdService;
 import com.depository_manage.utils.ObjectFormatUtil;
 import org.springframework.beans.factory.annotation.Autowired;

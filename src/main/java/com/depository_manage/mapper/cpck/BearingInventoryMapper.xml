@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.depository_manage.mapper.cpck.BearingInventoryMapper">
+    <resultMap id="bearingInventoryMap" type="com.depository_manage.entity.BearingInventory">
+        <id property="id" column="id" />
+        <result property="boxText" column="box_text"/>
+        <result property="boxNumber" column="box_number"/>
+        <result property="quantityInStock" column="quantity_in_stock"/>
+        <result property="totalBoxes" column="total_boxes"/>
+        <result property="depositoryId" column="depository_id"/>
+    </resultMap>
+
+    <insert id="insertBearingInventory" parameterType="com.depository_manage.entity.BearingInventory">
+        INSERT INTO bearing_inventory (box_text, box_number, quantity_in_stock, total_boxes, depository_id)
+        VALUES (#{boxText}, #{boxNumber}, #{quantityInStock}, #{totalBoxes}, #{depositoryId})
+    </insert>
+    <select id="selectBearingInventory" parameterType="string" resultMap="bearingInventoryMap">
+        SELECT * FROM bearing_inventory WHERE box_text = #{boxText}
+    </select>
+    <select id="selectBearingInventoryByBoxTextAndDepositoryId" parameterType="map" resultMap="bearingInventoryMap">
+        SELECT * FROM bearing_inventory
+        WHERE box_text = #{boxText} AND depository_id = #{depositoryId}
+    </select>
+
+    <update id="updateBearingInventory">
+        UPDATE bearing_inventory
+        SET quantity_in_stock = #{quantityInStock}, total_boxes = #{totalBoxes}
+        WHERE box_text = #{boxText} AND depository_id = #{depositoryId}
+    </update>
+
+    <delete id="deleteBearingInventory">
+        DELETE FROM bearing_inventory
+        WHERE box_text = #{boxText} AND depository_id = #{depositoryId}
+    </delete>
+
+    <select id="countOperationRecords" resultType="int">
+        SELECT COUNT(*)
+        FROM bearing_records
+        WHERE box_text = #{boxText} AND box_number = #{boxNumber} AND transaction_type = #{operationType}
+    </select>
+<!--    <select id="selectInventoryInfo" resultType="com.depository_manage.entity.InventoryInfo">-->
+<!--        SELECT-->
+<!--            bi.box_text,-->
+<!--            pi.box_number,-->
+<!--            bi.quantity_in_stock,-->
+<!--            bi.total_boxes,-->
+<!--            pi.quantity ,-->
+<!--            pi.is_stocked,-->
+<!--            b.outer_inner_ring,-->
+<!--            b.model-->
+<!--        FROM-->
+<!--            bearing_inventory bi-->
+<!--                JOIN-->
+<!--            product_ids pi ON bi.box_text = pi.box_text AND bi.depository_id = pi.depository_id-->
+<!--                LEFT JOIN-->
+<!--            bearings b ON bi.box_text = b.box_text AND bi.depository_id = CASE-->
+<!--                                                                              WHEN b.depository = 'SAB' THEN 1-->
+<!--                                                                              WHEN b.depository = 'ZAB' THEN 2-->
+<!--                                                                              ELSE NULL-->
+<!--                END-->
+<!--        WHERE-->
+<!--            bi.box_text = #{boxText} AND bi.depository_id = #{depositoryId} AND pi.box_number = #{boxNumber};-->
+<!--    </select>-->
+    <select id="selectInventoryInfo" resultType="com.depository_manage.entity.InventoryInfo">
+        SELECT
+            bi.box_text,
+            pi.box_number,
+            bi.quantity_in_stock,
+            bi.total_boxes,
+            pi.quantity,
+            pi.is_stocked,
+            pi.iter,
+            b.outer_inner_ring,
+            b.model
+        FROM
+            bearing_inventory bi
+                JOIN product_ids pi ON bi.box_text = pi.box_text AND bi.depository_id = pi.depository_id
+                LEFT JOIN bearings b ON bi.box_text = b.box_text
+        WHERE
+            bi.box_text = #{boxText} AND bi.depository_id = #{depositoryId} AND pi.box_number = #{boxNumber}
+          AND (b.depository = 'SAB' AND #{depositoryId} = 1 OR b.depository = 'ZAB' AND #{depositoryId} = 2 OR b.depository IS NULL)
+        ORDER BY
+            pi.iter DESC
+            LIMIT 1;
+    </select>
+</mapper>

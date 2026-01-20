@@ -28,16 +28,25 @@
     <div class="card-body">
         <form id="searchForm">
             <div class="row g-2 align-items-center">
+
+                <!-- 订单号 -->
+                <div class="col-md-3">
+                    <input type="text" class="form-control" name="orderNo" placeholder="订单号">
+                </div>
+
+                <!-- 客户 -->
                 <div class="col-md-3">
                     <select class="form-select customer-select" name="customer">
                         <option value="" selected>搜索客户</option>
                         <option th:each="customer : ${customers}"
                                 th:value="${customer.name}"
-                                th:text="${customer.name}"></option>
+                                th:text="${customer.name}">
+                        </option>
                     </select>
                 </div>
 
-                <div class="col-md-3">
+                <!-- 状态 -->
+                <div class="col-md-2">
                     <select name="status" class="form-select">
                         <option value="">订单状态</option>
                         <option value="0">待排产</option>
@@ -46,7 +55,13 @@
                     </select>
                 </div>
 
-                <div class="col-md-6 text-end">
+                <!-- 交货期（Layui 日期控件） -->
+                <div class="col-md-2">
+                    <input type="text" id="deliveryDate" class="form-control" name="deliveryDate" placeholder="请选择交货期" autocomplete="off">
+                </div>
+
+                <!-- 按钮 -->
+                <div class="col-md-2 text-end">
                     <button type="button" class="btn btn-primary" id="btnSearch">查询</button>
                     <button type="button" class="btn btn-success" id="btnAdd">新增</button>
                 </div>
@@ -163,11 +178,18 @@
     }
 
 
-    layui.use(['table', 'form','layer'], function () {
+    layui.use(['table', 'form','layer','laydate'], function () {
         var table = layui.table;
         var layer = layui.layer;
         var form = layui.form;
-
+        var laydate = layui.laydate;
+        laydate.render({
+            elem: '#deliveryDate',   // 绑定元素
+            type: 'date',            // 日期类型
+            format: 'yyyy-MM-dd',    // 显示格式
+            theme: 'molv',           // 可选主题
+            trigger: 'click'         // 点击弹出
+        });
         // 表格初始化
         table.render({
             elem: '#orderTable',

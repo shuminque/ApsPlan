@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.depository_manage.mapper.cpck.old.RateMapper">
+
+    <resultMap id="rateMap" type="com.depository_manage.entity.Rate">
+        <id column="id" property="id" jdbcType="INTEGER" />
+        <result column="date" property="date" jdbcType="DATE" />
+        <result column="currency_from" property="currency_from" jdbcType="VARCHAR" />
+        <result column="currency_to" property="currency_to" jdbcType="VARCHAR" />
+        <result column="rate" property="rate" jdbcType="DOUBLE" />
+    </resultMap>
+
+    <sql id="allColumns">
+        r.id, r.date, r.currency_from, r.currency_to, r.rate
+    </sql>
+
+    <select id="findRateAll" resultMap="rateMap">
+        SELECT
+        <include refid="allColumns" />
+        FROM rate r
+    </select>
+
+    <select id="findRateByCondition" resultMap="rateMap" parameterType="map">
+        SELECT
+        <include refid="allColumns" />
+        FROM rate r where 1 = 1
+        <if test="currency_from != null and currency_from != ''">
+            AND r.currency_from LIKE CONCAT('%', #{currency_from}, '%')
+        </if>
+        <if test="currency_to != null and currency_to != ''">
+            AND r.currency_to LIKE CONCAT('%', #{currency_to}, '%')
+        </if>
+        <if test="rate != null">
+            AND r.rate = #{rate}
+        </if>
+        <if test="startDate != null and endDate != null">
+            AND r.date BETWEEN #{startDate} AND #{endDate}
+        </if>
+    </select>
+
+    <select id="findRateByDate" resultMap="rateMap" parameterType="date">
+        SELECT
+        <include refid="allColumns" />
+        FROM rate r WHERE r.date = #{date}
+    </select>
+
+    <select id="findRareById" resultMap="rateMap" parameterType="integer">
+        SELECT
+        <include refid="allColumns" />
+        FROM rate r WHERE r.id = #{id}
+    </select>
+
+    <select id="findRateByIds" resultMap="rateMap" parameterType="list">
+        SELECT
+        <include refid="allColumns" />
+        FROM rate r WHERE r.id in
+        <foreach collection="list" index="index" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <select id="findRateByCurrencyPair" resultType="double">
+        SELECT
+            r.rate
+        FROM rate r
+        WHERE r.currency_from = #{currency_from} AND r.currency_to = #{currency_to}
+    </select>
+
+    <insert id="insertRate" parameterType="map">
+        INSERT INTO rate (
+            date, currency_from, currency_to, rate
+        ) VALUES (
+                     #{date},
+                     #{currency_from},
+                     #{currency_to},
+                     #{rate}
+                 )
+    </insert>
+
+    <update id="updateRate" parameterType="map">
+        UPDATE rate
+        <set>
+            <if test="date != null">
+                date = #{date},
+            </if>
+            <if test="currency_from != null">
+                currency_from = #{currency_from},
+            </if>
+            <if test="currency_to != null">
+                currency_to = #{currency_to},
+            </if>
+            <if test="rate != null">
+                rate = #{rate}
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteRateById" parameterType="int">
+        DELETE FROM rate WHERE id = #{id}
+    </delete>
+
+    <select id="findCountByCondition" parameterType="map" resultType="integer">
+        SELECT
+        count(*)
+        FROM rate r WHERE 1=1
+        <if test="currency_from != null and currency_from != ''">
+            AND r.currency_from LIKE CONCAT('%', #{currency_from}, '%')
+        </if>
+        <if test="currency_to != null and currency_to != ''">
+            AND r.currency_to LIKE CONCAT('%', #{currency_to}, '%')
+        </if>
+        <if test="rate != null">
+            AND r.rate = #{rate}
+        </if>
+        <if test="startDate != null and endDate != null">
+            AND r.date BETWEEN #{startDate} AND #{endDate}
+        </if>
+    </select>
+</mapper>

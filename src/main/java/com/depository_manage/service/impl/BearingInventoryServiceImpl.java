@@ -5,11 +5,12 @@ import com.depository_manage.entity.BearingRecord;
 import com.depository_manage.entity.InventoryInfo;
 import com.depository_manage.entity.ProductId;
 import com.depository_manage.exception.OperationAlreadyDoneException;
-import com.depository_manage.mapper.BearingInventoryMapper;
+import com.depository_manage.mapper.cpck.BearingInventoryMapper;
 import com.depository_manage.service.BearingInventoryService;
 import com.depository_manage.service.BearingRecordService;
 import com.depository_manage.service.ProductIdService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
@@ -24,6 +25,7 @@ public class BearingInventoryServiceImpl implements BearingInventoryService {
     @Autowired
     private ProductIdService productIdService; // 注入ProductIdService
     @Autowired
+    @Lazy
     private BearingRecordService bearingRecordService; // 注入ProductIdService
     @Override
     public void addBearingInventory(BearingInventory bearingInventory) {
