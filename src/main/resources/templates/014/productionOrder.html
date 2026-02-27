@@ -66,9 +66,9 @@
               </td>
               <td>
                 <input type="number" class="form-control quantity-input" name="quantity" required autocomplete="off">
-                <small class="text-warning quantity-warning d-none">请重新确认数量是否正确</small>
+                <small class="text-warning quantity-warning d-none">请确认数量是否正确</small>
               </td>
-              <td><input type="text" class="form-control date-input" readonly></td>
+              <td><input type="text" class="form-control date-input" required></td>
               <td>
                 <select class="form-select priority-select" required>
                   <option value="">请选择</option>
@@ -120,19 +120,17 @@
 
       if (!packQuantity || !quantity || quantity <= 0) {
         $warning.addClass('d-none');
-        return true;
+        return;
       }
 
       if (quantity % packQuantity !== 0) {
         $warning.removeClass('d-none');
         if (showToast) {
-          layer.msg('请重新确认数量是否正确');
+          layer.msg('请确认数量是否正确');
         }
-        return false;
+      } else {
+        $warning.addClass('d-none');
       }
-
-      $warning.addClass('d-none');
-      return true;
     }
 
     function loadPackQuantity(row) {
@@ -274,15 +272,13 @@
     // 提交逻辑
     $('#batchOrderForm').submit(function(e) {
       e.preventDefault();
-      var quantityValid = true;
-      $('.order-row').each(function() {
-        if (!validateQuantityMultiple($(this), true)) {
-          quantityValid = false;
-        }
-      });
-      if (!quantityValid) {
+      if (!this.checkValidity()) {
+        this.reportValidity();
         return;
       }
+      $('.order-row').each(function() {
+        validateQuantityMultiple($(this), false);
+      });
 
       var dataList = [];
       $('.order-row').each(function() {
@@ -308,9 +304,11 @@
           if(res.code === 200) {
 
             // ✅ 假设 res.data 返回生成的订单号数组
-            var orderNos = res.data;
-            layer.alert('本次订单录入已完成，生成的订单号为：\n' + orderNos.join(', '), {title: '提交成功'});
-
+            var orderNo = res.data[0];
+            layer.alert(
+                    '本次订单录入已完成，生成的订单号为：\n' + orderNo,
+                    {title: '提交成功'}
+            );
             // 1️⃣ 清空表格
             $('#orderTable tbody').empty();
 
