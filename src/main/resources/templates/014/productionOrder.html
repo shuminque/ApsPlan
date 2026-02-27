@@ -64,7 +64,10 @@
                   <option value="">请先选择前两项</option>
                 </select>
               </td>
-              <td><input type="number" class="form-control" name="quantity" required autocomplete="off"></td>
+              <td>
+                <input type="number" class="form-control quantity-input" name="quantity" required autocomplete="off">
+                <small class="text-warning quantity-warning d-none">请重新确认数量是否正确</small>
+              </td>
               <td><input type="text" class="form-control date-input" readonly></td>
               <td>
                 <select class="form-select priority-select" required>
@@ -103,6 +106,66 @@
         width: '100%'
       });
     }
+
+    function resetQuantityHint(row) {
+      row.removeAttr('data-pack-quantity');
+      row.find('.quantity-warning').addClass('d-none');
+    }
+
+    function validateQuantityMultiple(row, showToast) {
+      var packQuantity = parseInt(row.attr('data-pack-quantity'), 10);
+      var quantityValue = row.find('input[name="quantity"]').val();
+      var quantity = parseInt(quantityValue, 10);
+      var $warning = row.find('.quantity-warning');
+
+      if (!packQuantity || !quantity || quantity <= 0) {
+        $warning.addClass('d-none');
+        return true;
+      }
+
+      if (quantity % packQuantity !== 0) {
+        $warning.removeClass('d-none');
+        if (showToast) {
+          layer.msg('请重新确认数量是否正确');
+        }
+        return false;
+      }
+
+      $warning.addClass('d-none');
+      return true;
+    }
+
+    function loadPackQuantity(row) {
+      var customer = row.find('.customer-select').val();
+      var ring = row.find('.ring-select').val();
+      var model = row.find('.model-select').val();
+
+      if (!(customer && ring && model)) {
+        resetQuantityHint(row);
+        return;
+      }
+
+      $.ajax({
+        url: '/bearings/pack-quantity',
+        type: 'GET',
+        data: {
+          customer: customer,
+          ring: ring,
+          model: model
+        },
+        success: function(res) {
+          if (res.code === 200 && res.data) {
+            row.attr('data-pack-quantity', res.data);
+            validateQuantityMultiple(row, false);
+          } else {
+            resetQuantityHint(row);
+          }
+        },
+        error: function() {
+          resetQuantityHint(row);
+        }
+      });
+    }
     // 绑定日期选择器的函数
     function bindDate() {
       $('.date-input').each(function(){
@@ -126,6 +189,7 @@
               .val('')
               .prop('disabled', true)
               .html('<option value="">请先选择前两项</option>');
+      resetQuantityHint(newRow);
 
       // ⭐ 优先级默认普通
       newRow.find('.priority-select').val('0');
@@ -157,6 +221,8 @@
       var ring = row.find('.ring-select').val();
       var $modelSelect = row.find('.model-select');
 
+      resetQuantityHint(row);
+
       // 只有当两个都选择了才触发
       if(customer && ring) {
         $.ajax({
@@ -176,6 +242,7 @@
                 $modelSelect.prop('disabled', false).html(options);
                 // 关键：渲染完数据后调用 select2
                 initSelect2($modelSelect);
+                loadPackQuantity(row);
               } else {
                 $modelSelect.prop('disabled', true).html('<option value="">暂无对应型号</option>');
               }
@@ -193,9 +260,30 @@
       }
     });
 
+
+    $(document).on('change', '.model-select', function() {
+      var row = $(this).closest('tr');
+      loadPackQuantity(row);
+    });
+
+    $(document).on('input', 'input[name="quantity"]', function() {
+      var row = $(this).closest('tr');
+      validateQuantityMultiple(row, false);
+    });
+
     // 提交逻辑
     $('#batchOrderForm').submit(function(e) {
       e.preventDefault();
+      var quantityValid = true;
+      $('.order-row').each(function() {
+        if (!validateQuantityMultiple($(this), true)) {
+          quantityValid = false;
+        }
+      });
+      if (!quantityValid) {
+        return;
+      }
+
       var dataList = [];
       $('.order-row').each(function() {
         var row = $(this);
@@ -238,6 +326,7 @@
             newRow.find('.model-select')
                     .prop('disabled', true)
                     .html('<option value="">请先选择前两项</option>');
+            resetQuantityHint(newRow);
             newRow.find('.date-input')
                     .removeAttr('lay-key')
                     .val('');

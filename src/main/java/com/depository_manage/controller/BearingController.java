@@ -312,4 +312,12 @@ public class BearingController {
         List<String> models = bearingService.getModels(customer, ring);
         return Result.success(models);
     }
+
+    @GetMapping("/pack-quantity")
+    public Result findPackQuantity(@RequestParam String customer,
+                                   @RequestParam String ring,
+                                   @RequestParam String model) {
+        Integer quantity = bearingService.getPackQuantity(customer, ring, model);
+        return Result.success(quantity);
+    }
 }

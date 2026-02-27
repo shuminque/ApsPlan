@@ -24,4 +24,8 @@ public interface BearingMapper {
     String getMaxPairNumber();
     List<String> findModelsByCustomerAndRing(@Param("customer") String customer,
                                              @Param("ring") String ring);
+
+    Integer findQuantityByCustomerRingAndModel(@Param("customer") String customer,
+                                               @Param("ring") String ring,
+                                               @Param("model") String model);
 }
