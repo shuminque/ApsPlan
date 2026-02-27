@@ -20,7 +20,7 @@ public class ProductionOrderServiceImpl extends ServiceImpl<ProductionOrderMappe
     @Transactional
     public boolean saveWithOrderNo(ProductionOrder order) {
         // 1. 生成年月前缀，例如 "202601-"
-        String prefix = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM")) + "-";
+        String prefix = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
 
         // 2. 查询当日/当月最大的订单号
         QueryWrapper<ProductionOrder> queryWrapper = new QueryWrapper<>();
@@ -51,7 +51,7 @@ public class ProductionOrderServiceImpl extends ServiceImpl<ProductionOrderMappe
 
         // 1. 生成前缀，例如 202601-
         String prefix = LocalDate.now()
-                .format(DateTimeFormatter.ofPattern("yyyyMM")) + "-";
+                .format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
 
         // 2. 查询当前最大订单号（只查一次）
         QueryWrapper<ProductionOrder> queryWrapper = new QueryWrapper<>();
