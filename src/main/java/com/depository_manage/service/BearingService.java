@@ -21,4 +21,6 @@ public interface BearingService {
     String getNextPairNumber();
 
     List<String> getModels(String customer, String ring);
+
+    Integer getPackQuantity(String customer, String ring, String model);
 }

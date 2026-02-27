@@ -68,4 +68,9 @@ public class BearingServiceImpl implements BearingService {
         // 直接调用原生 Mapper 方法
         return bearingMapper.findModelsByCustomerAndRing(customer, ring);
     }
+
+    @Override
+    public Integer getPackQuantity(String customer, String ring, String model) {
+        return bearingMapper.findQuantityByCustomerRingAndModel(customer, ring, model);
+    }
 }

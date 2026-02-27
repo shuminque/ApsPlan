@@ -183,5 +183,17 @@
           AND outer_inner_ring = #{ring}
           AND model IS NOT NULL
           AND model != ''
-    </select></mapper>
+    </select>
+
+    <select id="findQuantityByCustomerRingAndModel" resultType="java.lang.Integer">
+        SELECT quantity
+        FROM bearings
+        WHERE customer = #{customer}
+          AND outer_inner_ring = #{ring}
+          AND model = #{model}
+          AND quantity IS NOT NULL
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+</mapper>
 
