@@ -35,7 +35,7 @@
               <th style="width: 12%">内外轮 <span class="text-danger">*</span></th>
               <th style="width: 20%">产品型号 <span class="text-danger">*</span></th>
               <th style="width: 10%">数量 <span class="text-danger">*</span></th>
-              <th style="width: 12%">交货期</th>
+              <th style="width: 12%">交货期 <span class="text-danger">*</span></th>
               <th style="width: 10%">优先级</th>
               <th style="width: 10%">备注</th>
               <th style="width: 5%">操作</th>
@@ -65,7 +65,9 @@
                 </select>
               </td>
               <td><input type="number" class="form-control" name="quantity" required autocomplete="off"></td>
-              <td><input type="text" class="form-control date-input" readonly></td>
+              <td>
+                <input type="text" class="form-control date-input" required>
+              </td>
               <td>
                 <select class="form-select priority-select" required>
                   <option value="">请选择</option>
