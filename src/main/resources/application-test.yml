@@ -19,31 +19,61 @@ spring:
             enable: true
     default-encoding: utf-8
   datasource:
-    username: root
-#    password: xuriroot!@Xuri
-#    url: jdbc:mysql://localhost:3306/cpck?serverTimezone=Asia/Shanghai&zeroDateTimeBehavior=convertToNull
-    password: 123456
-    url: jdbc:mysql://localhost:3308/cpck?serverTimezone=Asia/Shanghai&zeroDateTimeBehavior=convertToNull
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    type: com.alibaba.druid.pool.DruidDataSource
-    initialSize: 5
-    minIdle: 5
-    maxActive: 10
-    maxWait: 60000
-    timeBetweenEvictionRunsMillis: 60000
-    minEvictableIdleTimeMillis: 300000
-    validationQuery: SELECT 1 FROM DUAL
-    useGlobalDataSourceStat: true
-    testWhileIdle: true
-    testOnReturn: false
-    testOnBorrow: false
-    poolPreparedStatements: true
-    maxPoolPreparedStatementPerConnectionSize: 206
-    filters: stat, wall, log4j
-    connectionProperties: druid.stat.mergeSql=true;druid.stat.slowSqlMillis=5000
-    removeAbandoned: true
-    removeAbandonedTimeout: 1800
-    logAbandoned: true
+    # ================== cpck 主业务库 ==================
+    cpck:
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      url: jdbc:mysql://localhost:3308/cpck?serverTimezone=Asia/Shanghai&zeroDateTimeBehavior=convertToNull
+      ##    password: xuriroot!@Xuri
+      ##    url: jdbc:mysql://localhost:3306/cpck?serverTimezone=Asia/Shanghai&zeroDateTimeBehavior=convertToNull
+      username: root
+      password: 123456
+      type: com.alibaba.druid.pool.DruidDataSource
+
+      initialSize: 5
+      minIdle: 5
+      maxActive: 10
+      maxWait: 60000
+      timeBetweenEvictionRunsMillis: 60000
+      minEvictableIdleTimeMillis: 300000
+      validationQuery: SELECT 1 FROM DUAL
+      useGlobalDataSourceStat: true
+      testWhileIdle: true
+      testOnBorrow: false
+      testOnReturn: false
+      poolPreparedStatements: true
+      maxPoolPreparedStatementPerConnectionSize: 206
+      filters: stat,wall,slf4j
+      connectionProperties: druid.stat.mergeSql=true;druid.stat.slowSqlMillis=5000
+      removeAbandoned: true
+      removeAbandonedTimeout: 1800
+      logAbandoned: true
+
+    # ================== apsplan 排产计划库 ==================
+    apsplan:
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      url: jdbc:mysql://localhost:3308/apsplan?serverTimezone=Asia/Shanghai&zeroDateTimeBehavior=convertToNull
+      username: root
+      password: 123456
+      type: com.alibaba.druid.pool.DruidDataSource
+
+      initialSize: 5
+      minIdle: 5
+      maxActive: 10
+      maxWait: 60000
+      timeBetweenEvictionRunsMillis: 60000
+      minEvictableIdleTimeMillis: 300000
+      validationQuery: SELECT 1 FROM DUAL
+      useGlobalDataSourceStat: true
+      testWhileIdle: true
+      testOnBorrow: false
+      testOnReturn: false
+      poolPreparedStatements: true
+      maxPoolPreparedStatementPerConnectionSize: 206
+      filters: stat,wall,slf4j
+      connectionProperties: druid.stat.mergeSql=true;druid.stat.slowSqlMillis=5000
+      removeAbandoned: true
+      removeAbandonedTimeout: 1800
+      logAbandoned: true
   banner:
     location: banner.txt
   thymeleaf:
