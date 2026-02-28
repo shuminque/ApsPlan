@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.depository_manage.mapper.aps.ProductionLineModelConfigMapper">
+
+    <resultMap id="ModelConfigResultMap" type="com.depository_manage.entity.aps.ProductionLineModelConfig">
+        <id column="id" property="id"/>
+        <result column="line_id" property="lineId"/>
+        <result column="line_name" property="lineName"/>
+        <result column="model" property="model"/>
+        <result column="capacity_per_hour" property="capacityPerHour"/>
+        <result column="small_changeover_time" property="smallChangeoverTime"/>
+        <result column="large_changeover_time" property="largeChangeoverTime"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="LineOptionResultMap" type="com.depository_manage.entity.aps.ProductionLine">
+        <id column="id" property="id"/>
+        <result column="line_code" property="lineCode"/>
+        <result column="line_name" property="lineName"/>
+    </resultMap>
+
+    <select id="selectPageList" resultMap="ModelConfigResultMap">
+        SELECT c.id,
+               c.line_id,
+               l.line_name,
+               c.model,
+               c.capacity_per_hour,
+               c.small_changeover_time,
+               c.large_changeover_time,
+               c.status,
+               c.remark,
+               c.create_time,
+               c.update_time
+        FROM production_line_model_config c
+                 LEFT JOIN production_line l ON l.id = c.line_id
+        <where>
+            <if test="lineId != null">
+                AND c.line_id = #{lineId}
+            </if>
+            <if test="model != null and model != ''">
+                AND c.model LIKE CONCAT('%', #{model}, '%')
+            </if>
+        </where>
+        ORDER BY c.id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="selectPageCount" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM production_line_model_config c
+        <where>
+            <if test="lineId != null">
+                AND c.line_id = #{lineId}
+            </if>
+            <if test="model != null and model != ''">
+                AND c.model LIKE CONCAT('%', #{model}, '%')
+            </if>
+        </where>
+    </select>
+
+    <insert id="insertModelConfig" parameterType="com.depository_manage.entity.aps.ProductionLineModelConfig"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO production_line_model_config
+            (line_id, model, capacity_per_hour, small_changeover_time, large_changeover_time, status, remark, create_time, update_time)
+        VALUES (#{lineId},
+                #{model},
+                #{capacityPerHour},
+                #{smallChangeoverTime},
+                #{largeChangeoverTime},
+                #{status},
+                #{remark},
+                NOW(),
+                NOW())
+    </insert>
+
+    <update id="updateModelConfig" parameterType="com.depository_manage.entity.aps.ProductionLineModelConfig">
+        UPDATE production_line_model_config
+        <set>
+            <if test="lineId != null">line_id = #{lineId},</if>
+            <if test="model != null and model != ''">model = #{model},</if>
+            <if test="capacityPerHour != null">capacity_per_hour = #{capacityPerHour},</if>
+            <if test="smallChangeoverTime != null">small_changeover_time = #{smallChangeoverTime},</if>
+            <if test="largeChangeoverTime != null">large_changeover_time = #{largeChangeoverTime},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM production_line_model_config
+        WHERE id = #{id}
+    </delete>
+
+    <update id="updateStatus">
+        UPDATE production_line_model_config
+        SET status = #{status},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectLineOptions" resultMap="LineOptionResultMap">
+        SELECT id, line_code, line_name
+        FROM production_line
+        ORDER BY line_code ASC
+    </select>
+
+</mapper>
