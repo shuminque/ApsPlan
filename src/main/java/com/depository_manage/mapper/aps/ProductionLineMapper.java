@@ -1,6 +1,5 @@
 package com.depository_manage.mapper.aps;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.depository_manage.entity.aps.ProductionLine;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -8,7 +7,7 @@ import org.apache.ibatis.annotations.Param;
 import java.util.List;
 
 @Mapper
-public interface ProductionLineMapper extends BaseMapper<ProductionLine> {
+public interface ProductionLineMapper {
 
     List<ProductionLine> selectPageList(@Param("lineCode") String lineCode,
                                         @Param("lineName") String lineName,
