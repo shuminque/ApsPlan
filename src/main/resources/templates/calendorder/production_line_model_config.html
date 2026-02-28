@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>产线型号配置</title>
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8f9fa; padding: 16px; }
+        .card { border-radius: 10px; }
+        .table td, .table th { vertical-align: middle; }
+    </style>
+</head>
+<body>
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-4">
+                <label class="form-label mb-1">产线</label>
+                <select id="lineId" class="form-select">
+                    <option value="">全部产线</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label mb-1">型号</label>
+                <input id="modelKeyword" class="form-control" placeholder="请输入型号关键字">
+            </div>
+            <div class="col-md-4 d-flex align-items-end gap-2">
+                <button class="btn btn-primary" id="btnSearch">查询</button>
+                <button class="btn btn-outline-secondary" id="btnReset">重置</button>
+                <button class="btn btn-success ms-auto" id="btnAdd">新增型号</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover bg-white">
+                <thead class="table-light">
+                <tr>
+                    <th>产线</th>
+                    <th>型号</th>
+                    <th>产能(件/小时)</th>
+                    <th>小换型时长(分钟)</th>
+                    <th>大换型时长(分钟)</th>
+                    <th>状态</th>
+                    <th>备注</th>
+                    <th>更新时间</th>
+                    <th style="min-width: 220px;">操作</th>
+                </tr>
+                </thead>
+                <tbody id="tableBody">
+                <tr><td colspan="9" class="text-center text-muted py-4">暂无数据</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center">
+            <div>共 <span id="totalCount">0</span> 条</div>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-outline-secondary btn-sm" id="prevPage">上一页</button>
+                <span>第 <span id="currentPage">1</span> / <span id="totalPage">1</span> 页</span>
+                <button class="btn btn-outline-secondary btn-sm" id="nextPage">下一页</button>
+                <select class="form-select form-select-sm" id="pageSize" style="width: 96px;">
+                    <option value="10" selected>10条/页</option>
+                    <option value="20">20条/页</option>
+                    <option value="50">50条/页</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="configModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">新增型号配置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="configForm" class="needs-validation" novalidate>
+                    <input type="hidden" id="id" name="id">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">产线</label>
+                            <select id="formLineId" name="lineId" class="form-select" required>
+                                <option value="">请选择产线</option>
+                            </select>
+                            <div class="invalid-feedback">请选择产线</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">型号</label>
+                            <input id="formModel" name="model" class="form-control" maxlength="100" required>
+                            <div class="invalid-feedback">请输入型号</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">产能(件/小时)</label>
+                            <input id="formCapacityPerHour" name="capacityPerHour" type="number" step="0.01" min="0" class="form-control" required>
+                            <div class="invalid-feedback">请输入有效产能</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">小换型时长(分钟)</label>
+                            <input id="formSmallChangeoverTime" name="smallChangeoverTime" type="number" min="0" class="form-control" required>
+                            <div class="invalid-feedback">请输入有效时长</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">大换型时长(分钟)</label>
+                            <input id="formLargeChangeoverTime" name="largeChangeoverTime" type="number" min="0" class="form-control" required>
+                            <div class="invalid-feedback">请输入有效时长</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">状态</label>
+                            <select id="formStatus" name="status" class="form-select">
+                                <option value="1">启用</option>
+                                <option value="0">停用</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">备注</label>
+                            <input id="formRemark" name="remark" class="form-control" maxlength="255">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnSave">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
+<script src="/static/js/bootstrap@5.1.0_dist_js_bootstrap.bundle.js"></script>
+<script>
+    const modal = new bootstrap.Modal(document.getElementById('configModal'));
+    let lineOptions = [];
+    let currentRecords = [];
+    let modalMode = 'add';
+    let pageState = { page: 1, size: 10, total: 0 };
+
+    function showMessage(msg) { alert(msg || '操作失败'); }
+
+    function safeText(value) {
+        return value == null ? '' : String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatDateTime(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (isNaN(date.getTime())) return value;
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        const ss = String(date.getSeconds()).padStart(2, '0');
+        return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+    }
+
+    function loadLineOptions() {
+        return $.ajax({
+            url: '/api/model-config/line-options',
+            method: 'GET',
+            success: function (res) {
+                if (!res || res.code !== 200) {
+                    showMessage(res ? res.msg : '加载产线失败');
+                    return;
+                }
+                lineOptions = res.data || [];
+                const options = lineOptions.map(item => `<option value="${item.id}">${safeText(item.lineCode)} - ${safeText(item.lineName)}</option>`).join('');
+                $('#lineId').append(options);
+                $('#formLineId').append(options);
+            },
+            error: function () {
+                showMessage('加载产线失败');
+            }
+        });
+    }
+
+    function findLineName(lineId) {
+        const line = lineOptions.find(item => String(item.id) === String(lineId));
+        return line ? (line.lineName || '') : '';
+    }
+
+    function buildRow(item) {
+        const enabled = Number(item.status) === 1;
+        const statusHtml = enabled ? '<span class="badge bg-success">启用</span>' : '<span class="badge bg-secondary">停用</span>';
+        return `<tr>
+            <td>${safeText(item.lineName || findLineName(item.lineId))}</td>
+            <td>${safeText(item.model)}</td>
+            <td>${safeText(item.capacityPerHour)}</td>
+            <td>${safeText(item.smallChangeoverTime)}</td>
+            <td>${safeText(item.largeChangeoverTime)}</td>
+            <td>${statusHtml}</td>
+            <td>${safeText(item.remark)}</td>
+            <td>${safeText(formatDateTime(item.updateTime))}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary me-1 btn-edit" data-id="${item.id}">编辑</button>
+                <button class="btn btn-sm btn-outline-danger me-1 btn-delete" data-id="${item.id}">删除</button>
+                <button class="btn btn-sm btn-outline-warning btn-toggle" data-id="${item.id}" data-status="${enabled ? 0 : 1}">${enabled ? '停用' : '启用'}</button>
+            </td>
+        </tr>`;
+    }
+
+    function loadList() {
+        $.ajax({
+            url: '/api/model-config/list',
+            method: 'GET',
+            data: {
+                page: pageState.page,
+                size: pageState.size,
+                lineId: $('#lineId').val(),
+                model: $('#modelKeyword').val().trim()
+            },
+            success: function (res) {
+                if (!res || res.code !== 200) {
+                    showMessage(res ? res.msg : '查询失败');
+                    return;
+                }
+                const data = res.data || {};
+                currentRecords = data.records || [];
+                pageState.total = Number(data.total || 0);
+
+                if (!currentRecords.length) {
+                    $('#tableBody').html('<tr><td colspan="9" class="text-center text-muted py-4">暂无数据</td></tr>');
+                } else {
+                    $('#tableBody').html(currentRecords.map(buildRow).join(''));
+                }
+
+                const totalPage = Math.max(1, Math.ceil(pageState.total / pageState.size));
+                $('#totalCount').text(pageState.total);
+                $('#currentPage').text(pageState.page);
+                $('#totalPage').text(totalPage);
+                $('#prevPage').prop('disabled', pageState.page <= 1);
+                $('#nextPage').prop('disabled', pageState.page >= totalPage);
+            },
+            error: function () {
+                showMessage('查询失败');
+            }
+        });
+    }
+
+    function getRowById(id) {
+        return currentRecords.find(item => String(item.id) === String(id));
+    }
+
+    function openModal(mode, row) {
+        modalMode = mode;
+        const form = $('#configForm')[0];
+        form.reset();
+        $('#configForm').removeClass('was-validated');
+        $('#id').val('');
+
+        if (mode === 'edit' && row) {
+            $('#modalTitle').text('编辑型号配置');
+            $('#id').val(row.id || '');
+            $('#formLineId').val(String(row.lineId || ''));
+            $('#formModel').val(row.model || '');
+            $('#formCapacityPerHour').val(row.capacityPerHour == null ? '' : row.capacityPerHour);
+            $('#formSmallChangeoverTime').val(row.smallChangeoverTime == null ? '' : row.smallChangeoverTime);
+            $('#formLargeChangeoverTime').val(row.largeChangeoverTime == null ? '' : row.largeChangeoverTime);
+            $('#formStatus').val(String(row.status == null ? 1 : row.status));
+            $('#formRemark').val(row.remark || '');
+        } else {
+            $('#modalTitle').text('新增型号配置');
+            $('#formStatus').val('1');
+        }
+        modal.show();
+    }
+
+    function collectFormData() {
+        return {
+            id: $('#id').val() || null,
+            lineId: $('#formLineId').val() ? Number($('#formLineId').val()) : null,
+            model: $('#formModel').val().trim(),
+            capacityPerHour: $('#formCapacityPerHour').val() ? Number($('#formCapacityPerHour').val()) : null,
+            smallChangeoverTime: $('#formSmallChangeoverTime').val() ? Number($('#formSmallChangeoverTime').val()) : null,
+            largeChangeoverTime: $('#formLargeChangeoverTime').val() ? Number($('#formLargeChangeoverTime').val()) : null,
+            status: $('#formStatus').val() ? Number($('#formStatus').val()) : 1,
+            remark: $('#formRemark').val().trim()
+        };
+    }
+
+    function saveConfig() {
+        const formEl = document.getElementById('configForm');
+        if (!formEl.checkValidity()) {
+            $('#configForm').addClass('was-validated');
+            return;
+        }
+
+        const payload = collectFormData();
+        $.ajax({
+            url: modalMode === 'add' ? '/api/model-config/add' : '/api/model-config/update',
+            method: modalMode === 'add' ? 'POST' : 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function (res) {
+                if (!res || res.code !== 200) {
+                    showMessage(res ? res.msg : '保存失败');
+                    return;
+                }
+                modal.hide();
+                loadList();
+            },
+            error: function () { showMessage('保存失败'); }
+        });
+    }
+
+    function deleteConfig(id) {
+        if (!confirm('确认删除该记录吗？')) {
+            return;
+        }
+        $.ajax({
+            url: '/api/model-config/delete/' + id,
+            method: 'DELETE',
+            success: function (res) {
+                if (!res || res.code !== 200) {
+                    showMessage(res ? res.msg : '删除失败');
+                    return;
+                }
+                loadList();
+            },
+            error: function () { showMessage('删除失败'); }
+        });
+    }
+
+    function toggleStatus(id, status) {
+        $.ajax({
+            url: '/api/model-config/status/' + id,
+            method: 'PUT',
+            data: { status: status },
+            success: function (res) {
+                if (!res || res.code !== 200) {
+                    showMessage(res ? res.msg : '状态更新失败');
+                    return;
+                }
+                loadList();
+            },
+            error: function () { showMessage('状态更新失败'); }
+        });
+    }
+
+    $(function () {
+        loadLineOptions().then(function () {
+            loadList();
+        });
+
+        $('#btnSearch').on('click', function () {
+            pageState.page = 1;
+            loadList();
+        });
+
+        $('#btnReset').on('click', function () {
+            $('#lineId').val('');
+            $('#modelKeyword').val('');
+            pageState.page = 1;
+            loadList();
+        });
+
+        $('#btnAdd').on('click', function () { openModal('add'); });
+        $('#btnSave').on('click', saveConfig);
+
+        $('#pageSize').on('change', function () {
+            pageState.size = Number($(this).val() || 10);
+            pageState.page = 1;
+            loadList();
+        });
+
+        $('#prevPage').on('click', function () {
+            if (pageState.page > 1) {
+                pageState.page -= 1;
+                loadList();
+            }
+        });
+
+        $('#nextPage').on('click', function () {
+            const totalPage = Math.max(1, Math.ceil(pageState.total / pageState.size));
+            if (pageState.page < totalPage) {
+                pageState.page += 1;
+                loadList();
+            }
+        });
+
+        $('#tableBody').on('click', '.btn-edit', function () {
+            const row = getRowById($(this).data('id'));
+            if (row) {
+                openModal('edit', row);
+            }
+        });
+
+        $('#tableBody').on('click', '.btn-delete', function () {
+            deleteConfig($(this).data('id'));
+        });
+
+        $('#tableBody').on('click', '.btn-toggle', function () {
+            toggleStatus($(this).data('id'), $(this).data('status'));
+        });
+    });
+</script>
+</body>
+</html>

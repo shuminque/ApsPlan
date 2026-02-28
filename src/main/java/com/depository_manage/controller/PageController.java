@@ -223,6 +223,28 @@ public class PageController {
         mv.setViewName("calendorder/production_line");
         return getModelAndView(mv);
     }
+
+    @GetMapping("/production_line_model_config")
+    public ModelAndView productionLineModelConfig() {
+        ModelAndView mv = new ModelAndView();
+        mv.setViewName("calendorder/production_line_model_config");
+        return mv;
+    }
+
+    @GetMapping("/production_line_runtime")
+    public ModelAndView productionLineRuntime() {
+        ModelAndView mv = new ModelAndView();
+        mv.setViewName("calendorder/production_line_runtime");
+        return mv;
+    }
+
+    @GetMapping("/production_line_history")
+    public ModelAndView productionLineHistory() {
+        ModelAndView mv = new ModelAndView();
+        mv.setViewName("calendorder/production_line_history");
+        return mv;
+    }
+
     @GetMapping("/safety_stock")
     public ModelAndView safety_stock() {
         ModelAndView mv = new ModelAndView();

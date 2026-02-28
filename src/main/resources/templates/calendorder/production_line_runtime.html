@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>产线运行状态</title>
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8f9fa; padding: 16px; }
+        .table td, .table th { vertical-align: middle; }
+    </style>
+</head>
+<body>
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">产线</label>
+                <select id="lineId" class="form-select">
+                    <option value="">全部产线</option>
+                </select>
+            </div>
+            <div class="col-md-8 d-flex gap-2">
+                <button class="btn btn-primary" id="btnSearch">查询</button>
+                <button class="btn btn-outline-secondary" id="btnReset">重置</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover bg-white">
+                <thead class="table-light">
+                <tr>
+                    <th>产线编码</th>
+                    <th>产线名称</th>
+                    <th>当前型号</th>
+                    <th>当前产能</th>
+                    <th>状态</th>
+                    <th>换型开始时间</th>
+                    <th>换型结束时间</th>
+                    <th>更新时间</th>
+                    <th>操作</th>
+                </tr>
+                </thead>
+                <tbody id="tableBody">
+                <tr><td class="text-center text-muted" colspan="9">暂无数据</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="runtimeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑运行状态</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="runtimeForm" class="needs-validation" novalidate>
+                    <input type="hidden" id="id">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">产线</label>
+                            <select id="formLineId" class="form-select" required>
+                                <option value="">请选择产线</option>
+                            </select>
+                            <div class="invalid-feedback">请选择产线</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">状态</label>
+                            <select id="formStatus" class="form-select" required>
+                                <option value="1">运行中</option>
+                                <option value="0">停机</option>
+                                <option value="2">换型中</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">当前型号</label>
+                            <input id="formCurrentModel" class="form-control" maxlength="100">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">当前产能</label>
+                            <input id="formCurrentCapacity" type="number" step="0.01" min="0" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">换型开始时间</label>
+                            <input id="formChangeoverStartTime" type="datetime-local" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">换型结束时间</label>
+                            <input id="formChangeoverEndTime" type="datetime-local" class="form-control">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnSave">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
+<script src="/static/js/bootstrap@5.1.0_dist_js_bootstrap.bundle.js"></script>
+<script>
+    const modal = new bootstrap.Modal(document.getElementById('runtimeModal'));
+    let lineOptions = [];
+    let records = [];
+
+    function safeText(v) {
+        return v == null ? '' : String(v)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatDate(v) {
+        if (!v) return '';
+        const d = new Date(v);
+        if (isNaN(d.getTime())) return v;
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return `${y}-${m}-${day} ${hh}:${mm}:${ss}`;
+    }
+
+    function toInputDatetime(v) {
+        if (!v) return '';
+        const d = new Date(v);
+        if (isNaN(d.getTime())) return '';
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `${y}-${m}-${day}T${hh}:${mm}`;
+    }
+
+    function fromInputDatetime(v) {
+        if (!v) return null;
+        return v.replace('T', ' ') + ':00';
+    }
+
+    function statusText(status) {
+        if (Number(status) === 1) return '<span class="badge bg-success">运行中</span>';
+        if (Number(status) === 2) return '<span class="badge bg-warning text-dark">换型中</span>';
+        return '<span class="badge bg-secondary">停机</span>';
+    }
+
+    function loadLineOptions() {
+        return $.ajax({
+            url: '/api/model-config/line-options',
+            method: 'GET',
+            success: function (res) {
+                if (!res || res.code !== 200) return;
+                lineOptions = res.data || [];
+                const options = lineOptions.map(l => `<option value="${l.id}">${safeText(l.lineCode)} - ${safeText(l.lineName)}</option>`).join('');
+                $('#lineId').append(options);
+                $('#formLineId').append(options);
+            }
+        });
+    }
+
+    function renderList() {
+        if (!records.length) {
+            $('#tableBody').html('<tr><td class="text-center text-muted" colspan="9">暂无数据</td></tr>');
+            return;
+        }
+        const html = records.map(r => `<tr>
+            <td>${safeText(r.lineCode)}</td>
+            <td>${safeText(r.lineName)}</td>
+            <td>${safeText(r.currentModel)}</td>
+            <td>${safeText(r.currentCapacity)}</td>
+            <td>${statusText(r.status)}</td>
+            <td>${safeText(formatDate(r.changeoverStartTime))}</td>
+            <td>${safeText(formatDate(r.changeoverEndTime))}</td>
+            <td>${safeText(formatDate(r.updateTime))}</td>
+            <td><button class="btn btn-sm btn-outline-primary btn-edit" data-id="${r.id}">编辑</button></td>
+        </tr>`).join('');
+        $('#tableBody').html(html);
+    }
+
+    function loadList() {
+        $.ajax({
+            url: '/api/runtime/list',
+            method: 'GET',
+            data: { lineId: $('#lineId').val() || null },
+            success: function (res) {
+                if (!res || res.code !== 200) {
+                    alert(res ? res.msg : '加载失败');
+                    return;
+                }
+                records = res.data || [];
+                renderList();
+            },
+            error: function () { alert('加载失败'); }
+        });
+    }
+
+    function openEdit(id) {
+        const row = records.find(v => String(v.id) === String(id));
+        if (!row) return;
+        $('#runtimeForm')[0].reset();
+        $('#runtimeForm').removeClass('was-validated');
+        $('#id').val(row.id || '');
+        $('#formLineId').val(String(row.lineId || ''));
+        $('#formCurrentModel').val(row.currentModel || '');
+        $('#formCurrentCapacity').val(row.currentCapacity == null ? '' : row.currentCapacity);
+        $('#formStatus').val(String(row.status == null ? 1 : row.status));
+        $('#formChangeoverStartTime').val(toInputDatetime(row.changeoverStartTime));
+        $('#formChangeoverEndTime').val(toInputDatetime(row.changeoverEndTime));
+        modal.show();
+    }
+
+    function save() {
+        const formEl = document.getElementById('runtimeForm');
+        if (!formEl.checkValidity()) {
+            $('#runtimeForm').addClass('was-validated');
+            return;
+        }
+        const payload = {
+            id: Number($('#id').val()),
+            lineId: Number($('#formLineId').val()),
+            currentModel: $('#formCurrentModel').val().trim() || null,
+            currentCapacity: $('#formCurrentCapacity').val() ? Number($('#formCurrentCapacity').val()) : null,
+            status: Number($('#formStatus').val()),
+            changeoverStartTime: fromInputDatetime($('#formChangeoverStartTime').val()),
+            changeoverEndTime: fromInputDatetime($('#formChangeoverEndTime').val())
+        };
+        $.ajax({
+            url: '/api/runtime/update',
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function (res) {
+                if (!res || res.code !== 200) {
+                    alert(res ? res.msg : '保存失败');
+                    return;
+                }
+                modal.hide();
+                loadList();
+            },
+            error: function () { alert('保存失败'); }
+        });
+    }
+
+    $(function () {
+        loadLineOptions().then(loadList);
+
+        $('#btnSearch').on('click', loadList);
+        $('#btnReset').on('click', function () {
+            $('#lineId').val('');
+            loadList();
+        });
+        $('#tableBody').on('click', '.btn-edit', function () {
+            openEdit($(this).data('id'));
+        });
+        $('#btnSave').on('click', save);
+    });
+</script>
+</body>
+</html>
