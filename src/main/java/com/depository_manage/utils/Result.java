@@ -11,7 +11,7 @@ public class Result<T> {
     public static <T> Result<T> success(T data) {
         Result<T> result = new Result<>();
         result.setCode(200);
-        result.setMsg("操作成功");
+        result.setMsg("success");
         result.setData(data);
         return result;
     }

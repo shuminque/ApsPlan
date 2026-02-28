@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.depository_manage.mapper.aps.ProductionLineMapper">
+
+    <resultMap id="ProductionLineResultMap" type="com.depository_manage.entity.aps.ProductionLine">
+        <id column="id" property="id"/>
+        <result column="line_code" property="lineCode"/>
+        <result column="line_name" property="lineName"/>
+        <result column="workshop" property="workshop"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, line_code, line_name, workshop, status, remark, create_time, update_time
+    </sql>
+
+    <select id="selectPageList" resultMap="ProductionLineResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM production_line
+        <where>
+            <if test="lineCode != null and lineCode != ''">
+                AND line_code LIKE CONCAT('%', #{lineCode}, '%')
+            </if>
+            <if test="lineName != null and lineName != ''">
+                AND line_name LIKE CONCAT('%', #{lineName}, '%')
+            </if>
+        </where>
+        ORDER BY id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="selectPageCount" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM production_line
+        <where>
+            <if test="lineCode != null and lineCode != ''">
+                AND line_code LIKE CONCAT('%', #{lineCode}, '%')
+            </if>
+            <if test="lineName != null and lineName != ''">
+                AND line_name LIKE CONCAT('%', #{lineName}, '%')
+            </if>
+        </where>
+    </select>
+
+    <insert id="insertProductionLine" parameterType="com.depository_manage.entity.aps.ProductionLine"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO production_line
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="lineCode != null">line_code,</if>
+            <if test="lineName != null">line_name,</if>
+            <if test="workshop != null">workshop,</if>
+            <if test="status != null">status,</if>
+            <if test="remark != null">remark,</if>
+            create_time,
+            update_time
+        </trim>
+        <trim prefix="VALUES (" suffix=")" suffixOverrides=",">
+            <if test="lineCode != null">#{lineCode},</if>
+            <if test="lineName != null">#{lineName},</if>
+            <if test="workshop != null">#{workshop},</if>
+            <if test="status != null">#{status},</if>
+            <if test="remark != null">#{remark},</if>
+            NOW(),
+            NOW()
+        </trim>
+    </insert>
+
+    <update id="updateProductionLine" parameterType="com.depository_manage.entity.aps.ProductionLine">
+        UPDATE production_line
+        <set>
+            <if test="lineCode != null">line_code = #{lineCode},</if>
+            <if test="lineName != null">line_name = #{lineName},</if>
+            <if test="workshop != null">workshop = #{workshop},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteByIdCustom">
+        DELETE FROM production_line WHERE id = #{id}
+    </delete>
+
+    <update id="updateStatus">
+        UPDATE production_line
+        SET status = #{status},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+</mapper>
