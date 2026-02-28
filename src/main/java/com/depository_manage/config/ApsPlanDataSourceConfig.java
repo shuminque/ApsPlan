@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
 import javax.sql.DataSource;
@@ -34,6 +35,10 @@ public class ApsPlanDataSourceConfig {
 
         MybatisSqlSessionFactoryBean bean = new MybatisSqlSessionFactoryBean();
         bean.setDataSource(dataSource);
+        bean.setMapperLocations(
+                new PathMatchingResourcePatternResolver()
+                        .getResources("classpath*:com/depository_manage/mapper/aps/*.xml")
+        );
         // 可选：MP 全局配置、插件等
         return bean.getObject();
     }
