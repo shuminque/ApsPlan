@@ -217,6 +217,12 @@ public class PageController {
         mv.setViewName("calendorder/production_order_list");
         return getModelAndView(mv);
     }
+    @GetMapping("/production_line")
+    public ModelAndView production_line() {
+        ModelAndView mv = new ModelAndView();
+        mv.setViewName("calendorder/production_line");
+        return getModelAndView(mv);
+    }
     @GetMapping("/safety_stock")
     public ModelAndView safety_stock() {
         ModelAndView mv = new ModelAndView();

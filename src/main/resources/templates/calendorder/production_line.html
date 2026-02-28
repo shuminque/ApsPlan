@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>产线管理</title>
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8f9fa; padding: 16px; }
+        .card { border: none; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+        .table td, .table th { vertical-align: middle; }
+        .required::after { content: " *"; color: #dc3545; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="card mb-3">
+        <div class="card-body">
+            <form id="searchForm" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label for="lineCode" class="form-label">产线编码</label>
+                    <input id="lineCode" name="lineCode" type="text" class="form-control" placeholder="请输入产线编码">
+                </div>
+                <div class="col-md-3">
+                    <label for="lineName" class="form-label">产线名称</label>
+                    <input id="lineName" name="lineName" type="text" class="form-control" placeholder="请输入产线名称">
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <button type="button" class="btn btn-primary" id="btnSearch">查询</button>
+                    <button type="button" class="btn btn-outline-secondary" id="btnReset">重置</button>
+                    <button type="button" class="btn btn-success" id="btnAdd">新增</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover bg-white">
+                    <thead class="table-light">
+                    <tr>
+                        <th>产线编码</th>
+                        <th>产线名称</th>
+                        <th>车间</th>
+                        <th>状态</th>
+                        <th>备注</th>
+                        <th>更新时间</th>
+                        <th style="width: 220px;">操作</th>
+                    </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">暂无数据</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+                <div>
+                    总数：<span id="totalCount">0</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <label for="pageSize" class="mb-0">每页</label>
+                    <select id="pageSize" class="form-select form-select-sm" style="width: 90px;">
+                        <option value="10" selected>10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                    <span>条</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="prevPage">上一页</button>
+                    <span>第 <span id="currentPage">1</span> / <span id="totalPage">1</span> 页</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="nextPage">下一页</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="lineModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="lineModalTitle">新增产线</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="lineForm" novalidate>
+                    <input type="hidden" id="lineId" name="id">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="formLineCode" class="form-label required">产线编码</label>
+                            <input type="text" id="formLineCode" name="lineCode" class="form-control" required>
+                            <div class="invalid-feedback">请输入产线编码</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="formLineName" class="form-label required">产线名称</label>
+                            <input type="text" id="formLineName" name="lineName" class="form-control" required>
+                            <div class="invalid-feedback">请输入产线名称</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="formWorkshop" class="form-label">车间</label>
+                            <input type="text" id="formWorkshop" name="workshop" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="formStatus" class="form-label">状态</label>
+                            <select id="formStatus" name="status" class="form-select">
+                                <option value="1" selected>启用</option>
+                                <option value="0">停用</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="formRemark" class="form-label">备注</label>
+                            <textarea id="formRemark" name="remark" rows="3" class="form-control"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnSave">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
+<script src="/static/js/bootstrap@5.1.0_dist_js_bootstrap.bundle.js"></script>
+<script>
+    let pageState = { page: 1, size: 10, total: 0 };
+    let currentRecords = [];
+    let modalMode = 'add';
+    const lineModal = new bootstrap.Modal(document.getElementById('lineModal'));
+
+    function safeText(value) {
+        return value == null ? '' : String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatDateTime(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (isNaN(date.getTime())) return value;
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const hh = String(date.getHours()).padStart(2, '0');
+        const mm = String(date.getMinutes()).padStart(2, '0');
+        const ss = String(date.getSeconds()).padStart(2, '0');
+        return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+    }
+
+    function showMessage(msg, isSuccess) {
+        const text = msg || (isSuccess ? '操作成功' : '操作失败');
+        alert(text);
+    }
+
+    function handleResponse(res) {
+        if (res && res.code === 200) {
+            showMessage(res.msg, true);
+            return true;
+        }
+        showMessage(res ? res.msg : '请求失败', false);
+        return false;
+    }
+
+    function buildRow(item) {
+        const enabled = Number(item.status) === 1;
+        const statusText = enabled ? '<span class="badge bg-success">启用</span>' : '<span class="badge bg-secondary">停用</span>';
+        const toggleText = enabled ? '停用' : '启用';
+        return `<tr>
+            <td>${safeText(item.lineCode)}</td>
+            <td>${safeText(item.lineName)}</td>
+            <td>${safeText(item.workshop)}</td>
+            <td>${statusText}</td>
+            <td>${safeText(item.remark)}</td>
+            <td>${safeText(formatDateTime(item.updateTime))}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary me-1 btn-edit" data-id="${item.id}">编辑</button>
+                <button class="btn btn-sm btn-outline-danger me-1 btn-delete" data-id="${item.id}">删除</button>
+                <button class="btn btn-sm btn-outline-warning btn-toggle" data-id="${item.id}" data-status="${enabled ? 0 : 1}">${toggleText}</button>
+            </td>
+        </tr>`;
+    }
+
+    function loadList() {
+        const lineCode = $('#lineCode').val().trim();
+        const lineName = $('#lineName').val().trim();
+        $.ajax({
+            url: '/api/production-line/list',
+            method: 'GET',
+            data: {
+                page: pageState.page,
+                size: pageState.size,
+                lineCode: lineCode,
+                lineName: lineName
+            },
+            success: function (res) {
+                if (!handleResponse(res)) {
+                    return;
+                }
+                const data = res.data || {};
+                const records = data.records || [];
+                currentRecords = records;
+                pageState.total = Number(data.total || 0);
+
+                if (!records.length) {
+                    $('#tableBody').html('<tr><td colspan="7" class="text-center text-muted py-4">暂无数据</td></tr>');
+                } else {
+                    $('#tableBody').html(records.map(buildRow).join(''));
+                }
+
+                const totalPage = Math.max(1, Math.ceil(pageState.total / pageState.size));
+                if (pageState.page > totalPage) {
+                    pageState.page = totalPage;
+                }
+                $('#totalCount').text(pageState.total);
+                $('#currentPage').text(pageState.page);
+                $('#totalPage').text(totalPage);
+                $('#prevPage').prop('disabled', pageState.page <= 1);
+                $('#nextPage').prop('disabled', pageState.page >= totalPage);
+            },
+            error: function () {
+                showMessage('请求失败', false);
+            }
+        });
+    }
+
+    function openModal(mode, rowData) {
+        modalMode = mode;
+        $('#lineForm')[0].reset();
+        $('#lineForm').removeClass('was-validated');
+        $('#lineId').val('');
+        if (mode === 'edit' && rowData) {
+            $('#lineModalTitle').text('编辑产线');
+            $('#lineId').val(rowData.id || '');
+            $('#formLineCode').val(rowData.lineCode || '');
+            $('#formLineName').val(rowData.lineName || '');
+            $('#formWorkshop').val(rowData.workshop || '');
+            $('#formStatus').val(String(rowData.status == null ? 1 : rowData.status));
+            $('#formRemark').val(rowData.remark || '');
+        } else {
+            $('#lineModalTitle').text('新增产线');
+            $('#formStatus').val('1');
+        }
+        lineModal.show();
+    }
+
+    function getRowById(id) {
+        return currentRecords.find(item => String(item.id) === String(id));
+    }
+
+    function saveLine() {
+        const form = document.getElementById('lineForm');
+        if (!form.checkValidity()) {
+            $('#lineForm').addClass('was-validated');
+            return;
+        }
+        const payload = {
+            id: $('#lineId').val() || null,
+            lineCode: $('#formLineCode').val().trim(),
+            lineName: $('#formLineName').val().trim(),
+            workshop: $('#formWorkshop').val().trim(),
+            status: Number($('#formStatus').val()),
+            remark: $('#formRemark').val().trim()
+        };
+
+        $.ajax({
+            url: modalMode === 'add' ? '/api/production-line/add' : '/api/production-line/update',
+            method: modalMode === 'add' ? 'POST' : 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function (res) {
+                if (handleResponse(res)) {
+                    lineModal.hide();
+                    loadList();
+                }
+            },
+            error: function () { showMessage('请求失败', false); }
+        });
+    }
+
+    $(function () {
+        loadList();
+
+        $('#btnSearch').on('click', function () {
+            pageState.page = 1;
+            loadList();
+        });
+
+        $('#btnReset').on('click', function () {
+            $('#searchForm')[0].reset();
+            pageState.page = 1;
+            loadList();
+        });
+
+        $('#btnAdd').on('click', function () {
+            openModal('add');
+        });
+
+        $('#btnSave').on('click', saveLine);
+
+        $('#pageSize').on('change', function () {
+            pageState.size = Number($(this).val());
+            pageState.page = 1;
+            loadList();
+        });
+
+        $('#prevPage').on('click', function () {
+            if (pageState.page > 1) {
+                pageState.page--;
+                loadList();
+            }
+        });
+
+        $('#nextPage').on('click', function () {
+            const totalPage = Math.max(1, Math.ceil(pageState.total / pageState.size));
+            if (pageState.page < totalPage) {
+                pageState.page++;
+                loadList();
+            }
+        });
+
+        $('#tableBody').on('click', '.btn-edit', function () {
+            const id = $(this).data('id');
+            const rowData = getRowById(id);
+            if (!rowData) {
+                showMessage('未找到对应数据', false);
+                return;
+            }
+            openModal('edit', rowData);
+        });
+
+        $('#tableBody').on('click', '.btn-delete', function () {
+            const id = $(this).data('id');
+            if (!confirm('确定要删除该产线吗？')) return;
+            $.ajax({
+                url: '/api/production-line/delete/' + id,
+                method: 'DELETE',
+                success: function (res) {
+                    if (handleResponse(res)) {
+                        loadList();
+                    }
+                },
+                error: function () { showMessage('请求失败', false); }
+            });
+        });
+
+        $('#tableBody').on('click', '.btn-toggle', function () {
+            const id = $(this).data('id');
+            const status = $(this).data('status');
+            const actionText = Number(status) === 1 ? '启用' : '停用';
+            if (!confirm('确定要' + actionText + '该产线吗？')) return;
+            $.ajax({
+                url: '/api/production-line/status/' + id,
+                method: 'PUT',
+                data: { status: status },
+                success: function (res) {
+                    if (handleResponse(res)) {
+                        loadList();
+                    }
+                },
+                error: function () { showMessage('请求失败', false); }
+            });
+        });
+    });
+</script>
+</body>
+</html>
