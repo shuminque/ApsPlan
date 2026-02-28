@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.depository_manage.mapper.aps.ProductionLineRuntimeMapper">
+
+    <resultMap id="RuntimeResultMap" type="com.depository_manage.entity.aps.ProductionLineRuntime">
+        <id column="id" property="id"/>
+        <result column="line_id" property="lineId"/>
+        <result column="line_code" property="lineCode"/>
+        <result column="line_name" property="lineName"/>
+        <result column="current_model" property="currentModel"/>
+        <result column="current_capacity" property="currentCapacity"/>
+        <result column="status" property="status"/>
+        <result column="changeover_start_time" property="changeoverStartTime"/>
+        <result column="changeover_end_time" property="changeoverEndTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectList" resultMap="RuntimeResultMap">
+        SELECT r.id,
+               r.line_id,
+               l.line_code,
+               l.line_name,
+               r.current_model,
+               r.current_capacity,
+               r.status,
+               r.changeover_start_time,
+               r.changeover_end_time,
+               r.update_time
+        FROM production_line_runtime r
+                 LEFT JOIN production_line l ON l.id = r.line_id
+        <where>
+            <if test="lineId != null">
+                AND r.line_id = #{lineId}
+            </if>
+        </where>
+        ORDER BY r.id DESC
+    </select>
+
+    <update id="updateRuntime" parameterType="com.depository_manage.entity.aps.ProductionLineRuntime">
+        UPDATE production_line_runtime
+        SET line_id = #{lineId},
+            current_model = #{currentModel},
+            current_capacity = #{currentCapacity},
+            status = #{status},
+            changeover_start_time = #{changeoverStartTime},
+            changeover_end_time = #{changeoverEndTime},
+            update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+</mapper>
