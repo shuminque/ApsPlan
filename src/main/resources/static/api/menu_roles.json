@@ -138,6 +138,42 @@
                     ],
                     "child": [
                         {
+                            "title": "生产线信息",
+                            "href": "/production_line",
+                            "icon": "layui-icon layui-icon-list",
+                            "target": "_self",
+                            "roles": [
+                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+                            ]
+                        },
+                        {
+                            "title": "生产线状态",
+                            "href": "/production_line_runtime",
+                            "icon": "layui-icon layui-icon-list",
+                            "target": "_self",
+                            "roles": [
+                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+                            ]
+                        },
+                        {
+                            "title": "产线型号配置",
+                            "href": "/production_line_model_config",
+                            "icon": "layui-icon layui-icon-list",
+                            "target": "_self",
+                            "roles": [
+                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+                            ]
+                        },
+                        {
+                            "title": "产线历史查询",
+                            "href": "/production_line_history",
+                            "icon": "layui-icon layui-icon-list",
+                            "target": "_self",
+                            "roles": [
+                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+                            ]
+                        },
+                        {
                             "title": "订单查询",
                             "href": "/production_order_list",
                             "icon": "layui-icon layui-icon-list",
