@@ -156,17 +156,16 @@
         return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
     }
 
-    function showMessage(msg, isSuccess) {
-        const text = msg || (isSuccess ? '操作成功' : '操作失败');
+    function showError(msg) {
+        const text = msg || '操作失败';
         alert(text);
     }
 
     function handleResponse(res) {
         if (res && res.code === 200) {
-            showMessage(res.msg, true);
             return true;
         }
-        showMessage(res ? res.msg : '请求失败', false);
+        showError(res ? res.msg : '请求失败');
         return false;
     }
 
@@ -227,7 +226,7 @@
                 $('#nextPage').prop('disabled', pageState.page >= totalPage);
             },
             error: function () {
-                showMessage('请求失败', false);
+                showError('请求失败');
             }
         });
     }
@@ -282,7 +281,7 @@
                     loadList();
                 }
             },
-            error: function () { showMessage('请求失败', false); }
+            error: function () { showError('请求失败'); }
         });
     }
 
@@ -331,7 +330,7 @@
             const id = $(this).data('id');
             const rowData = getRowById(id);
             if (!rowData) {
-                showMessage('未找到对应数据', false);
+                showError('未找到对应数据');
                 return;
             }
             openModal('edit', rowData);
@@ -348,7 +347,7 @@
                         loadList();
                     }
                 },
-                error: function () { showMessage('请求失败', false); }
+                error: function () { showError('请求失败'); }
             });
         });
 
@@ -366,7 +365,7 @@
                         loadList();
                     }
                 },
-                error: function () { showMessage('请求失败', false); }
+                error: function () { showError('请求失败'); }
             });
         });
     });
