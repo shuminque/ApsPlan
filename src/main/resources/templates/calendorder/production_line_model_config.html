@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>产线型号配置</title>
+    <title>产线系列配置</title>
     <link href="/static/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background: #f8f9fa; padding: 16px; }
@@ -21,13 +21,13 @@
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label mb-1">型号</label>
-                <input id="modelKeyword" class="form-control" placeholder="请输入型号关键字">
+                <label class="form-label mb-1">系列</label>
+                <input id="modelKeyword" class="form-control" placeholder="请输入系列关键字">
             </div>
             <div class="col-md-4 d-flex align-items-end gap-2">
                 <button class="btn btn-primary" id="btnSearch">查询</button>
                 <button class="btn btn-outline-secondary" id="btnReset">重置</button>
-                <button class="btn btn-success ms-auto" id="btnAdd">新增型号</button>
+                <button class="btn btn-success ms-auto" id="btnAdd">新增系列</button>
             </div>
         </div>
     </div>
@@ -40,7 +40,7 @@
                 <thead class="table-light">
                 <tr>
                     <th>产线</th>
-                    <th>型号</th>
+                    <th>系列</th>
                     <th>产能(件/小时)</th>
                     <th>小换型时长(分钟)</th>
                     <th>大换型时长(分钟)</th>
@@ -76,7 +76,7 @@
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="modalTitle">新增型号配置</h5>
+                <h5 class="modal-title" id="modalTitle">新增系列配置</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -91,9 +91,9 @@
                             <div class="invalid-feedback">请选择产线</div>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">型号</label>
+                            <label class="form-label">系列</label>
                             <input id="formModel" name="model" class="form-control" maxlength="100" required>
-                            <div class="invalid-feedback">请输入型号</div>
+                            <div class="invalid-feedback">请输入系列</div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">产能(件/小时)</label>
@@ -260,7 +260,7 @@
         $('#id').val('');
 
         if (mode === 'edit' && row) {
-            $('#modalTitle').text('编辑型号配置');
+            $('#modalTitle').text('编辑系列配置');
             $('#id').val(row.id || '');
             $('#formLineId').val(String(row.lineId || ''));
             $('#formModel').val(row.model || '');
@@ -270,7 +270,7 @@
             $('#formStatus').val(String(row.status == null ? 1 : row.status));
             $('#formRemark').val(row.remark || '');
         } else {
-            $('#modalTitle').text('新增型号配置');
+            $('#modalTitle').text('新增系列配置');
             $('#formStatus').val('1');
         }
         modal.show();

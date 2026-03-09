@@ -156,7 +156,7 @@
                             ]
                         },
                         {
-                            "title": "产线型号配置",
+                            "title": "产线系列配置",
                             "href": "/production_line_model_config",
                             "icon": "layui-icon layui-icon-list",
                             "target": "_self",

@@ -47,7 +47,7 @@
                 AND c.model LIKE CONCAT('%', #{model}, '%')
             </if>
         </where>
-        ORDER BY c.id DESC
+        ORDER BY c.id 
         LIMIT #{offset}, #{size}
     </select>
 

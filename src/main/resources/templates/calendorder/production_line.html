@@ -39,7 +39,7 @@
                 <table class="table table-bordered table-hover bg-white">
                     <thead class="table-light">
                     <tr>
-                        <th>产线编码</th>
+<!--                        <th>产线编码</th>-->
                         <th>产线名称</th>
                         <th>车间</th>
                         <th>状态</th>
@@ -173,8 +173,8 @@
         const enabled = Number(item.status) === 1;
         const statusText = enabled ? '<span class="badge bg-success">启用</span>' : '<span class="badge bg-secondary">停用</span>';
         const toggleText = enabled ? '停用' : '启用';
+        // <td>${safeText(item.lineCode)}</td>
         return `<tr>
-            <td>${safeText(item.lineCode)}</td>
             <td>${safeText(item.lineName)}</td>
             <td>${safeText(item.workshop)}</td>
             <td>${statusText}</td>

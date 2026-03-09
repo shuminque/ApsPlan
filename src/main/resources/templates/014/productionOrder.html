@@ -65,8 +65,18 @@
                 </select>
               </td>
               <td>
-                <input type="number" class="form-control quantity-input" name="quantity" required autocomplete="off">
-                <small class="text-warning quantity-warning d-none">请确认数量是否正确</small>
+                <div class="d-flex align-items-center gap-2">
+                  <input type="number" class="form-control quantity-input" name="quantity" required autocomplete="off">
+
+                  <div class="quantity-actions d-none">
+                    <button type="button" class="btn btn-sm btn-outline-success confirm-quantity">√</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger reject-quantity">×</button>
+                  </div>
+                </div>
+
+                <small class="text-warning quantity-warning d-none">
+                  请确认数量无误
+                </small>
               </td>
               <td><input type="text" class="form-control date-input" required></td>
               <td>
@@ -110,6 +120,7 @@
     function resetQuantityHint(row) {
       row.removeAttr('data-pack-quantity');
       row.find('.quantity-warning').addClass('d-none');
+      row.find('.quantity-actions').addClass('d-none');
     }
 
     function validateQuantityMultiple(row, showToast) {
@@ -123,13 +134,18 @@
         return;
       }
 
+      var $actions = row.find('.quantity-actions');
+
       if (quantity % packQuantity !== 0) {
         $warning.removeClass('d-none');
+        $actions.removeClass('d-none');
+
         if (showToast) {
-          layer.msg('请确认数量是否正确');
+          layer.msg('请确认数量无误');
         }
       } else {
         $warning.addClass('d-none');
+        $actions.addClass('d-none');
       }
     }
 
@@ -258,7 +274,20 @@
       }
     });
 
+// 点击 √ —— 手动确认
+    $(document).on('click', '.confirm-quantity', function() {
+      var row = $(this).closest('tr');
+      row.find('.quantity-warning').addClass('d-none');
+      row.find('.quantity-actions').addClass('d-none');
+    });
 
+// 点击 × —— 清空数量
+    $(document).on('click', '.reject-quantity', function() {
+      var row = $(this).closest('tr');
+      row.find('input[name="quantity"]').val('');
+      row.find('.quantity-warning').addClass('d-none');
+      row.find('.quantity-actions').addClass('d-none');
+    });
     $(document).on('change', '.model-select', function() {
       var row = $(this).closest('tr');
       loadPackQuantity(row);

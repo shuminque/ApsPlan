@@ -31,7 +31,7 @@
                 AND line_name LIKE CONCAT('%', #{lineName}, '%')
             </if>
         </where>
-        ORDER BY id DESC
+        ORDER BY id
         LIMIT #{offset}, #{size}
     </select>
 
