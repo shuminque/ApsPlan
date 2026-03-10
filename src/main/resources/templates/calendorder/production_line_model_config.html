@@ -62,10 +62,15 @@ layui.use(['table'], function(){
         table.render({elem:'#configTable',url:'/api/model-config/list',method:'GET',request:{pageName:'page',limitName:'size'},where:{lineId:$('#lineId').val(),model:$('#modelKeyword').val().trim()},
             parseData:function(res){if(!res||res.code!==200)return {code:1,msg:res?res.msg:'查询失败',count:0,data:[]};const d=res.data||{};currentRecords=d.records||[];return {code:0,msg:'',count:Number(d.total||0),data:currentRecords};},
             page:true,limit:20,limits:[20,50,100],toolbar:['filter','exports','print'],
-            cols:[[
-                {field:'lineName',title:'产线'}, {field:'model',title:'系列'}, {field:'capacityPerHour',title:'产能(件/小时)'}, {field:'smallChangeoverTime',title:'小换型时长(分钟)'}, {field:'largeChangeoverTime',title:'大换型时长(分钟)'},
+            cols:[ [
+                {field:'lineName',title:'产线'}, {field:'model',title:'系列'},
+                {field:'capacityPerHour',title:'产能(件/小时)'},
+                {field:'smallChangeoverTime',title:'小换型时长(分钟)'},
+                {field:'largeChangeoverTime',title:'大换型时长(分钟)'},
                 {field:'status',title:'状态',templet:d=>Number(d.status)===1?'<span class="layui-badge layui-bg-green">启用</span>':'<span class="layui-badge">停用</span>'},
-                {field:'remark',title:'备注'}, {field:'updateTime',title:'更新时间',templet:d=>formatDateTime(d.updateTime)}, {fixed:'right',title:'操作',toolbar:'#configRowBar',width:230}
+                {field:'remark',title:'备注',hide:true},
+                {field:'updateTime',title:'更新时间',templet:d=>formatDateTime(d.updateTime),hide:true},
+                {fixed:'right',title:'操作',toolbar:'#configRowBar',width:230}
             ]]
         });
     }

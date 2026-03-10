@@ -60,8 +60,13 @@ layui.use(['table'], function(){
         table.render({elem:'#lineTable',url:'/api/production-line/list',method:'GET',request:{pageName:'page',limitName:'size'},where:{lineCode:$('#lineCode').val().trim(),lineName:$('#lineName').val().trim()},
             parseData:function(res){if(!handleResponse(res))return {code:1,msg:'',count:0,data:[]};const data=res.data||{};currentRecords=data.records||[];return {code:0,msg:'',count:Number(data.total||0),data:currentRecords};},
             page:true,limit:20,limits:[20,50,100],toolbar:['filter','exports','print'],
-            cols:[[
-                {field:'lineName',title:'产线名称'}, {field:'workshop',title:'车间'}, {field:'status',title:'状态',templet:d=>statusBadge(d.status)}, {field:'remark',title:'备注'}, {field:'updateTime',title:'更新时间',templet:d=>formatDateTime(d.updateTime)}, {fixed:'right',title:'操作',toolbar:'#lineRowBar',width:230}
+            cols:[ [
+                {field:'lineName',title:'产线名称'},
+                {field:'workshop',title:'车间'},
+                {field:'status',title:'状态',templet:d=>statusBadge(d.status)},
+                {field:'remark',title:'备注',hide:true},
+                {field:'updateTime',title:'更新时间',templet:d=>formatDateTime(d.updateTime),hide:true},
+                {fixed:'right',title:'操作',toolbar:'#lineRowBar',width:230}
             ]]
         });
     }
