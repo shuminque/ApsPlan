@@ -43,5 +43,9 @@ public interface ShiftScheduleMapper {
      */
     int deleteByIds(@Param("ids") Set<Long> ids);
 
+    int upsertByMongoId(ShiftSchedule schedule);
+
+    int deleteBySourceMongoId(@Param("sourceMongoId") String sourceMongoId);
+
 }
 
