@@ -22,6 +22,7 @@
         <result property="startDateTime" column="startDateTime" />
         <result property="endDateTime" column="endDateTime" />
         <result property="remark" column="remark" />
+        <result property="sourceMongoId" column="sourceMongoId" />
         <result property="createTime" column="createTime" />
         <result property="updateTime" column="updateTime" />
     </resultMap>
@@ -49,14 +50,15 @@ CASE s.teamID
             useGeneratedKeys="true"
             keyProperty="scheduleId">
         INSERT INTO shift_schedule
-            (scheduleDate, teamID, shiftCode, startDateTime, endDateTime, remark)
+            (scheduleDate, teamID, shiftCode, startDateTime, endDateTime, remark, sourceMongoId)
         VALUES
             (#{scheduleDate},
              #{teamID},
              #{shiftCode},
              #{startDateTime},
              #{endDateTime},
-             #{remark})
+             #{remark},
+             #{sourceMongoId})
     </insert>
 
 
@@ -70,6 +72,7 @@ CASE s.teamID
             startDateTime = #{startDateTime},
             endDateTime = #{endDateTime},
             remark = #{remark},
+            sourceMongoId = #{sourceMongoId},
             updateTime = NOW()
         WHERE scheduleId = #{scheduleId}
     </update>
@@ -113,4 +116,25 @@ CASE s.teamID
         SELECT * FROM shift_schedule
         WHERE scheduleDate = #{date}
     </select>
+
+
+    <insert id="upsertByMongoId" parameterType="com.depository_manage.entity.aps.ShiftSchedule">
+        INSERT INTO shift_schedule
+            (scheduleDate, teamID, shiftCode, startDateTime, endDateTime, remark, sourceMongoId)
+        VALUES
+            (#{scheduleDate}, #{teamID}, #{shiftCode}, #{startDateTime}, #{endDateTime}, #{remark}, #{sourceMongoId})
+        ON DUPLICATE KEY UPDATE
+            teamID = VALUES(teamID),
+            shiftCode = VALUES(shiftCode),
+            startDateTime = VALUES(startDateTime),
+            endDateTime = VALUES(endDateTime),
+            remark = VALUES(remark),
+            sourceMongoId = VALUES(sourceMongoId),
+            updateTime = NOW()
+    </insert>
+
+    <delete id="deleteBySourceMongoId">
+        DELETE FROM shift_schedule WHERE sourceMongoId = #{sourceMongoId}
+    </delete>
+
 </mapper>

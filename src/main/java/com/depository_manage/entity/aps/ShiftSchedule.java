@@ -27,6 +27,9 @@ public class ShiftSchedule {
     /** 备注 */
     private String remark;
 
+    /** MongoDB _id */
+    private String sourceMongoId;
+
     private Date createTime;
     private Date updateTime;
 
