@@ -19,7 +19,7 @@
 <script type="text/html" id="configRowBar">
     <button class="btn btn-sm btn-outline-primary me-1" lay-event="edit">编辑</button>
     <button class="btn btn-sm btn-outline-danger me-1" lay-event="del">删除</button>
-    <button class="btn btn-sm btn-outline-warning" lay-event="toggle">{{ Number(d.status)===1 ? '停用' : '启用' }}</button>
+<!--    <button class="btn btn-sm btn-outline-warning" lay-event="toggle">{{ Number(d.status)===1 ? '停用' : '启用' }}</button>-->
 </script>
 
 <div class="modal fade" id="configModal" tabindex="-1" aria-hidden="true">
@@ -48,7 +48,13 @@ const modal = new bootstrap.Modal(document.getElementById('configModal')); let m
 function safeText(v){return v==null?'':String(v)}
 function formatDateTime(v){if(!v)return '';const d=new Date(v);if(isNaN(d.getTime()))return v;return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`}
 function showMessage(msg){alert(msg)}
-function loadLineOptions(){return $.ajax({url:'/api/model-config/line-options',method:'GET',success:function(res){if(!res||res.code!==200)return showMessage(res?res.msg:'加载产线失败');const options=(res.data||[]).map(i=>`<option value="${i.id}">${safeText(i.lineCode)} - ${safeText(i.lineName)}</option>`).join('');$('#lineId').append(options);$('#formLineId').append(options);}})}
+function loadLineOptions(){return $.ajax({url:'/api/model-config/line-options',method:'GET',success:function(res){if(!res||res.code!==200)return showMessage(res?res.msg:'加载产线失败');
+    const options=(res.data||[])
+        // .map(i=>`<option value="${i.id}">${safeText(i.lineCode)} - ${safeText(i.lineName)}</option>`)
+        .map(i=>`<option value="${i.id}"> ${safeText(i.lineName)}</option>`)
+        .join('');$('#lineId')
+            .append(options);$('#formLineId')
+            .append(options);}})}
 function getRowById(id){return currentRecords.find(item=>String(item.id)===String(id))}
 function openModal(mode,row){modalMode=mode;$('#configForm')[0].reset();$('#id').val('');if(mode==='edit'&&row){$('#modalTitle').text('编辑系列配置');$('#id').val(row.id||'');$('#formLineId').val(String(row.lineId||''));$('#formModel').val(row.model||'');$('#formCapacityPerHour').val(row.capacityPerHour);$('#formSmallChangeoverTime').val(row.smallChangeoverTime);$('#formLargeChangeoverTime').val(row.largeChangeoverTime);$('#formStatus').val(String(row.status==null?1:row.status));$('#formRemark').val(row.remark||'');}else{$('#modalTitle').text('新增系列配置');$('#formStatus').val('1');}modal.show();}
 function collectFormData(){return {id:$('#id').val()||null,lineId:Number($('#formLineId').val()),model:$('#formModel').val().trim(),capacityPerHour:Number($('#formCapacityPerHour').val()),smallChangeoverTime:Number($('#formSmallChangeoverTime').val()),largeChangeoverTime:Number($('#formLargeChangeoverTime').val()),status:Number($('#formStatus').val()),remark:$('#formRemark').val().trim()}}
