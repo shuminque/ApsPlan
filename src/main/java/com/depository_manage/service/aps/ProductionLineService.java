@@ -6,7 +6,7 @@ import java.util.Map;
 
 public interface ProductionLineService {
 
-    Map<String, Object> list(Integer page, Integer size, String lineCode, String lineName);
+    Map<String, Object> list(Integer page, Integer size, String lineName);
 
     boolean add(ProductionLine productionLine);
 

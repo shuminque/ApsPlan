@@ -24,6 +24,9 @@ public class ProductionLine {
     @TableField("workshop")
     private String workshop;
 
+    @TableField("craft")
+    private String craft;
+
     @TableField("status")
     private Integer status;
 
