@@ -9,13 +9,11 @@ import java.util.List;
 @Mapper
 public interface ProductionLineMapper {
 
-    List<ProductionLine> selectPageList(@Param("lineCode") String lineCode,
-                                        @Param("lineName") String lineName,
+    List<ProductionLine> selectPageList(@Param("lineName") String lineName,
                                         @Param("offset") Long offset,
                                         @Param("size") Long size);
 
-    Long selectPageCount(@Param("lineCode") String lineCode,
-                         @Param("lineName") String lineName);
+    Long selectPageCount(@Param("lineName") String lineName);
 
     int insertProductionLine(ProductionLine productionLine);
 

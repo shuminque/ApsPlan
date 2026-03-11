@@ -18,9 +18,8 @@ public class ProductionLineController {
     @GetMapping("/list")
     public Result<Map<String, Object>> list(@RequestParam(defaultValue = "1") Integer page,
                                             @RequestParam(defaultValue = "10") Integer size,
-                                            @RequestParam(required = false) String lineCode,
                                             @RequestParam(required = false) String lineName) {
-        return Result.success(productionLineService.list(page, size, lineCode, lineName));
+        return Result.success(productionLineService.list(page, size, lineName));
     }
 
     @PostMapping("/add")

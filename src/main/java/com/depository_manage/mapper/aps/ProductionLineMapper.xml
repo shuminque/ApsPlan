@@ -10,6 +10,7 @@
         <result column="line_code" property="lineCode"/>
         <result column="line_name" property="lineName"/>
         <result column="workshop" property="workshop"/>
+        <result column="craft" property="craft"/>
         <result column="status" property="status"/>
         <result column="remark" property="remark"/>
         <result column="create_time" property="createTime"/>
@@ -17,16 +18,13 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, line_code, line_name, workshop, status, remark, create_time, update_time
+        id, line_code, line_name, workshop, craft, status, remark, create_time, update_time
     </sql>
 
     <select id="selectPageList" resultMap="ProductionLineResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM production_line
         <where>
-            <if test="lineCode != null and lineCode != ''">
-                AND line_code LIKE CONCAT('%', #{lineCode}, '%')
-            </if>
             <if test="lineName != null and lineName != ''">
                 AND line_name LIKE CONCAT('%', #{lineName}, '%')
             </if>
@@ -39,9 +37,6 @@
         SELECT COUNT(1)
         FROM production_line
         <where>
-            <if test="lineCode != null and lineCode != ''">
-                AND line_code LIKE CONCAT('%', #{lineCode}, '%')
-            </if>
             <if test="lineName != null and lineName != ''">
                 AND line_name LIKE CONCAT('%', #{lineName}, '%')
             </if>
@@ -55,6 +50,7 @@
             <if test="lineCode != null">line_code,</if>
             <if test="lineName != null">line_name,</if>
             <if test="workshop != null">workshop,</if>
+            <if test="craft != null">craft,</if>
             <if test="status != null">status,</if>
             <if test="remark != null">remark,</if>
             create_time,
@@ -64,6 +60,7 @@
             <if test="lineCode != null">#{lineCode},</if>
             <if test="lineName != null">#{lineName},</if>
             <if test="workshop != null">#{workshop},</if>
+            <if test="craft != null">#{craft},</if>
             <if test="status != null">#{status},</if>
             <if test="remark != null">#{remark},</if>
             NOW(),
@@ -77,6 +74,7 @@
             <if test="lineCode != null">line_code = #{lineCode},</if>
             <if test="lineName != null">line_name = #{lineName},</if>
             <if test="workshop != null">workshop = #{workshop},</if>
+            <if test="craft != null">craft = #{craft},</if>
             <if test="status != null">status = #{status},</if>
             <if test="remark != null">remark = #{remark},</if>
             update_time = NOW()

@@ -17,13 +17,13 @@ public class ProductionLineServiceImpl implements ProductionLineService {
     private ProductionLineMapper productionLineMapper;
 
     @Override
-    public Map<String, Object> list(Integer page, Integer size, String lineCode, String lineName) {
+    public Map<String, Object> list(Integer page, Integer size, String lineName) {
         long pageNo = page == null || page < 1 ? 1L : page.longValue();
         long pageSize = size == null || size < 1 ? 10L : size.longValue();
         long offset = (pageNo - 1) * pageSize;
 
-        List<ProductionLine> records = productionLineMapper.selectPageList(lineCode, lineName, offset, pageSize);
-        Long total = productionLineMapper.selectPageCount(lineCode, lineName);
+        List<ProductionLine> records = productionLineMapper.selectPageList(lineName, offset, pageSize);
+        Long total = productionLineMapper.selectPageCount(lineName);
 
         Map<String, Object> pageData = new HashMap<>();
         pageData.put("records", records);
