@@ -191,13 +191,16 @@
     bindDate();
 
     $('#addRow').click(function() {
+      var lastRow = $('#orderTable tbody .order-row:last');
+      var lastCustomer = lastRow.find('.customer-select').val();
       var newRow = $rowTemplate.clone(true);
 
       // input 清空
       newRow.find('input').val('');
 
       // select 处理
-      newRow.find('.customer-select').val('');
+      newRow.find('.customer-select').val(lastCustomer || '');
+      newRow.find('.customer-select').trigger('change.select2');
       newRow.find('.ring-select').val('');
       newRow.find('.model-select')
               .val('')
