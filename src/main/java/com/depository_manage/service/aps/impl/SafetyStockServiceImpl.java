@@ -51,14 +51,14 @@ public class SafetyStockServiceImpl extends ServiceImpl<SafetyStockMapper, Safet
     }
 
     @Override
-    public Result updateCustomerCycle(String customer, BigDecimal stockCycle){
+    public Result updateCustomerCycle(String customer, BigDecimal stockCycle, BigDecimal monthlyStockQty){
         LambdaUpdateWrapper<SafetyStock> wrapper = new LambdaUpdateWrapper<>();
         wrapper.eq(SafetyStock::getCustomer, customer)
                 .set(SafetyStock::getStockCycle, stockCycle)
+                .set(SafetyStock::getMonthlyStockQty, monthlyStockQty)
                 .set(SafetyStock::getUpdatedAt, new Date());
         int updated = safetyStockMapper.update(new SafetyStock(), wrapper);
         return Result.success("更新成功，共修改 " + updated + " 条记录");
     }
 
 }
-

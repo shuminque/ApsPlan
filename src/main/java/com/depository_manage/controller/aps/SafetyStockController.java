@@ -99,9 +99,10 @@ public class SafetyStockController {
 
         Object customerObj = param.get("customer");
         Object stockCycleObj = param.get("stockCycle");
+        Object monthlyStockQtyObj = param.get("monthlyStockQty");
 
-        if (customerObj == null || stockCycleObj == null) {
-            return Result.error("参数缺失：客户或库存周期不能为空");
+        if (customerObj == null || stockCycleObj == null || monthlyStockQtyObj == null) {
+            return Result.error("参数缺失：客户、库存周期或月库存数不能为空");
         }
 
         String customer = customerObj.toString().trim();
@@ -127,7 +128,22 @@ public class SafetyStockController {
             return Result.error("库存周期最多支持两位小数");
         }
 
-        return safetyStockService.updateCustomerCycle(customer, stockCycle);
+        BigDecimal monthlyStockQty;
+        try {
+            monthlyStockQty = new BigDecimal(monthlyStockQtyObj.toString());
+        } catch (Exception e) {
+            return Result.error("月库存数格式不正确，请输入数字（支持两位小数）");
+        }
+
+        if (monthlyStockQty.compareTo(BigDecimal.ZERO) < 0) {
+            return Result.error("月库存数不能为负数");
+        }
+
+        if (monthlyStockQty.scale() > 2) {
+            return Result.error("月库存数最多支持两位小数");
+        }
+
+        return safetyStockService.updateCustomerCycle(customer, stockCycle, monthlyStockQty);
     }
 
 }
