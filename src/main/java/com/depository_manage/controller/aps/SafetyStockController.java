@@ -56,7 +56,26 @@ public class SafetyStockController {
     // 新增/修改
     @PostMapping("/save")
     public boolean save(@RequestBody SafetyStock stock) {
-        return safetyStockService.saveOrUpdate(stock);
+        if (stock.getId() == null) {
+            return safetyStockService.save(stock);
+        }
+
+        LambdaQueryWrapper<SafetyStock> existsWrapper = new LambdaQueryWrapper<>();
+        existsWrapper.eq(SafetyStock::getId, stock.getId());
+        if (safetyStockService.count(existsWrapper) == 0) {
+            return false;
+        }
+
+        return safetyStockService.update()
+                .eq("id", stock.getId())
+                .set(stock.getCustomer() != null, "customer", stock.getCustomer())
+                .set(stock.getOuterInnerRing() != null, "outer_inner_ring", stock.getOuterInnerRing())
+                .set(stock.getModel() != null, "model", stock.getModel())
+                .set(stock.getStockCycle() != null, "stock_cycle", stock.getStockCycle())
+                .set(stock.getMonthlyStockQty() != null, "monthly_stock_qty", stock.getMonthlyStockQty())
+                .set(stock.getIsCustom() != null, "is_custom", stock.getIsCustom())
+                .set("updated_at", new java.util.Date())
+                .update();
     }
 
     // 批量修改库存周期

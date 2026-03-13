@@ -18,6 +18,7 @@ public class SafetyStock {
     private String outerInnerRing;
     private String model;
     private BigDecimal stockCycle; // 单位：月
+    private BigDecimal monthlyStockQty;
     private Boolean isCustom;
 
     private Date createdAt;

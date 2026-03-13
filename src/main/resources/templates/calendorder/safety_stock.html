@@ -133,6 +133,13 @@
         </div>
 
         <div class="layui-form-item">
+            <label class="layui-form-label">月库存数</label>
+            <div class="layui-input-block">
+                <input type="text" name="monthlyStockQty" class="layui-input" placeholder="请输入月库存数">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
             <div class="layui-input-block">
                 <button class="layui-btn" lay-submit lay-filter="editSubmit">确认</button>
             </div>
@@ -174,6 +181,7 @@
         var layer = layui.layer;
         table.render({
             elem: '#safetyStockTable',
+            id: 'safetyStockTable',
             url: '/safety-stock/list',
             method: 'get',
             request: { pageName: 'page', limitName: 'size' },
@@ -190,26 +198,76 @@
                 {field:'outerInnerRing', title:'内外轮', width: '17%'},
                 {field:'model', title:'型号', width: '25%'},
                 {field:'stockCycle', title:'库存周期(月)', edit:'text'},
+                {field:'monthlyStockQty', title:'月库存数', edit:'text'},
                 {field:'updatedAt', title:'更新时间', templet: function(d){ return formatDate(d.updatedAt) },hide:true}
             ]],
             page:true
         });
 
-        // 单元格编辑保存
-        table.on('edit(stockTable)', function(obj){
-            var data = { id: obj.data.id, stockCycle: obj.value };
-            fetch('/safety-stock/save', {
+        function isValidDecimal2(input) {
+            return /^\d+(\.\d{1,2})?$/.test(input);
+        }
+
+        function validateMonthlyStockQty(value) {
+            if (value === undefined || value === null || value === '') {
+                return '月库存数不能为空';
+            }
+            var input = String(value).trim();
+            if (!isValidDecimal2(input)) {
+                return '月库存数必须为数字，且最多两位小数';
+            }
+            var num = Number(input);
+            if (Number.isNaN(num)) {
+                return '月库存数必须为数字';
+            }
+            if (num < 0) {
+                return '月库存数不能为负数';
+            }
+            return '';
+        }
+
+        function saveRow(data) {
+            return fetch('/safety-stock/save', {
                 method:'POST',
                 headers:{'Content-Type':'application/json'},
                 body: JSON.stringify(data)
-            }).then(res => res.json())
-                .then(res => {
-                    if(res.code === 0){
-                        layer.msg('更新成功');
-                    } else {
-                        layer.msg('更新失败: ' + res.msg);
-                    }
-                });
+            }).then(res => res.json());
+        }
+
+        function isSaveSuccess(res) {
+            return res === true || res.code === 0 || res.code === 200;
+        }
+
+        // 单元格编辑保存
+        table.on('edit(stockTable)', function(obj){
+            var field = obj.field;
+            var data = { id: obj.data.id };
+
+            if (field === 'stockCycle') {
+                data.stockCycle = obj.value;
+            } else if (field === 'monthlyStockQty') {
+                var errMsg = validateMonthlyStockQty(obj.value);
+                if (errMsg) {
+                    layer.msg(errMsg);
+                    table.reload('safetyStockTable');
+                    return;
+                }
+                data.monthlyStockQty = obj.value;
+            } else {
+                return;
+            }
+
+            saveRow(data).then(res => {
+                if(isSaveSuccess(res)){
+                    layer.msg('更新成功');
+                } else {
+                    layer.msg('更新失败: ' + res.msg);
+                    table.reload('safetyStockTable');
+                }
+            }).catch(() => {
+                layer.msg('网络异常或服务器错误');
+                table.reload('safetyStockTable');
+            });
         });
         $('#btnUpdateCustomerCycle').on('click', function () {
             var customer = $('select[name="customer"]').val();
@@ -291,6 +349,35 @@
 
             return false; // 阻止表单原生跳转
         });
+        form.on('submit(editSubmit)', function (data) {
+            var field = data.field;
+            var monthlyErr = validateMonthlyStockQty(field.monthlyStockQty);
+            if (monthlyErr) {
+                layer.msg(monthlyErr);
+                return false;
+            }
+
+            saveRow({
+                id: field.id,
+                customer: field.customer,
+                outerInnerRing: field.outerInnerRing,
+                model: field.model,
+                stockCycle: field.stockCycle,
+                monthlyStockQty: field.monthlyStockQty
+            }).then(res => {
+                if (isSaveSuccess(res)) {
+                    layer.msg('保存成功');
+                    layer.closeAll('page');
+                    table.reload('safetyStockTable');
+                } else {
+                    layer.msg('保存失败: ' + res.msg);
+                }
+            }).catch(() => {
+                layer.msg('网络异常或服务器错误');
+            });
+            return false;
+        });
+
         // 查询按钮
         $('#btnSearch').on('click', function(){
             var formData = $('#searchForm').serializeArray();
@@ -299,15 +386,6 @@
             table.reload('safetyStockTable', { where: params, page: { curr: 1 } });
         });
 
-
-        // 监听单元格编辑
-        table.on('edit(stockTable)', function(obj){
-            fetch('/safety-stock/save',{
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify(obj.data)
-            });
-        });
     });
 </script>
 
