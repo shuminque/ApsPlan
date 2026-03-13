@@ -80,6 +80,14 @@
             </div>
         </div>
 
+        <div class="layui-form-item">
+            <label class="layui-form-label">月库存数</label>
+            <div class="layui-input-block">
+                <input type="text" name="monthlyStockQty" class="layui-input"
+                       placeholder="请输入月库存数" lay-verify="required">
+            </div>
+        </div>
+
         <div class="layui-form-item" style="margin-top: 25px; text-align: center;">
             <button class="layui-btn layui-btn-normal" lay-submit lay-filter="customerCycleSubmit">
                 确认修改
@@ -284,7 +292,8 @@
                 success: function () {
                     form.val('customerCycleForm', {
                         customerName: customer,
-                        stockCycle: ''
+                        stockCycle: '',
+                        monthlyStockQty: ''
                     });
                     form.render();
                 }
@@ -294,6 +303,7 @@
             var field = data.field; // 获得表单字段
             var customer = field.customerName;
             var stockCycle = parseFloat(field.stockCycle);
+            var monthlyStockQty = field.monthlyStockQty;
             if (isNaN(stockCycle)) {
                 layer.msg('库存周期必须是数字');
                 return false;
@@ -309,6 +319,13 @@
                 layer.msg('库存周期最多支持两位小数');
                 return false;
             }
+
+            var monthlyErr = validateMonthlyStockQty(monthlyStockQty);
+            if (monthlyErr) {
+                layer.msg(monthlyErr);
+                return false;
+            }
+
             // 显示加载层，防止重复提交
             var loading = layer.load(2);
 
@@ -317,7 +334,8 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     customer: customer,
-                    stockCycle: stockCycle
+                    stockCycle: stockCycle,
+                    monthlyStockQty: monthlyStockQty
                 })
             })
                 .then(res => res.json())

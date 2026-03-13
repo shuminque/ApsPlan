@@ -11,6 +11,5 @@ public interface SafetyStockService extends IService<SafetyStock> {
     List<SafetyStock> treeList(String customer, String outerInnerRing, String model);
     void updateStockCycle(Long id, BigDecimal stockCycle, Boolean applyToChildren);
 
-    Result updateCustomerCycle(String customer, BigDecimal stockCycle);
+    Result updateCustomerCycle(String customer, BigDecimal stockCycle, BigDecimal monthlyStockQty);
 }
-
