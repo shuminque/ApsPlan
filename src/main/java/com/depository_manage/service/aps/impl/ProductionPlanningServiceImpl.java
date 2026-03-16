@@ -8,11 +8,11 @@ import com.depository_manage.entity.aps.SafetyStock;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
-import com.depository_manage.mapper.aps.ShiftScheduleMapper;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.service.aps.ProductionOrderService;
 import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.SafetyStockService;
+import com.depository_manage.service.aps.ShiftCalendarService;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -43,11 +43,11 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     @Resource
     private SafetyStockService safetyStockService;
     @Resource
+    private ShiftCalendarService shiftCalendarService;
+    @Resource
     private ProductionLineModelConfigMapper modelConfigMapper;
     @Resource
     private ProductionLineMapper productionLineMapper;
-    @Resource
-    private ShiftScheduleMapper shiftScheduleMapper;
 
     @Override
     public List<CalendarEventDTO> generatePlanCalendarEvents(String startDate, String endDate) {
@@ -151,7 +151,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         Map<LocalDate, BigDecimal> result = new HashMap<>();
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
-            List<ShiftSchedule> schedules = shiftScheduleMapper.selectByDate(cursor.toString());
+            List<ShiftSchedule> schedules = shiftCalendarService.getSchedulesByDate(cursor.toString());
             BigDecimal hours = schedules.stream()
                     .map(this::calcHours)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
