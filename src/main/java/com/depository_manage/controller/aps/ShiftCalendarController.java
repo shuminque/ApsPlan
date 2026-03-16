@@ -3,6 +3,7 @@ package com.depository_manage.controller.aps;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.service.aps.ProductionPlanningService;
+import com.depository_manage.service.aps.ProductionPlanService;
 import com.depository_manage.service.aps.ShiftCalendarService;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +29,8 @@ public class ShiftCalendarController {
     private ShiftCalendarService shiftCalendarService;
     @Resource
     private ProductionPlanningService productionPlanningService;
+    @Resource
+    private ProductionPlanService productionPlanService;
 
     // 获取日历事件
     @GetMapping("/events")
@@ -56,6 +59,7 @@ public class ShiftCalendarController {
             }
             inserted += shiftCalendarService.addSchedule(schedule);
         }
+        productionPlanService.commitPlan(toCommit);
         PREVIEW_CACHE.remove(session.getId());
         return inserted;
     }

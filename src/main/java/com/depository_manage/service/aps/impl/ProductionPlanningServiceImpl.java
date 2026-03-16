@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -58,7 +59,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
 
         List<ProductionOrder> openOrders = productionOrderService.list(new LambdaQueryWrapper<ProductionOrder>()
-                .ne(ProductionOrder::getStatus, "2")
+                .in(ProductionOrder::getStatus, "待排产", "已排产")
                 .gt(ProductionOrder::getQuantity, 0));
         if (openOrders.isEmpty()) {
             return new ArrayList<>();
@@ -119,7 +120,11 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 continue;
             }
             ProductionOrder any = groupOrders.get(0);
-            int orderQty = groupOrders.stream().map(ProductionOrder::getQuantity).filter(Objects::nonNull).mapToInt(Integer::intValue).sum();
+            int orderQty = groupOrders.stream().mapToInt(order -> {
+                int qty = Optional.ofNullable(order.getQuantity()).orElse(0);
+                int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
+                return Math.max(0, qty - assigned);
+            }).sum();
             // 当前库存暂按 0 处理：现阶段项目未提供可用库存字段，后续可替换为库存服务查询值。
             int currentInventory = 0;
             SafetyStock stock = safetyStockByKey.get(entry.getKey());

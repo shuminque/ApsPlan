@@ -1,13 +1,15 @@
 package com.depository_manage.entity.aps;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
-import java.util.Date; // 切换到传统的 Date
+
+import java.util.Date;
 
 @Data
-@TableName("production_order") // 确保和数据库改名后的表名一致
+@TableName("production_order")
 public class ProductionOrder {
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -17,7 +19,6 @@ public class ProductionOrder {
     private String model;
     private Integer quantity;
 
-    // 使用 java.util.Date
     private Date orderDate;
     private Date deliveryDate;
 
@@ -25,8 +26,12 @@ public class ProductionOrder {
     private String priority;
     private Integer finishedQuantity;
     private String remark;
+    /**
+     * 已分配排产数量，避免重复排产。
+     */
+    @TableField("assigned_quantity")
+    private Integer assignedQuantity;
 
-    // 使用 java.util.Date
     private Date createdAt;
     private Date updatedAt;
 }
