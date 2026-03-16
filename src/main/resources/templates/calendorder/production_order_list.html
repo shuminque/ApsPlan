@@ -178,6 +178,21 @@
     }
 
 
+        function normalizeOrderStatus(status) {
+        if (status === '待排产') return '0';
+        if (status === '已排产') return '1';
+        if (status === '已完成') return '2';
+        return status;
+    }
+
+    function renderOrderStatus(status) {
+        const normalized = normalizeOrderStatus(status);
+        if (normalized === '0') return '<span class="text-primary">待排产</span>';
+        if (normalized === '1') return '<span class="text-success">已排产</span>';
+        if (normalized === '2') return '<span class="text-success">已完成</span>';
+        return '<span class="text-secondary">新建</span>';
+    }
+
     layui.use(['table', 'form','layer','laydate'], function () {
         var table = layui.table;
         var layer = layui.layer;
@@ -224,10 +239,7 @@
                     field: 'status',
                     title: '状态',
                     templet: function (d) {
-                        if (d.status === '0') return '<span class="text-primary">待排产</span>';
-                        if (d.status === '1') return '<span class="text-success">已排产</span>';
-                        if (d.status === '2') return '<span class="text-success">已完成</span>';
-                        return '<span class="text-secondary">新建</span>';
+                        return renderOrderStatus(d.status);
                     }
                 },
                 {field: 'createdAt', title: '创建时间', hide:true,templet: function(d) {return formatDate(d.createdAt);}},
@@ -281,7 +293,7 @@
                             model: data.model,
                             quantity: data.quantity,
                             deliveryDate: formatDateForInput(data.deliveryDate),
-                            status: data.status
+                            status: normalizeOrderStatus(data.status)
                         });
 
                         form.render();
