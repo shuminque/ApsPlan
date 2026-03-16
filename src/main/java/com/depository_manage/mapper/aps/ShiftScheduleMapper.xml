@@ -34,12 +34,10 @@
             DATE_FORMAT(s.endDateTime,   '%Y-%m-%dT%H:%i:%s') AS end,
             DATE_FORMAT(s.startDateTime, '%H:%i:%s') AS startTime,
             DATE_FORMAT(s.endDateTime, '%H:%i:%s') AS endTime,
-CASE s.teamID
-    WHEN '一班' THEN '#1e9fff'
-    WHEN '二班' THEN '#1e9fff'
-    WHEN '三班' THEN '#1e9fff'
-    ELSE '#9f9f43'
-        END AS color
+            ELT((CRC32(IFNULL(s.teamID,'')) % 10) + 1,
+                '#1E9FFF', '#67C23A', '#E6A23C', '#F56C6C', '#8E44AD',
+                '#16A085', '#D35400', '#2C3E50', '#27AE60', '#7F8C8D'
+            ) AS color
     FROM shift_schedule s
     WHERE s.startDateTime BETWEEN #{startDate} AND #{endDate}
     </select>

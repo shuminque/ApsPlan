@@ -10,6 +10,9 @@ import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
+import com.depository_manage.pojo.shift.PlanPreviewDailyDTO;
+import com.depository_manage.pojo.shift.PlanPreviewOrderDTO;
+import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 import com.depository_manage.service.aps.ProductionOrderService;
 import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.SafetyStockService;
@@ -53,17 +56,28 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
     @Override
     public List<CalendarEventDTO> generatePlanCalendarEvents(String startDate, String endDate) {
-        LocalDate start = toLocalDate(startDate);
+        return generatePlanPreview(startDate, endDate).getEvents();
+    }
+
+    @Override
+    public PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate) {
+        LocalDate requestStart = toLocalDate(startDate);
         LocalDate endExclusive = toLocalDate(endDate);
-        if (start == null || endExclusive == null || !start.isBefore(endExclusive)) {
-            return new ArrayList<>();
+        if (requestStart == null || endExclusive == null) {
+            return new PlanPreviewResponseDTO();
+        }
+
+        LocalDate today = LocalDate.now();
+        LocalDate start = requestStart.isBefore(today) ? today : requestStart;
+        if (!start.isBefore(endExclusive)) {
+            endExclusive = start.plusMonths(1);
         }
 
         List<ProductionOrder> openOrders = productionOrderService.list(new LambdaQueryWrapper<ProductionOrder>()
                 .in(ProductionOrder::getStatus, ProductionOrderStatus.openStatusFilterValues())
                 .gt(ProductionOrder::getQuantity, 0));
         if (openOrders.isEmpty()) {
-            return new ArrayList<>();
+            return new PlanPreviewResponseDTO();
         }
 
         List<SafetyStock> safetyStocks = safetyStockService.list();
@@ -77,13 +91,23 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         List<DemandItem> demands = buildDemands(orderByKey, safetyStockByKey);
         if (demands.isEmpty()) {
-            return new ArrayList<>();
+            return new PlanPreviewResponseDTO();
+        }
+
+        LocalDate latestDeliveryExclusive = demands.stream()
+                .map(DemandItem::earliestDeliveryDate)
+                .filter(Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .map(d -> d.plusDays(1))
+                .orElse(endExclusive);
+        if (endExclusive.isBefore(latestDeliveryExclusive)) {
+            endExclusive = latestDeliveryExclusive;
         }
 
         Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, endExclusive);
         Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities();
 
-        List<CalendarEventDTO> plannedEvents = new ArrayList<>();
+        List<PlanSlice> plannedSlices = new ArrayList<>();
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
             final LocalDate day = cursor;
@@ -105,12 +129,17 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     }
                     int assignQty = Math.min(dayCapacity, demand.remaining);
                     demand.remaining -= assignQty;
-                    plannedEvents.add(buildEvent(day, line.lineName, demand, assignQty));
+                    demand.recordPlanDay(day);
+                    plannedSlices.add(new PlanSlice(day, line.lineName, demand.customer, demand.outerInnerRing, demand.model, assignQty));
                 }
             }
             cursor = cursor.plusDays(1);
         }
-        return plannedEvents;
+        PlanPreviewResponseDTO response = new PlanPreviewResponseDTO();
+        response.setEvents(mergeSlicesToEvents(plannedSlices));
+        response.setOrders(buildOrderPreviewRows(demands));
+        response.setDailyOutputs(buildDailyPreviewRows(plannedSlices));
+        return response;
     }
 
     private List<DemandItem> buildDemands(Map<String, List<ProductionOrder>> orderByKey, Map<String, SafetyStock> safetyStockByKey) {
@@ -210,11 +239,82 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return map;
     }
 
-    private CalendarEventDTO buildEvent(LocalDate day, String lineName, DemandItem demand, int quantity) {
+    private List<CalendarEventDTO> mergeSlicesToEvents(List<PlanSlice> slices) {
+        List<CalendarEventDTO> result = new ArrayList<>();
+        if (slices.isEmpty()) {
+            return result;
+        }
+
+        slices.sort(Comparator
+                .comparing(PlanSlice::mergeKey)
+                .thenComparing(s -> s.day));
+
+        PlanSlice current = slices.get(0);
+        LocalDate blockStart = current.day;
+        LocalDate blockEnd = current.day;
+        int blockQty = current.quantity;
+
+        for (int i = 1; i < slices.size(); i++) {
+            PlanSlice next = slices.get(i);
+            boolean sameBlock = current.mergeKey().equals(next.mergeKey())
+                    && blockEnd.plusDays(1).equals(next.day);
+            if (sameBlock) {
+                blockEnd = next.day;
+                blockQty += next.quantity;
+                continue;
+            }
+            result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty));
+            current = next;
+            blockStart = next.day;
+            blockEnd = next.day;
+            blockQty = next.quantity;
+        }
+        result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty));
+        return result;
+    }
+
+    private List<PlanPreviewOrderDTO> buildOrderPreviewRows(List<DemandItem> demands) {
+        List<PlanPreviewOrderDTO> rows = new ArrayList<>();
+        for (DemandItem item : demands) {
+            PlanPreviewOrderDTO row = new PlanPreviewOrderDTO();
+            row.setCustomer(item.customer);
+            row.setOuterInnerRing(item.outerInnerRing);
+            row.setModel(item.model);
+            LocalDate earliest = item.earliestDeliveryDate();
+            row.setEarliestDeliveryDate(earliest == null ? "" : earliest.toString());
+            row.setRequiredQuantity(item.required);
+            row.setPlannedQuantity(item.required - item.remaining);
+            row.setPlannedDays(item.plannedDays.size());
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private List<PlanPreviewDailyDTO> buildDailyPreviewRows(List<PlanSlice> slices) {
+        List<PlanPreviewDailyDTO> rows = new ArrayList<>();
+        slices.sort(Comparator.comparing((PlanSlice s) -> s.day)
+                .thenComparing(s -> s.customer)
+                .thenComparing(s -> s.outerInnerRing)
+                .thenComparing(s -> s.model)
+                .thenComparing(s -> s.lineName));
+        for (PlanSlice slice : slices) {
+            PlanPreviewDailyDTO row = new PlanPreviewDailyDTO();
+            row.setDay(slice.day.toString());
+            row.setLineName(slice.lineName);
+            row.setCustomer(slice.customer);
+            row.setOuterInnerRing(slice.outerInnerRing);
+            row.setModel(slice.model);
+            row.setQuantity(slice.quantity);
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private CalendarEventDTO buildEvent(LocalDate startInclusive, LocalDate endExclusive, PlanSlice slice, int quantity) {
         CalendarEventDTO dto = new CalendarEventDTO();
-        dto.setTitle(String.format("[排产] %s %s/%s %s x %,d", lineName, demand.customer, demand.outerInnerRing, demand.model, quantity));
-        dto.setStart(day.atStartOfDay().format(DATE_TIME_FMT));
-        dto.setEnd(day.plusDays(1).atStartOfDay().format(DATE_TIME_FMT));
+        dto.setTitle(String.format("[排产] %s %s/%s %s x %,d", slice.lineName, slice.customer, slice.outerInnerRing, slice.model, quantity));
+        dto.setStart(startInclusive.atStartOfDay().format(DATE_TIME_FMT));
+        dto.setEnd(endExclusive.atStartOfDay().format(DATE_TIME_FMT));
         dto.setColor(PLAN_COLOR);
         return dto;
     }
@@ -241,6 +341,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final int required;
         private int remaining;
         private final Date earliestDelivery;
+        private final java.util.Set<LocalDate> plannedDays = new java.util.HashSet<>();
         private DemandItem(String customer, String outerInnerRing, String model, int required, Date earliestDelivery) {
             this.customer = customer;
             this.outerInnerRing = outerInnerRing;
@@ -254,8 +355,41 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             if (earliestDelivery == null) {
                 return Integer.MAX_VALUE;
             }
-            LocalDate d = earliestDelivery.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            LocalDate d = earliestDeliveryDate();
             return (int) ChronoUnit.DAYS.between(LocalDate.now(), d);
+        }
+
+        private LocalDate earliestDeliveryDate() {
+            if (earliestDelivery == null) {
+                return null;
+            }
+            return earliestDelivery.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+        }
+
+        private void recordPlanDay(LocalDate day) {
+            plannedDays.add(day);
+        }
+    }
+
+    private static class PlanSlice {
+        private final LocalDate day;
+        private final String lineName;
+        private final String customer;
+        private final String outerInnerRing;
+        private final String model;
+        private final int quantity;
+
+        private PlanSlice(LocalDate day, String lineName, String customer, String outerInnerRing, String model, int quantity) {
+            this.day = day;
+            this.lineName = lineName;
+            this.customer = customer;
+            this.outerInnerRing = outerInnerRing;
+            this.model = model;
+            this.quantity = quantity;
+        }
+
+        private String mergeKey() {
+            return lineName + "|" + customer + "|" + outerInnerRing + "|" + model;
         }
     }
 
