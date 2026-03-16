@@ -44,6 +44,10 @@
 </head>
 <body>
 <div class="container-fluid">
+    <div style="display:flex;gap:16px;align-items:center;padding:10px 0 12px 2px;color:#555;">
+        <span><i class="layui-icon layui-icon-circle-dot" style="color:#1e9fff;"></i> 班次排班</span>
+        <span><i class="layui-icon layui-icon-circle-dot" style="color:#FFB020;"></i> 自动排产(规则优先级)</span>
+    </div>
     <div id="calendar"></div>
 </div>
 <script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
@@ -229,8 +233,9 @@
             eventDataTransform: function(event) {
                 var sTime = event.shiftStartTime || '';
                 var eTime = event.shiftEndTime || '';
+                const isPlanEvent = (event.title || '').startsWith('[排产]');
                 // 2. 重新组合标题： 一班 (08:00:00~17:00:00)
-                if (sTime && eTime) {
+                if (!isPlanEvent && sTime && eTime) {
                     // 显示小时分钟，用 sTime.substring(0, 5)
                     event.title = event.title + " (" + sTime + "~" + eTime + ")";
                 }
