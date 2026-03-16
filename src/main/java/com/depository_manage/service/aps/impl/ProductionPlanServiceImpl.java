@@ -3,6 +3,7 @@ package com.depository_manage.service.aps.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.depository_manage.entity.aps.ProductionLine;
 import com.depository_manage.entity.aps.ProductionOrder;
+import com.depository_manage.entity.aps.ProductionOrderStatus;
 import com.depository_manage.entity.aps.ProductionPlan;
 import com.depository_manage.entity.aps.ProductionPlanItem;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
@@ -116,7 +117,7 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
                 inserted++;
 
                 order.setAssignedQuantity(assigned + assignToOrder);
-                order.setStatus("已排产");
+                order.setStatus(ProductionOrderStatus.PLANNED.getCode());
                 productionOrderMapper.updateById(order);
                 left -= assignToOrder;
             }
@@ -127,7 +128,7 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
 
     private Map<String, List<ProductionOrder>> loadOpenOrdersByKey() {
         List<ProductionOrder> orders = productionOrderMapper.selectList(new LambdaQueryWrapper<ProductionOrder>()
-                .in(ProductionOrder::getStatus, "待排产", "已排产")
+                .in(ProductionOrder::getStatus, ProductionOrderStatus.openStatusFilterValues())
                 .isNotNull(ProductionOrder::getCustomer)
                 .isNotNull(ProductionOrder::getModel)
                 .isNotNull(ProductionOrder::getOuterInnerRing)

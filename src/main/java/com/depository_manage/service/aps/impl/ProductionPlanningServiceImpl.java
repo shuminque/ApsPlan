@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.depository_manage.entity.aps.ProductionLine;
 import com.depository_manage.entity.aps.ProductionLineModelConfig;
 import com.depository_manage.entity.aps.ProductionOrder;
+import com.depository_manage.entity.aps.ProductionOrderStatus;
 import com.depository_manage.entity.aps.SafetyStock;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
@@ -59,7 +60,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
 
         List<ProductionOrder> openOrders = productionOrderService.list(new LambdaQueryWrapper<ProductionOrder>()
-                .in(ProductionOrder::getStatus, "待排产", "已排产")
+                .in(ProductionOrder::getStatus, ProductionOrderStatus.openStatusFilterValues())
                 .gt(ProductionOrder::getQuantity, 0));
         if (openOrders.isEmpty()) {
             return new ArrayList<>();

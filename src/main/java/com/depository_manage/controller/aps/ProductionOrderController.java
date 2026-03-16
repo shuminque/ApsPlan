@@ -3,6 +3,7 @@ package com.depository_manage.controller.aps;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.depository_manage.entity.aps.ProductionOrder;
+import com.depository_manage.entity.aps.ProductionOrderStatus;
 import com.depository_manage.service.aps.ProductionOrderService;
 import com.depository_manage.utils.Result;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,8 +38,8 @@ public class ProductionOrderController {
                 .eq(StringUtils.hasText(orderNo), ProductionOrder::getOrderNo, orderNo)
                 // 客户模糊匹配
                 .like(StringUtils.hasText(customer), ProductionOrder::getCustomer, customer)
-                // 状态精确匹配
-                .eq(StringUtils.hasText(status), ProductionOrder::getStatus, status);
+                // 状态兼容匹配：支持编码与历史中文状态
+                .in(StringUtils.hasText(status), ProductionOrder::getStatus, ProductionOrderStatus.aliasesFor(status));
 
         // 交货期条件
         if (StringUtils.hasText(deliveryDate)) {
