@@ -44,9 +44,14 @@
 </head>
 <body>
 <div class="container-fluid">
-    <div style="display:flex;gap:16px;align-items:center;padding:10px 0 12px 2px;color:#555;">
+    <div style="display:flex;gap:10px;align-items:center;padding:10px 0 8px 2px;">
+        <button class="layui-btn layui-btn-sm" onclick="previewAutoPlan()">自动排产预览</button>
+        <button class="layui-btn layui-btn-normal layui-btn-sm" onclick="commitAutoPlan()">确认写入排产</button>
+        <button class="layui-btn layui-btn-primary layui-btn-sm" onclick="clearAutoPlanPreview()">清除预览</button>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center;padding:0 0 12px 2px;color:#555;">
         <span><i class="layui-icon layui-icon-circle-dot" style="color:#1e9fff;"></i> 班次排班</span>
-        <span><i class="layui-icon layui-icon-circle-dot" style="color:#FFB020;"></i> 自动排产(规则优先级)</span>
+        <span><i class="layui-icon layui-icon-circle-dot" style="color:#FFB020;"></i> 自动排产预览</span>
     </div>
     <div id="calendar"></div>
 </div>
@@ -55,6 +60,7 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
 <script>
     let calendar;
+    let previewEvents = [];
     // --- 工具函数 ---
     const formatTime = (dateTime) => {
         if (!dateTime) return '';
@@ -179,6 +185,73 @@
         });
     }
 
+
+
+    function getCurrentRange() {
+        return {
+            start: calendar.view.activeStart.toISOString(),
+            end: calendar.view.activeEnd.toISOString()
+        };
+    }
+
+    function previewAutoPlan() {
+        const range = getCurrentRange();
+        fetch('/api/shift/plan/preview', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(range)
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('预览失败');
+                return res.json();
+            })
+            .then(data => {
+                previewEvents = data || [];
+                calendar.getEventSourceById('autoPlanPreviewSource').refetch();
+                layer.msg('已生成自动排产预览');
+            })
+            .catch(() => layer.msg('自动排产预览失败'));
+    }
+
+    function commitAutoPlan() {
+        if (!previewEvents.length) {
+            layer.msg('当前没有可写入的预览数据');
+            return;
+        }
+        fetch('/api/shift/plan/commit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(previewEvents)
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('写入失败');
+                return res.text();
+            })
+            .then(() => {
+                previewEvents = [];
+                calendar.getEventSourceById('autoPlanPreviewSource').refetch();
+                calendar.getEventSourceById('shiftScheduleSource').refetch();
+                layer.msg('自动排产已写入班次排班');
+            })
+            .catch(() => layer.msg('写入排产失败'));
+    }
+
+    function clearAutoPlanPreview() {
+        fetch('/api/shift/plan/preview', {
+            method: 'DELETE'
+        })
+            .then(() => {
+                previewEvents = [];
+                calendar.getEventSourceById('autoPlanPreviewSource').refetch();
+                layer.msg('已清除预览');
+            })
+            .catch(() => layer.msg('清除预览失败'));
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var calendarEl = document.getElementById('calendar');
 
@@ -196,12 +269,27 @@
             selectable: true,
             editable: false,
 
-            events: function(fetchInfo, successCallback, failureCallback) {
-                fetch('/api/shift/events?start=' + fetchInfo.startStr + '&end=' + fetchInfo.endStr)
-                    .then(res => res.json())
-                    .then(data => successCallback(data))
-                    .catch(err => failureCallback(err));
-            },
+            eventSources: [
+                {
+                    id: 'shiftScheduleSource',
+                    events: function(fetchInfo, successCallback, failureCallback) {
+                        fetch('/api/shift/events?start=' + fetchInfo.startStr + '&end=' + fetchInfo.endStr)
+                            .then(res => res.json())
+                            .then(data => successCallback(data.map(item => ({...item, sourceType: 'shift'}))))
+                            .catch(err => failureCallback(err));
+                    }
+                },
+                {
+                    id: 'autoPlanPreviewSource',
+                    events: function(fetchInfo, successCallback) {
+                        successCallback(previewEvents.map(item => ({
+                            ...item,
+                            sourceType: 'preview',
+                            color: item.color || '#FFB020'
+                        })));
+                    }
+                }
+            ],
 
             dayCellContent: function (arg) {
                 const d = arg.date;
