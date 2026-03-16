@@ -51,7 +51,7 @@
     </div>
     <div style="display:flex;gap:16px;align-items:center;padding:0 0 12px 2px;color:#555;">
         <span><i class="layui-icon layui-icon-circle-dot" style="color:#1e9fff;"></i> 班次排班</span>
-        <span><i class="layui-icon layui-icon-tabs" style="color:#FFB020;"></i> 自动排产预览（弹窗明细）</span>
+        <span><i class="layui-icon layui-icon-circle-dot" style="color:#FFB020;"></i> 自动排产预览</span>
     </div>
     <div id="calendar"></div>
 </div>
@@ -60,7 +60,7 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
 <script>
     let calendar;
-    let previewPlanData = null;
+    let previewEvents = [];
     // --- 工具函数 ---
     const formatTime = (dateTime) => {
         if (!dateTime) return '';
@@ -208,78 +208,15 @@
                 return res.json();
             })
             .then(data => {
-                previewPlanData = data || {events: [], orders: [], dailyOutputs: []};
-                openPlanPreviewDialog(previewPlanData);
+                previewEvents = data || [];
+                calendar.getEventSourceById('autoPlanPreviewSource').refetch();
+                layer.msg('已生成自动排产预览');
             })
             .catch(() => layer.msg('自动排产预览失败'));
     }
 
-    function openPlanPreviewDialog(data) {
-        const orders = data.orders || [];
-        const dailyOutputs = data.dailyOutputs || [];
-
-        const orderRows = orders.map(item => `
-            <tr>
-                <td>${item.customer || ''}</td>
-                <td>${item.outerInnerRing || ''}</td>
-                <td>${item.model || ''}</td>
-                <td>${item.earliestDeliveryDate || ''}</td>
-                <td>${item.requiredQuantity || 0}</td>
-                <td>${item.plannedQuantity || 0}</td>
-                <td>${item.plannedDays || 0}</td>
-            </tr>
-        `).join('');
-
-        const dailyRows = dailyOutputs.map(item => `
-            <tr>
-                <td>${item.day || ''}</td>
-                <td>${item.lineName || ''}</td>
-                <td>${item.customer || ''}</td>
-                <td>${item.outerInnerRing || ''}</td>
-                <td>${item.model || ''}</td>
-                <td>${item.quantity || 0}</td>
-            </tr>
-        `).join('');
-
-        layer.open({
-            type: 1,
-            title: '自动排产预览分解',
-            area: ['1200px', '760px'],
-            maxmin: true,
-            btn: ['确认写入排产', '关闭'],
-            content: `
-                <div style="padding: 12px; max-height: 650px; overflow: auto;">
-                    <div style="margin-bottom: 8px; font-weight: 700;">待排产订单汇总</div>
-                    <table class="layui-table">
-                        <thead>
-                            <tr>
-                                <th>客户</th><th>内外圈</th><th>型号</th><th>最早交期</th><th>需求数量</th><th>已计划数量</th><th>计划天数</th>
-                            </tr>
-                        </thead>
-                        <tbody>${orderRows || '<tr><td colspan="7" style="text-align:center;color:#999;">无可排产需求</td></tr>'}</tbody>
-                    </table>
-
-                    <div style="margin: 14px 0 8px; font-weight: 700;">每日排产明细</div>
-                    <table class="layui-table">
-                        <thead>
-                            <tr>
-                                <th>日期</th><th>产线</th><th>客户</th><th>内外圈</th><th>型号</th><th>当日产量</th>
-                            </tr>
-                        </thead>
-                        <tbody>${dailyRows || '<tr><td colspan="6" style="text-align:center;color:#999;">暂无排产结果</td></tr>'}</tbody>
-                    </table>
-                </div>
-            `,
-            yes: function(index) {
-                commitAutoPlan();
-                layer.close(index);
-            }
-        });
-    }
-
     function commitAutoPlan() {
-        const events = (previewPlanData && previewPlanData.events) || [];
-        if (!events.length) {
+        if (!previewEvents.length) {
             layer.msg('当前没有可写入的预览数据');
             return;
         }
@@ -288,14 +225,15 @@
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(events)
+            body: JSON.stringify(previewEvents)
         })
             .then(res => {
                 if (!res.ok) throw new Error('写入失败');
                 return res.text();
             })
             .then(() => {
-                previewPlanData = null;
+                previewEvents = [];
+                calendar.getEventSourceById('autoPlanPreviewSource').refetch();
                 calendar.getEventSourceById('shiftScheduleSource').refetch();
                 layer.msg('自动排产已写入班次排班');
             })
@@ -307,7 +245,8 @@
             method: 'DELETE'
         })
             .then(() => {
-                previewPlanData = null;
+                previewEvents = [];
+                calendar.getEventSourceById('autoPlanPreviewSource').refetch();
                 layer.msg('已清除预览');
             })
             .catch(() => layer.msg('清除预览失败'));
@@ -338,6 +277,16 @@
                             .then(res => res.json())
                             .then(data => successCallback(data.map(item => ({...item, sourceType: 'shift'}))))
                             .catch(err => failureCallback(err));
+                    }
+                },
+                {
+                    id: 'autoPlanPreviewSource',
+                    events: function(fetchInfo, successCallback) {
+                        successCallback(previewEvents.map(item => ({
+                            ...item,
+                            sourceType: 'preview',
+                            color: item.color || '#FFB020'
+                        })));
                     }
                 }
             ],

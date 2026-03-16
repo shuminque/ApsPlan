@@ -2,7 +2,6 @@ package com.depository_manage.controller.aps;
 
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
-import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.ProductionPlanService;
 import com.depository_manage.service.aps.ShiftCalendarService;
@@ -40,10 +39,10 @@ public class ShiftCalendarController {
     }
 
     @PostMapping("/plan/preview")
-    public PlanPreviewResponseDTO previewPlan(@RequestBody PlanRangeRequest request, HttpSession session) {
-        PlanPreviewResponseDTO preview = productionPlanningService.generatePlanPreview(request.getStart(), request.getEnd());
-        PREVIEW_CACHE.put(session.getId(), preview.getEvents());
-        return preview;
+    public List<CalendarEventDTO> previewPlan(@RequestBody PlanRangeRequest request, HttpSession session) {
+        List<CalendarEventDTO> previewEvents = productionPlanningService.generatePlanCalendarEvents(request.getStart(), request.getEnd());
+        PREVIEW_CACHE.put(session.getId(), previewEvents);
+        return previewEvents;
     }
 
     @PostMapping("/plan/commit")

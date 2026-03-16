@@ -10,9 +10,6 @@ import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
-import com.depository_manage.pojo.shift.PlanPreviewDailyDTO;
-import com.depository_manage.pojo.shift.PlanPreviewOrderDTO;
-import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 import com.depository_manage.service.aps.ProductionOrderService;
 import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.SafetyStockService;
@@ -72,7 +69,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 .in(ProductionOrder::getStatus, ProductionOrderStatus.openStatusFilterValues())
                 .gt(ProductionOrder::getQuantity, 0));
         if (openOrders.isEmpty()) {
-            return new PlanPreviewResponseDTO();
+            return new ArrayList<>();
         }
 
         List<SafetyStock> safetyStocks = safetyStockService.list();
@@ -86,17 +83,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         List<DemandItem> demands = buildDemands(orderByKey, safetyStockByKey);
         if (demands.isEmpty()) {
-            return new PlanPreviewResponseDTO();
-        }
-
-        LocalDate latestDeliveryExclusive = demands.stream()
-                .map(DemandItem::earliestDeliveryDate)
-                .filter(Objects::nonNull)
-                .max(LocalDate::compareTo)
-                .map(d -> d.plusDays(1))
-                .orElse(endExclusive);
-        if (endExclusive.isBefore(latestDeliveryExclusive)) {
-            endExclusive = latestDeliveryExclusive;
+            return new ArrayList<>();
         }
 
         LocalDate latestDeliveryExclusive = demands.stream()
@@ -304,7 +291,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final int required;
         private int remaining;
         private final Date earliestDelivery;
-        private final java.util.Set<LocalDate> plannedDays = new java.util.HashSet<>();
         private DemandItem(String customer, String outerInnerRing, String model, int required, Date earliestDelivery) {
             this.customer = customer;
             this.outerInnerRing = outerInnerRing;
