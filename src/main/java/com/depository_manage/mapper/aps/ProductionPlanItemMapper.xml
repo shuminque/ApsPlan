@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.depository_manage.mapper.aps.ProductionPlanItemMapper">
+
+    <resultMap id="ProductionPlanItemResultMap" type="com.depository_manage.entity.aps.ProductionPlanItem">
+        <id column="id" property="id"/>
+        <result column="plan_id" property="planId"/>
+        <result column="plan_batch_no" property="planBatchNo"/>
+        <result column="order_id" property="orderId"/>
+        <result column="customer" property="customer"/>
+        <result column="model" property="model"/>
+        <result column="outer_inner_ring" property="outerInnerRing"/>
+        <result column="line_id" property="lineId"/>
+        <result column="line_name" property="lineName"/>
+        <result column="start_date" property="startDate"/>
+        <result column="end_date" property="endDate"/>
+        <result column="assign_qty" property="assignQty"/>
+        <result column="source" property="source"/>
+        <result column="create_time" property="createdAt"/>
+        <result column="update_time" property="updatedAt"/>
+    </resultMap>
+
+</mapper>
