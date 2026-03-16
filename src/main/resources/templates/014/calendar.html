@@ -328,10 +328,6 @@
                     event.title = event.title + " (" + sTime + "~" + eTime + ")";
                 }
 
-                // 3. 处理月视图不跨行显示
-                if (calendar.view.type === 'dayGridMonth') {
-                    event.end = null;
-                }
                 return event;
             },
 
