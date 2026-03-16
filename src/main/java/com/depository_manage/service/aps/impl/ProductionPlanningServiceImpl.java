@@ -56,15 +56,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
     @Override
     public List<CalendarEventDTO> generatePlanCalendarEvents(String startDate, String endDate) {
-        return generatePlanPreview(startDate, endDate).getEvents();
-    }
-
-    @Override
-    public PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate) {
         LocalDate requestStart = toLocalDate(startDate);
         LocalDate endExclusive = toLocalDate(endDate);
         if (requestStart == null || endExclusive == null) {
-            return new PlanPreviewResponseDTO();
+            return new ArrayList<>();
         }
 
         LocalDate today = LocalDate.now();
@@ -104,6 +99,16 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             endExclusive = latestDeliveryExclusive;
         }
 
+        LocalDate latestDeliveryExclusive = demands.stream()
+                .map(DemandItem::earliestDeliveryDate)
+                .filter(Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .map(d -> d.plusDays(1))
+                .orElse(endExclusive);
+        if (endExclusive.isBefore(latestDeliveryExclusive)) {
+            endExclusive = latestDeliveryExclusive;
+        }
+
         Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, endExclusive);
         Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities();
 
@@ -129,17 +134,12 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     }
                     int assignQty = Math.min(dayCapacity, demand.remaining);
                     demand.remaining -= assignQty;
-                    demand.recordPlanDay(day);
                     plannedSlices.add(new PlanSlice(day, line.lineName, demand.customer, demand.outerInnerRing, demand.model, assignQty));
                 }
             }
             cursor = cursor.plusDays(1);
         }
-        PlanPreviewResponseDTO response = new PlanPreviewResponseDTO();
-        response.setEvents(mergeSlicesToEvents(plannedSlices));
-        response.setOrders(buildOrderPreviewRows(demands));
-        response.setDailyOutputs(buildDailyPreviewRows(plannedSlices));
-        return response;
+        return mergeSlicesToEvents(plannedSlices);
     }
 
     private List<DemandItem> buildDemands(Map<String, List<ProductionOrder>> orderByKey, Map<String, SafetyStock> safetyStockByKey) {
@@ -273,43 +273,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return result;
     }
 
-    private List<PlanPreviewOrderDTO> buildOrderPreviewRows(List<DemandItem> demands) {
-        List<PlanPreviewOrderDTO> rows = new ArrayList<>();
-        for (DemandItem item : demands) {
-            PlanPreviewOrderDTO row = new PlanPreviewOrderDTO();
-            row.setCustomer(item.customer);
-            row.setOuterInnerRing(item.outerInnerRing);
-            row.setModel(item.model);
-            LocalDate earliest = item.earliestDeliveryDate();
-            row.setEarliestDeliveryDate(earliest == null ? "" : earliest.toString());
-            row.setRequiredQuantity(item.required);
-            row.setPlannedQuantity(item.required - item.remaining);
-            row.setPlannedDays(item.plannedDays.size());
-            rows.add(row);
-        }
-        return rows;
-    }
-
-    private List<PlanPreviewDailyDTO> buildDailyPreviewRows(List<PlanSlice> slices) {
-        List<PlanPreviewDailyDTO> rows = new ArrayList<>();
-        slices.sort(Comparator.comparing((PlanSlice s) -> s.day)
-                .thenComparing(s -> s.customer)
-                .thenComparing(s -> s.outerInnerRing)
-                .thenComparing(s -> s.model)
-                .thenComparing(s -> s.lineName));
-        for (PlanSlice slice : slices) {
-            PlanPreviewDailyDTO row = new PlanPreviewDailyDTO();
-            row.setDay(slice.day.toString());
-            row.setLineName(slice.lineName);
-            row.setCustomer(slice.customer);
-            row.setOuterInnerRing(slice.outerInnerRing);
-            row.setModel(slice.model);
-            row.setQuantity(slice.quantity);
-            rows.add(row);
-        }
-        return rows;
-    }
-
     private CalendarEventDTO buildEvent(LocalDate startInclusive, LocalDate endExclusive, PlanSlice slice, int quantity) {
         CalendarEventDTO dto = new CalendarEventDTO();
         dto.setTitle(String.format("[排产] %s %s/%s %s x %,d", slice.lineName, slice.customer, slice.outerInnerRing, slice.model, quantity));
@@ -364,10 +327,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 return null;
             }
             return earliestDelivery.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-        }
-
-        private void recordPlanDay(LocalDate day) {
-            plannedDays.add(day);
         }
     }
 

@@ -379,10 +379,6 @@
                     event.title = event.title + " (" + sTime + "~" + eTime + ")";
                 }
 
-                if (!isPlanEvent && calendar.view.type === 'dayGridMonth') {
-                    event.end = null;
-                }
-
                 return event;
             },
 
