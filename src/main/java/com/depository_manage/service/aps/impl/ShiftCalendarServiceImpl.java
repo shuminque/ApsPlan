@@ -3,6 +3,7 @@ package com.depository_manage.service.aps.impl;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ShiftScheduleMapper;
+import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.ShiftCalendarService;
 import org.springframework.stereotype.Service;
 
@@ -24,10 +25,14 @@ public class ShiftCalendarServiceImpl implements ShiftCalendarService {
 
     @Resource
     private ShiftScheduleMapper shiftScheduleMapper;
+    @Resource
+    private ProductionPlanningService productionPlanningService;
 
     @Override
     public List<CalendarEventDTO> getCalendarEvents(String startDate, String endDate) {
-        return shiftScheduleMapper.selectCalendarEvents(startDate, endDate);
+        List<CalendarEventDTO> events = shiftScheduleMapper.selectCalendarEvents(startDate, endDate);
+        events.addAll(productionPlanningService.generatePlanCalendarEvents(startDate, endDate));
+        return events;
     }
 
     @Override
