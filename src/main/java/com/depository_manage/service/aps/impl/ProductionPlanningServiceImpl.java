@@ -28,6 +28,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -121,7 +122,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 if (demand.remaining <= 0) {
                     continue;
                 }
-                List<LineCapacity> lines = lineCapByModel.getOrDefault(demand.model, new ArrayList<>());
+                List<LineCapacity> lines = findMatchingLines(demand.model, lineCapByModel);
                 for (LineCapacity line : lines) {
                     if (demand.remaining <= 0) {
                         break;
@@ -237,12 +238,54 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             if (cfg.getModel() == null || cfg.getCapacityPerHour() == null || cfg.getLineId() == null) {
                 continue;
             }
+            String configModel = cfg.getModel().trim();
+            if (configModel.isEmpty()) {
+                continue;
+            }
             String lineName = lineNameById.getOrDefault(cfg.getLineId(), "产线" + cfg.getLineId());
-            map.computeIfAbsent(cfg.getModel(), k -> new ArrayList<>())
-                    .add(new LineCapacity(cfg.getLineId(), lineName, cfg.getCapacityPerHour()));
+            map.computeIfAbsent(configModel, k -> new ArrayList<>())
+                    .add(new LineCapacity(cfg.getLineId(), lineName, configModel, cfg.getCapacityPerHour(), cfg.getPriority()));
         }
-        map.values().forEach(list -> list.sort(Comparator.comparing(l -> l.lineId)));
+        map.values().forEach(this::sortLineCapacities);
         return map;
+    }
+
+    List<LineCapacity> findMatchingLines(String demandModel, Map<String, List<LineCapacity>> lineCapByModel) {
+        if (demandModel == null || demandModel.trim().isEmpty() || lineCapByModel == null || lineCapByModel.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String normalizedDemandModel = demandModel.trim();
+        List<LineCapacity> exactMatches = lineCapByModel.get(normalizedDemandModel);
+        if (exactMatches != null && !exactMatches.isEmpty()) {
+            List<LineCapacity> sortedExactMatches = new ArrayList<>(exactMatches);
+            sortLineCapacities(sortedExactMatches);
+            return sortedExactMatches;
+        }
+
+        List<LineCapacity> seriesMatches = new ArrayList<>();
+        for (Map.Entry<String, List<LineCapacity>> entry : lineCapByModel.entrySet()) {
+            String configModel = entry.getKey();
+            if (!isSeriesMatch(normalizedDemandModel, configModel)) {
+                continue;
+            }
+            seriesMatches.addAll(entry.getValue());
+        }
+        sortLineCapacities(seriesMatches);
+        return seriesMatches;
+    }
+
+    private boolean isSeriesMatch(String demandModel, String configModel) {
+        if (configModel == null || configModel.trim().isEmpty()) {
+            return false;
+        }
+        String normalizedConfigModel = configModel.trim();
+        return demandModel.startsWith(normalizedConfigModel);
+    }
+
+    private void sortLineCapacities(List<LineCapacity> lineCapacities) {
+        lineCapacities.sort(Comparator
+                .comparing((LineCapacity l) -> l.priority, Comparator.nullsLast(Integer::compareTo))
+                .thenComparing(l -> l.lineId));
     }
 
     private List<CalendarEventDTO> mergeSlicesToEvents(List<PlanSlice> slices) {
@@ -426,15 +469,27 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
     }
 
-    private static class LineCapacity {
+    static class LineCapacity {
         private final Long lineId;
         private final String lineName;
+        private final String model;
         private final BigDecimal capacityPerHour;
+        private final Integer priority;
 
-        private LineCapacity(Long lineId, String lineName, BigDecimal capacityPerHour) {
+        private LineCapacity(Long lineId, String lineName, String model, BigDecimal capacityPerHour, Integer priority) {
             this.lineId = lineId;
             this.lineName = lineName;
+            this.model = model;
             this.capacityPerHour = capacityPerHour;
+            this.priority = priority;
+        }
+
+        static LineCapacity of(Long lineId, String lineName, String model, BigDecimal capacityPerHour, Integer priority) {
+            return new LineCapacity(lineId, lineName, model, capacityPerHour, priority);
+        }
+
+        Long getLineId() {
+            return lineId;
         }
     }
 }
