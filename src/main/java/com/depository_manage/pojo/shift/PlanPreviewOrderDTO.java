@@ -8,6 +8,7 @@ public class PlanPreviewOrderDTO {
     private String outerInnerRing;
     private String model;
     private String earliestDeliveryDate;
+    private Integer currentInventory;
     private Integer requiredQuantity;
     private Integer plannedQuantity;
     private Integer plannedDays;

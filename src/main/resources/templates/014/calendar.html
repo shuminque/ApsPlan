@@ -224,6 +224,7 @@
                 <td>${item.outerInnerRing || ''}</td>
                 <td>${item.model || ''}</td>
                 <td>${item.earliestDeliveryDate || ''}</td>
+                <td>${item.currentInventory || 0}</td>
                 <td>${item.requiredQuantity || 0}</td>
                 <td>${item.plannedQuantity || 0}</td>
                 <td>${item.plannedDays || 0}</td>
@@ -253,10 +254,10 @@
                     <table class="layui-table">
                         <thead>
                             <tr>
-                                <th>客户</th><th>内外圈</th><th>型号</th><th>最早交期</th><th>需求数量</th><th>已计划数量</th><th>计划天数</th>
+                                <th>客户</th><th>内外圈</th><th>型号</th><th>最早交期</th><th>在库数量</th><th>需求数量</th><th>已计划数量</th><th>计划天数</th>
                             </tr>
                         </thead>
-                        <tbody>${orderRows || '<tr><td colspan="7" style="text-align:center;color:#999;">无可排产需求</td></tr>'}</tbody>
+                        <tbody>${orderRows || '<tr><td colspan="8" style="text-align:center;color:#999;">无可排产需求</td></tr>'}</tbody>
                     </table>
 
                     <div style="margin: 14px 0 8px; font-weight: 700;">每日排产明细</div>
