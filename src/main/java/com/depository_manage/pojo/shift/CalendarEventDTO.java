@@ -12,6 +12,4 @@ public class CalendarEventDTO {
     private String shiftStartTime;
     private String shiftEndTime;
     private String color;    // 颜色
-    private String eventType; // SHIFT / PLAN
-    private String source;    // 来源标识
 }

@@ -23,42 +23,4 @@
         <result column="update_time" property="updatedAt"/>
     </resultMap>
 
-    <resultMap id="PlanCalendarEventResultMap" type="com.depository_manage.pojo.shift.CalendarEventDTO">
-        <id column="id" property="id"/>
-        <result column="title" property="title"/>
-        <result column="start" property="start"/>
-        <result column="end" property="end"/>
-        <result column="startTime" property="shiftStartTime"/>
-        <result column="endTime" property="shiftEndTime"/>
-        <result column="color" property="color"/>
-        <result column="eventType" property="eventType"/>
-        <result column="source" property="source"/>
-    </resultMap>
-
-    <select id="selectPlanCalendarEvents" resultMap="PlanCalendarEventResultMap">
-        SELECT
-            ppi.id,
-            CONCAT('[计划] ',
-                   IFNULL(ppi.line_name, '产线'),
-                   ' ',
-                   IFNULL(ppi.customer, ''),
-                   '/',
-                   IFNULL(ppi.outer_inner_ring, ''),
-                   ' ',
-                   IFNULL(ppi.model, ''),
-                   ' x ',
-                   FORMAT(IFNULL(ppi.assign_qty, 0), 0)) AS title,
-            DATE_FORMAT(ppi.start_date, '%Y-%m-%dT%H:%i:%s') AS start,
-            DATE_FORMAT(ppi.end_date, '%Y-%m-%dT%H:%i:%s') AS end,
-            DATE_FORMAT(ppi.start_date, '%H:%i:%s') AS startTime,
-            DATE_FORMAT(ppi.end_date, '%H:%i:%s') AS endTime,
-            '#9B59B6' AS color,
-            'PLAN' AS eventType,
-            IFNULL(ppi.source, 'PRODUCTION_PLAN_ITEM') AS source
-        FROM production_plan_item ppi
-        WHERE ppi.start_date &lt;= #{endDate}
-          AND ppi.end_date &gt;= #{startDate}
-        ORDER BY ppi.start_date, ppi.id
-    </select>
-
 </mapper>

@@ -2,7 +2,6 @@ package com.depository_manage.service.aps.impl;
 
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.entity.aps.ShiftSchedule;
-import com.depository_manage.mapper.aps.ProductionPlanItemMapper;
 import com.depository_manage.mapper.aps.ShiftScheduleMapper;
 import com.depository_manage.service.aps.ShiftCalendarService;
 import org.springframework.stereotype.Service;
@@ -15,8 +14,6 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Date;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,16 +24,10 @@ public class ShiftCalendarServiceImpl implements ShiftCalendarService {
 
     @Resource
     private ShiftScheduleMapper shiftScheduleMapper;
-    @Resource
-    private ProductionPlanItemMapper productionPlanItemMapper;
 
     @Override
     public List<CalendarEventDTO> getCalendarEvents(String startDate, String endDate) {
-        List<CalendarEventDTO> merged = new ArrayList<>();
-        merged.addAll(shiftScheduleMapper.selectCalendarEvents(startDate, endDate));
-        merged.addAll(productionPlanItemMapper.selectPlanCalendarEvents(startDate, endDate));
-        merged.sort(Comparator.comparing(CalendarEventDTO::getStart, Comparator.nullsLast(String::compareTo)));
-        return merged;
+        return shiftScheduleMapper.selectCalendarEvents(startDate, endDate);
     }
 
     @Override
