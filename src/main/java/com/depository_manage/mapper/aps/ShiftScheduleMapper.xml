@@ -13,6 +13,8 @@
         <result column="startTime" property="shiftStartTime" />
         <result column="endTime" property="shiftEndTime" />
         <result column="color" property="color" />
+        <result column="eventType" property="eventType" />
+        <result column="source" property="source" />
     </resultMap>
     <resultMap id="ShiftScheduleResultMap" type="com.depository_manage.entity.aps.ShiftSchedule">
         <id property="scheduleId" column="scheduleId" />
@@ -37,7 +39,9 @@
             ELT((CRC32(IFNULL(s.teamID,'')) % 10) + 1,
                 '#1E9FFF', '#67C23A', '#E6A23C', '#F56C6C', '#8E44AD',
                 '#16A085', '#D35400', '#2C3E50', '#27AE60', '#7F8C8D'
-            ) AS color
+            ) AS color,
+            'SHIFT' AS eventType,
+            'SHIFT_SCHEDULE' AS source
     FROM shift_schedule s
     WHERE s.startDateTime BETWEEN #{startDate} AND #{endDate}
     </select>
