@@ -13,6 +13,7 @@
         <result column="capacity_per_hour" property="capacityPerHour"/>
         <result column="small_changeover_time" property="smallChangeoverTime"/>
         <result column="large_changeover_time" property="largeChangeoverTime"/>
+        <result column="priority" property="priority"/>
         <result column="status" property="status"/>
         <result column="remark" property="remark"/>
         <result column="create_time" property="createTime"/>
@@ -33,6 +34,7 @@
                c.capacity_per_hour,
                c.small_changeover_time,
                c.large_changeover_time,
+               c.priority,
                c.status,
                c.remark,
                c.create_time,
@@ -67,12 +69,13 @@
     <insert id="insertModelConfig" parameterType="com.depository_manage.entity.aps.ProductionLineModelConfig"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO production_line_model_config
-            (line_id, model, capacity_per_hour, small_changeover_time, large_changeover_time, status, remark, create_time, update_time)
+            (line_id, model, capacity_per_hour, small_changeover_time, large_changeover_time, priority, status, remark, create_time, update_time)
         VALUES (#{lineId},
                 #{model},
                 #{capacityPerHour},
                 #{smallChangeoverTime},
                 #{largeChangeoverTime},
+                #{priority},
                 #{status},
                 #{remark},
                 NOW(),
@@ -87,6 +90,7 @@
             <if test="capacityPerHour != null">capacity_per_hour = #{capacityPerHour},</if>
             <if test="smallChangeoverTime != null">small_changeover_time = #{smallChangeoverTime},</if>
             <if test="largeChangeoverTime != null">large_changeover_time = #{largeChangeoverTime},</if>
+            <if test="priority != null">priority = #{priority},</if>
             <if test="status != null">status = #{status},</if>
             <if test="remark != null">remark = #{remark},</if>
             update_time = NOW()

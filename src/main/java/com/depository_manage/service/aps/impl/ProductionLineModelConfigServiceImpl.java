@@ -37,6 +37,9 @@ public class ProductionLineModelConfigServiceImpl implements ProductionLineModel
         if (modelConfig.getStatus() == null) {
             modelConfig.setStatus(1);
         }
+        if (modelConfig.getPriority() == null) {
+            modelConfig.setPriority(0);
+        }
         return productionLineModelConfigMapper.insertModelConfig(modelConfig) > 0;
     }
 
