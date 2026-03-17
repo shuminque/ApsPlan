@@ -10,11 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,7 +19,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequestMapping("/api/shift")
 public class ShiftCalendarController {
 
-    private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final Map<String, List<CalendarEventDTO>> PREVIEW_CACHE = new ConcurrentHashMap<>();
 
     @Resource
@@ -52,17 +47,9 @@ public class ShiftCalendarController {
         if (toCommit == null || toCommit.isEmpty()) {
             toCommit = PREVIEW_CACHE.getOrDefault(session.getId(), new ArrayList<>());
         }
-        int inserted = 0;
-        for (CalendarEventDTO event : toCommit) {
-            ShiftSchedule schedule = toShiftSchedule(event);
-            if (schedule == null) {
-                continue;
-            }
-            inserted += shiftCalendarService.addSchedule(schedule);
-        }
-        productionPlanService.commitPlan(toCommit);
+        int committed = productionPlanService.commitPlan(toCommit);
         PREVIEW_CACHE.remove(session.getId());
-        return inserted;
+        return committed;
     }
 
     @DeleteMapping("/plan/preview")
@@ -101,31 +88,6 @@ public class ShiftCalendarController {
     @PostMapping("/day/save")
     public void saveDay(@RequestBody List<ShiftSchedule> list) {
         shiftCalendarService.saveDaySchedules(list);
-    }
-
-    private ShiftSchedule toShiftSchedule(CalendarEventDTO event) {
-        if (event == null || event.getStart() == null || event.getEnd() == null) {
-            return null;
-        }
-        LocalDateTime start = LocalDateTime.parse(event.getStart(), DATE_TIME_FMT);
-        LocalDateTime end = LocalDateTime.parse(event.getEnd(), DATE_TIME_FMT);
-        ShiftSchedule schedule = new ShiftSchedule();
-        schedule.setTeamID(trimPlanPrefix(event.getTitle()));
-        schedule.setScheduleDate(Date.from(start.toLocalDate().atStartOfDay(ZoneId.systemDefault()).toInstant()));
-        schedule.setStartDateTime(Date.from(start.atZone(ZoneId.systemDefault()).toInstant()));
-        schedule.setEndDateTime(Date.from(end.atZone(ZoneId.systemDefault()).toInstant()));
-        return schedule;
-    }
-
-    private String trimPlanPrefix(String title) {
-        if (title == null) {
-            return "自动排产";
-        }
-        String trimmed = title.trim();
-        if (trimmed.startsWith("[排产]")) {
-            trimmed = trimmed.substring("[排产]".length()).trim();
-        }
-        return trimmed.isEmpty() ? "自动排产" : trimmed;
     }
 
     public static class PlanRangeRequest {
