@@ -34,6 +34,9 @@ public class ProductionLineModelConfig {
     @TableField("large_changeover_time")
     private Integer largeChangeoverTime;
 
+    @TableField("priority")
+    private Integer priority;
+
     @TableField("status")
     private Integer status;
 

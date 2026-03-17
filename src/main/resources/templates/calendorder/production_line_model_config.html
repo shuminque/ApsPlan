@@ -13,6 +13,7 @@
     <div class="col-md-4"><label class="form-label mb-1">系列</label><input id="modelKeyword" class="form-control" placeholder="请输入系列关键字"></div>
     <div class="col-md-4 d-flex align-items-end gap-2"><button class="btn btn-primary" id="btnSearch">查询</button><button class="btn btn-outline-secondary" id="btnReset">重置</button><button class="btn btn-success ms-auto" id="btnAdd">新增系列</button></div>
 </div></div></div>
+<div class="alert alert-info py-2">排产优先级说明：系统先按“精确型号”匹配，未命中再按“型号系列（如6200VV*XC2→6200）”回退；同等匹配范围下综合产能、换型时长、运行状态与本配置优先级进行排序。</div>
 
 <div class="card"><div class="card-body"><table id="configTable" lay-filter="configTable"></table></div></div>
 
@@ -29,11 +30,12 @@
             <div class="row g-3">
                 <div class="col-md-6"><label class="form-label">产线</label><select id="formLineId" name="lineId" class="form-select" required><option value="">请选择产线</option></select><div class="invalid-feedback">请选择产线</div></div>
                 <div class="col-md-6"><label class="form-label">系列</label><input id="formModel" name="model" class="form-control" maxlength="100" required><div class="invalid-feedback">请输入系列</div></div>
-                <div class="col-md-4"><label class="form-label">产能(件/小时)</label><input id="formCapacityPerHour" name="capacityPerHour" type="number" step="0.01" min="0" class="form-control" required></div>
-                <div class="col-md-4"><label class="form-label">小换型时长(分钟)</label><input id="formSmallChangeoverTime" name="smallChangeoverTime" type="number" min="0" class="form-control" required></div>
-                <div class="col-md-4"><label class="form-label">大换型时长(分钟)</label><input id="formLargeChangeoverTime" name="largeChangeoverTime" type="number" min="0" class="form-control" required></div>
+                <div class="col-md-3"><label class="form-label">产能(件/小时)</label><input id="formCapacityPerHour" name="capacityPerHour" type="number" step="0.01" min="0" class="form-control" required></div>
+                <div class="col-md-3"><label class="form-label">小换型时长(分钟)</label><input id="formSmallChangeoverTime" name="smallChangeoverTime" type="number" min="0" class="form-control" required></div>
+                <div class="col-md-3"><label class="form-label">大换型时长(分钟)</label><input id="formLargeChangeoverTime" name="largeChangeoverTime" type="number" min="0" class="form-control" required></div>
+                <div class="col-md-3"><label class="form-label">优先级</label><input id="formPriority" name="priority" type="number" min="0" class="form-control" value="0"></div>
                 <div class="col-md-4"><label class="form-label">状态</label><select id="formStatus" name="status" class="form-select"><option value="1">启用</option><option value="0">停用</option></select></div>
-                <div class="col-md-8"><label class="form-label">备注</label><input id="formRemark" name="remark" class="form-control" maxlength="255"></div>
+                <div class="col-md-8"><label class="form-label">备注</label><input id="formRemark" name="remark" class="form-control" maxlength="255" placeholder="可填写型号/系列匹配策略说明"></div>
             </div>
         </form></div>
         <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary" id="btnSave">保存</button></div>
@@ -56,8 +58,8 @@ function loadLineOptions(){return $.ajax({url:'/api/model-config/line-options',m
             .append(options);$('#formLineId')
             .append(options);}})}
 function getRowById(id){return currentRecords.find(item=>String(item.id)===String(id))}
-function openModal(mode,row){modalMode=mode;$('#configForm')[0].reset();$('#id').val('');if(mode==='edit'&&row){$('#modalTitle').text('编辑系列配置');$('#id').val(row.id||'');$('#formLineId').val(String(row.lineId||''));$('#formModel').val(row.model||'');$('#formCapacityPerHour').val(row.capacityPerHour);$('#formSmallChangeoverTime').val(row.smallChangeoverTime);$('#formLargeChangeoverTime').val(row.largeChangeoverTime);$('#formStatus').val(String(row.status==null?1:row.status));$('#formRemark').val(row.remark||'');}else{$('#modalTitle').text('新增系列配置');$('#formStatus').val('1');}modal.show();}
-function collectFormData(){return {id:$('#id').val()||null,lineId:Number($('#formLineId').val()),model:$('#formModel').val().trim(),capacityPerHour:Number($('#formCapacityPerHour').val()),smallChangeoverTime:Number($('#formSmallChangeoverTime').val()),largeChangeoverTime:Number($('#formLargeChangeoverTime').val()),status:Number($('#formStatus').val()),remark:$('#formRemark').val().trim()}}
+function openModal(mode,row){modalMode=mode;$('#configForm')[0].reset();$('#id').val('');if(mode==='edit'&&row){$('#modalTitle').text('编辑系列配置');$('#id').val(row.id||'');$('#formLineId').val(String(row.lineId||''));$('#formModel').val(row.model||'');$('#formCapacityPerHour').val(row.capacityPerHour);$('#formSmallChangeoverTime').val(row.smallChangeoverTime);$('#formLargeChangeoverTime').val(row.largeChangeoverTime);$('#formPriority').val(row.priority==null?0:row.priority);$('#formStatus').val(String(row.status==null?1:row.status));$('#formRemark').val(row.remark||'');}else{$('#modalTitle').text('新增系列配置');$('#formStatus').val('1');$('#formPriority').val('0');}modal.show();}
+function collectFormData(){return {id:$('#id').val()||null,lineId:Number($('#formLineId').val()),model:$('#formModel').val().trim(),capacityPerHour:Number($('#formCapacityPerHour').val()),smallChangeoverTime:Number($('#formSmallChangeoverTime').val()),largeChangeoverTime:Number($('#formLargeChangeoverTime').val()),priority:Number($('#formPriority').val()||0),status:Number($('#formStatus').val()),remark:$('#formRemark').val().trim()}}
 function saveConfig(renderTable){const f=document.getElementById('configForm');if(!f.checkValidity())return $('#configForm').addClass('was-validated');$.ajax({url:modalMode==='add'?'/api/model-config/add':'/api/model-config/update',method:modalMode==='add'?'POST':'PUT',contentType:'application/json',data:JSON.stringify(collectFormData()),success:function(res){if(!res||res.code!==200)return showMessage(res?res.msg:'保存失败');modal.hide();renderTable();},error:function(){showMessage('保存失败');}})}
 function deleteConfig(id,renderTable){if(!confirm('确认删除该记录吗？'))return;$.ajax({url:'/api/model-config/delete/'+id,method:'DELETE',success:function(res){if(!res||res.code!==200)return showMessage(res?res.msg:'删除失败');renderTable();}})}
 function toggleStatus(id,status,renderTable){$.ajax({url:'/api/model-config/status/'+id,method:'PUT',data:{status:status},success:function(res){if(!res||res.code!==200)return showMessage(res?res.msg:'状态更新失败');renderTable();}})}
@@ -73,6 +75,7 @@ layui.use(['table'], function(){
                 {field:'capacityPerHour',title:'产能(件/小时)'},
                 {field:'smallChangeoverTime',title:'小换型时长(分钟)'},
                 {field:'largeChangeoverTime',title:'大换型时长(分钟)'},
+                {field:'priority',title:'优先级'},
                 {field:'status',title:'状态',templet:d=>Number(d.status)===1?'<span class="layui-badge layui-bg-green">启用</span>':'<span class="layui-badge">停用</span>'},
                 {field:'remark',title:'备注',hide:true},
                 {field:'updateTime',title:'更新时间',templet:d=>formatDateTime(d.updateTime),hide:true},
