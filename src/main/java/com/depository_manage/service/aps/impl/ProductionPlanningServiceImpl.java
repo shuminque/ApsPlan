@@ -5,12 +5,10 @@ import com.depository_manage.entity.aps.ProductionLine;
 import com.depository_manage.entity.aps.ProductionLineModelConfig;
 import com.depository_manage.entity.aps.ProductionOrder;
 import com.depository_manage.entity.aps.ProductionOrderStatus;
-import com.depository_manage.entity.aps.ProductionLineRuntime;
 import com.depository_manage.entity.aps.SafetyStock;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
-import com.depository_manage.mapper.aps.ProductionLineRuntimeMapper;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.PlanPreviewDailyDTO;
 import com.depository_manage.pojo.shift.PlanPreviewOrderDTO;
@@ -55,15 +53,18 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private ProductionLineModelConfigMapper modelConfigMapper;
     @Resource
     private ProductionLineMapper productionLineMapper;
-    @Resource
-    private ProductionLineRuntimeMapper productionLineRuntimeMapper;
 
     @Override
     public List<CalendarEventDTO> generatePlanCalendarEvents(String startDate, String endDate) {
+        return generatePlanPreview(startDate, endDate).getEvents();
+    }
+
+    @Override
+    public PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate) {
         LocalDate requestStart = toLocalDate(startDate);
         LocalDate endExclusive = toLocalDate(endDate);
         if (requestStart == null || endExclusive == null) {
-            return new ArrayList<>();
+            return new PlanPreviewResponseDTO();
         }
 
         LocalDate today = LocalDate.now();
@@ -105,9 +106,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, endExclusive);
         Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities();
-        Map<Long, ProductionLineRuntime> runtimeByLine = productionLineRuntimeMapper.selectList(null).stream()
-                .filter(runtime -> runtime.getLineId() != null)
-                .collect(Collectors.toMap(ProductionLineRuntime::getLineId, runtime -> runtime, (a, b) -> a));
 
         List<PlanSlice> plannedSlices = new ArrayList<>();
         LocalDate cursor = start;
@@ -118,7 +116,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 if (demand.remaining <= 0) {
                     continue;
                 }
-                List<LineCapacity> lines = selectCandidateLines(demand.model, lineCapByModel, runtimeByLine);
+                List<LineCapacity> lines = lineCapByModel.getOrDefault(demand.model, new ArrayList<>());
                 for (LineCapacity line : lines) {
                     if (demand.remaining <= 0) {
                         break;
@@ -131,12 +129,17 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     }
                     int assignQty = Math.min(dayCapacity, demand.remaining);
                     demand.remaining -= assignQty;
+                    demand.recordPlanDay(day);
                     plannedSlices.add(new PlanSlice(day, line.lineName, demand.customer, demand.outerInnerRing, demand.model, assignQty));
                 }
             }
             cursor = cursor.plusDays(1);
         }
-        return mergeSlicesToEvents(plannedSlices);
+        PlanPreviewResponseDTO response = new PlanPreviewResponseDTO();
+        response.setEvents(mergeSlicesToEvents(plannedSlices));
+        response.setOrders(buildOrderPreviewRows(demands));
+        response.setDailyOutputs(buildDailyPreviewRows(plannedSlices));
+        return response;
     }
 
     private List<DemandItem> buildDemands(Map<String, List<ProductionOrder>> orderByKey, Map<String, SafetyStock> safetyStockByKey) {
@@ -228,79 +231,12 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             if (cfg.getModel() == null || cfg.getCapacityPerHour() == null || cfg.getLineId() == null) {
                 continue;
             }
-            String model = cfg.getModel().trim();
-            String normalizedModel = normalizeModel(model);
             String lineName = lineNameById.getOrDefault(cfg.getLineId(), "产线" + cfg.getLineId());
-            LineCapacity capacity = new LineCapacity(cfg.getLineId(), lineName, model, normalizedModel,
-                    cfg.getCapacityPerHour(), cfg.getSmallChangeoverTime(), cfg.getLargeChangeoverTime(), cfg.getPriority());
-            map.computeIfAbsent(model, k -> new ArrayList<>()).add(capacity);
-            if (!normalizedModel.equals(model)) {
-                map.computeIfAbsent(normalizedModel, k -> new ArrayList<>()).add(capacity);
-            }
+            map.computeIfAbsent(cfg.getModel(), k -> new ArrayList<>())
+                    .add(new LineCapacity(cfg.getLineId(), lineName, cfg.getCapacityPerHour()));
         }
+        map.values().forEach(list -> list.sort(Comparator.comparing(l -> l.lineId)));
         return map;
-    }
-
-    List<LineCapacity> selectCandidateLines(String demandModel,
-                                            Map<String, List<LineCapacity>> lineCapByModel,
-                                            Map<Long, ProductionLineRuntime> runtimeByLine) {
-        List<LineCapacity> exact = lineCapByModel.getOrDefault(demandModel, new ArrayList<>());
-        List<LineCapacity> candidates = exact.isEmpty()
-                ? lineCapByModel.getOrDefault(normalizeModel(demandModel), new ArrayList<>())
-                : exact;
-        return candidates.stream()
-                .sorted(Comparator
-                        .comparingDouble((LineCapacity line) -> linePriorityScore(line, demandModel, runtimeByLine))
-                        .reversed()
-                        .thenComparing(line -> line.lineId))
-                .collect(Collectors.toList());
-    }
-
-    static String normalizeModel(String model) {
-        if (model == null) {
-            return "";
-        }
-        String trimmed = model.trim();
-        if (trimmed.isEmpty()) {
-            return "";
-        }
-        int idx = 0;
-        while (idx < trimmed.length() && Character.isDigit(trimmed.charAt(idx))) {
-            idx++;
-        }
-        return idx > 0 ? trimmed.substring(0, idx) : trimmed;
-    }
-
-    private double linePriorityScore(LineCapacity line, String demandModel, Map<Long, ProductionLineRuntime> runtimeByLine) {
-        double score = 0D;
-        score += Optional.ofNullable(line.capacityPerHour).orElse(BigDecimal.ZERO).doubleValue() * 10;
-        score += Optional.ofNullable(line.priority).orElse(0) * 20;
-
-        ProductionLineRuntime runtime = runtimeByLine.get(line.lineId);
-        if (runtime != null) {
-            Integer status = runtime.getStatus();
-            if (status != null) {
-                if (status == 1) {
-                    score += 100;
-                } else if (status == 2) {
-                    score += 20;
-                } else {
-                    score -= 60;
-                }
-            }
-            String runtimeModel = Optional.ofNullable(runtime.getCurrentModel()).orElse("").trim();
-            if (!runtimeModel.isEmpty()) {
-                if (runtimeModel.equals(demandModel)) {
-                    score += 80;
-                } else if (normalizeModel(runtimeModel).equals(normalizeModel(demandModel))) {
-                    score += 30;
-                    score -= Optional.ofNullable(line.smallChangeoverTime).orElse(0);
-                } else {
-                    score -= Optional.ofNullable(line.largeChangeoverTime).orElse(0);
-                }
-            }
-        }
-        return score;
     }
 
     private List<CalendarEventDTO> mergeSlicesToEvents(List<PlanSlice> slices) {
@@ -337,6 +273,43 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return result;
     }
 
+    private List<PlanPreviewOrderDTO> buildOrderPreviewRows(List<DemandItem> demands) {
+        List<PlanPreviewOrderDTO> rows = new ArrayList<>();
+        for (DemandItem item : demands) {
+            PlanPreviewOrderDTO row = new PlanPreviewOrderDTO();
+            row.setCustomer(item.customer);
+            row.setOuterInnerRing(item.outerInnerRing);
+            row.setModel(item.model);
+            LocalDate earliest = item.earliestDeliveryDate();
+            row.setEarliestDeliveryDate(earliest == null ? "" : earliest.toString());
+            row.setRequiredQuantity(item.required);
+            row.setPlannedQuantity(item.required - item.remaining);
+            row.setPlannedDays(item.plannedDays.size());
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private List<PlanPreviewDailyDTO> buildDailyPreviewRows(List<PlanSlice> slices) {
+        List<PlanPreviewDailyDTO> rows = new ArrayList<>();
+        slices.sort(Comparator.comparing((PlanSlice s) -> s.day)
+                .thenComparing(s -> s.customer)
+                .thenComparing(s -> s.outerInnerRing)
+                .thenComparing(s -> s.model)
+                .thenComparing(s -> s.lineName));
+        for (PlanSlice slice : slices) {
+            PlanPreviewDailyDTO row = new PlanPreviewDailyDTO();
+            row.setDay(slice.day.toString());
+            row.setLineName(slice.lineName);
+            row.setCustomer(slice.customer);
+            row.setOuterInnerRing(slice.outerInnerRing);
+            row.setModel(slice.model);
+            row.setQuantity(slice.quantity);
+            rows.add(row);
+        }
+        return rows;
+    }
+
     private CalendarEventDTO buildEvent(LocalDate startInclusive, LocalDate endExclusive, PlanSlice slice, int quantity) {
         CalendarEventDTO dto = new CalendarEventDTO();
         dto.setTitle(String.format("[排产] %s %s/%s %s x %,d", slice.lineName, slice.customer, slice.outerInnerRing, slice.model, quantity));
@@ -361,7 +334,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return s.getCustomer() + "|" + s.getOuterInnerRing() + "|" + s.getModel();
     }
 
-    static class DemandItem {
+    private static class DemandItem {
         private final String customer;
         private final String outerInnerRing;
         private final String model;
@@ -392,6 +365,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             }
             return earliestDelivery.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
         }
+
+        private void recordPlanDay(LocalDate day) {
+            plannedDays.add(day);
+        }
     }
 
     private static class PlanSlice {
@@ -416,38 +393,15 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
     }
 
-    static class LineCapacity {
+    private static class LineCapacity {
         private final Long lineId;
         private final String lineName;
-        private final String model;
-        private final String normalizedModel;
         private final BigDecimal capacityPerHour;
-        private final Integer smallChangeoverTime;
-        private final Integer largeChangeoverTime;
-        private final Integer priority;
 
-        LineCapacity(Long lineId, String lineName, String model, String normalizedModel,
-                     BigDecimal capacityPerHour, Integer smallChangeoverTime,
-                     Integer largeChangeoverTime, Integer priority) {
+        private LineCapacity(Long lineId, String lineName, BigDecimal capacityPerHour) {
             this.lineId = lineId;
             this.lineName = lineName;
-            this.model = model;
-            this.normalizedModel = normalizedModel;
             this.capacityPerHour = capacityPerHour;
-            this.smallChangeoverTime = smallChangeoverTime;
-            this.largeChangeoverTime = largeChangeoverTime;
-            this.priority = priority;
         }
-
-        static LineCapacity of(Long lineId, String lineName, String model, BigDecimal capacityPerHour,
-                               Integer smallChangeoverTime, Integer largeChangeoverTime, Integer priority) {
-            return new LineCapacity(lineId, lineName, model, normalizeModel(model), capacityPerHour,
-                    smallChangeoverTime, largeChangeoverTime, priority);
-        }
-
-        Long getLineId() {
-            return lineId;
-        }
-
     }
 }
