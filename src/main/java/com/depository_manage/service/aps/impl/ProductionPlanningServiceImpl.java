@@ -13,6 +13,7 @@ import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.PlanPreviewDailyDTO;
 import com.depository_manage.pojo.shift.PlanPreviewOrderDTO;
 import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
+import com.depository_manage.service.BearingRecordService;
 import com.depository_manage.service.aps.ProductionOrderService;
 import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.SafetyStockService;
@@ -53,6 +54,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private ProductionLineModelConfigMapper modelConfigMapper;
     @Resource
     private ProductionLineMapper productionLineMapper;
+    @Resource
+    private BearingRecordService bearingRecordService;
 
     @Override
     public List<CalendarEventDTO> generatePlanCalendarEvents(String startDate, String endDate) {
@@ -89,7 +92,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 .filter(o -> o.getCustomer() != null && o.getModel() != null && o.getOuterInnerRing() != null)
                 .collect(Collectors.groupingBy(this::toKey));
 
-        List<DemandItem> demands = buildDemands(orderByKey, safetyStockByKey);
+        Map<String, Integer> currentInventoryByKey = queryCurrentInventoryByKey(start, orderByKey);
+
+        List<DemandItem> demands = buildDemands(orderByKey, safetyStockByKey, currentInventoryByKey);
         if (demands.isEmpty()) {
             return new PlanPreviewResponseDTO();
         }
@@ -142,7 +147,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return response;
     }
 
-    private List<DemandItem> buildDemands(Map<String, List<ProductionOrder>> orderByKey, Map<String, SafetyStock> safetyStockByKey) {
+    private List<DemandItem> buildDemands(Map<String, List<ProductionOrder>> orderByKey,
+                                          Map<String, SafetyStock> safetyStockByKey,
+                                          Map<String, Integer> currentInventoryByKey) {
         List<DemandItem> result = new ArrayList<>();
         for (Map.Entry<String, List<ProductionOrder>> entry : orderByKey.entrySet()) {
             List<ProductionOrder> groupOrders = entry.getValue();
@@ -155,8 +162,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
                 return Math.max(0, qty - assigned);
             }).sum();
-            // 当前库存暂按 0 处理：现阶段项目未提供可用库存字段，后续可替换为库存服务查询值。
-            int currentInventory = 0;
+            int currentInventory = currentInventoryByKey.getOrDefault(entry.getKey(), 0);
             SafetyStock stock = safetyStockByKey.get(entry.getKey());
             BigDecimal safetyTarget = BigDecimal.ZERO;
             if (stock != null && stock.getStockCycle() != null && stock.getMonthlyStockQty() != null) {
@@ -173,7 +179,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     .min(Date::compareTo)
                     .orElse(null);
 
-            result.add(new DemandItem(any.getCustomer(), any.getOuterInnerRing(), any.getModel(), required, earliestDelivery));
+            result.add(new DemandItem(any.getCustomer(), any.getOuterInnerRing(), any.getModel(), required, currentInventory, earliestDelivery));
         }
 
         result.sort(Comparator
@@ -282,6 +288,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             row.setModel(item.model);
             LocalDate earliest = item.earliestDeliveryDate();
             row.setEarliestDeliveryDate(earliest == null ? "" : earliest.toString());
+            row.setCurrentInventory(item.currentInventory);
             row.setRequiredQuantity(item.required);
             row.setPlannedQuantity(item.required - item.remaining);
             row.setPlannedDays(item.plannedDays.size());
@@ -330,8 +337,32 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return o.getCustomer() + "|" + o.getOuterInnerRing() + "|" + o.getModel();
     }
 
+    /**
+     * 口径说明：排产预览中的在库数量统一按“排产开始日(start)截止（含当日）累计净在库”计算。
+     * 该口径同时用于需求净额(required)和前端“在库数量”展示，避免前后端口径不一致。
+     */
+    private Map<String, Integer> queryCurrentInventoryByKey(LocalDate inventoryCutoffDate,
+                                                            Map<String, List<ProductionOrder>> orderByKey) {
+        if (inventoryCutoffDate == null || orderByKey.isEmpty()) {
+            return new HashMap<>();
+        }
+        Map<String, Object> params = new HashMap<>();
+        params.put("cutoffDate", java.sql.Date.valueOf(inventoryCutoffDate));
+        List<com.depository_manage.entity.BearingRecord> inventoryRecords = bearingRecordService.selectInventoryByCutoffDate(params);
+        if (inventoryRecords == null || inventoryRecords.isEmpty()) {
+            return new HashMap<>();
+        }
+        return inventoryRecords.stream()
+                .filter(r -> r.getCustomer() != null && r.getOuterInnerRing() != null && r.getModel() != null)
+                .collect(Collectors.groupingBy(this::toKey, Collectors.summingInt(r -> Math.max(0, Optional.ofNullable(r.getQuantity()).orElse(0)))));
+    }
+
     private String toKey(SafetyStock s) {
         return s.getCustomer() + "|" + s.getOuterInnerRing() + "|" + s.getModel();
+    }
+
+    private String toKey(com.depository_manage.entity.BearingRecord record) {
+        return record.getCustomer() + "|" + record.getOuterInnerRing() + "|" + record.getModel();
     }
 
     private static class DemandItem {
@@ -339,14 +370,16 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final String outerInnerRing;
         private final String model;
         private final int required;
+        private final int currentInventory;
         private int remaining;
         private final Date earliestDelivery;
         private final java.util.Set<LocalDate> plannedDays = new java.util.HashSet<>();
-        private DemandItem(String customer, String outerInnerRing, String model, int required, Date earliestDelivery) {
+        private DemandItem(String customer, String outerInnerRing, String model, int required, int currentInventory, Date earliestDelivery) {
             this.customer = customer;
             this.outerInnerRing = outerInnerRing;
             this.model = model;
             this.required = required;
+            this.currentInventory = currentInventory;
             this.remaining = required;
             this.earliestDelivery = earliestDelivery;
         }
