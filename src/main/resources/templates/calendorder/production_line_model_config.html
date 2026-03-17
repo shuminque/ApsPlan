@@ -10,7 +10,7 @@
 <body>
 <div class="card mb-3"><div class="card-body"><div class="row g-2 align-items-center">
     <div class="col-md-4"><label class="form-label mb-1">产线</label><select id="lineId" class="form-select"><option value="">全部产线</option></select></div>
-    <div class="col-md-4"><label class="form-label mb-1">系列</label><input id="modelKeyword" class="form-control" placeholder="请输入系列关键字"></div>
+    <div class="col-md-4"><label class="form-label mb-1">型号/系列前缀</label><input id="modelKeyword" class="form-control" placeholder="请输入完整型号或系列前缀"></div>
     <div class="col-md-4 d-flex align-items-end gap-2"><button class="btn btn-primary" id="btnSearch">查询</button><button class="btn btn-outline-secondary" id="btnReset">重置</button><button class="btn btn-success ms-auto" id="btnAdd">新增系列</button></div>
 </div></div></div>
 <div class="card"><div class="card-body"><table id="configTable" lay-filter="configTable"></table></div></div>
@@ -27,7 +27,7 @@
             <input type="hidden" id="id" name="id">
             <div class="row g-3">
                 <div class="col-md-6"><label class="form-label">产线</label><select id="formLineId" name="lineId" class="form-select" required><option value="">请选择产线</option></select><div class="invalid-feedback">请选择产线</div></div>
-                <div class="col-md-6"><label class="form-label">系列</label><input id="formModel" name="model" class="form-control" maxlength="100" required><div class="invalid-feedback">请输入系列</div></div>
+                <div class="col-md-6"><label class="form-label">型号/系列前缀</label><input id="formModel" name="model" class="form-control" maxlength="100" required placeholder="支持完整型号或系列前缀，例如 6200"><div class="invalid-feedback">请输入型号或系列前缀</div></div>
                 <div class="col-md-3"><label class="form-label">产能(件/小时)</label><input id="formCapacityPerHour" name="capacityPerHour" type="number" step="0.01" min="0" class="form-control" required></div>
                 <div class="col-md-3"><label class="form-label">小换型时长(分钟)</label><input id="formSmallChangeoverTime" name="smallChangeoverTime" type="number" min="0" class="form-control" required></div>
                 <div class="col-md-3"><label class="form-label">大换型时长(分钟)</label><input id="formLargeChangeoverTime" name="largeChangeoverTime" type="number" min="0" class="form-control" required></div>
