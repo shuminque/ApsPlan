@@ -13,8 +13,6 @@
     <div class="col-md-4"><label class="form-label mb-1">系列</label><input id="modelKeyword" class="form-control" placeholder="请输入系列关键字"></div>
     <div class="col-md-4 d-flex align-items-end gap-2"><button class="btn btn-primary" id="btnSearch">查询</button><button class="btn btn-outline-secondary" id="btnReset">重置</button><button class="btn btn-success ms-auto" id="btnAdd">新增系列</button></div>
 </div></div></div>
-<div class="alert alert-info py-2">排产优先级说明：系统先按“精确型号”匹配，未命中再按“型号系列（如6200VV*XC2→6200）”回退；同等匹配范围下综合产能、换型时长、运行状态与本配置优先级进行排序。</div>
-
 <div class="card"><div class="card-body"><table id="configTable" lay-filter="configTable"></table></div></div>
 
 <script type="text/html" id="configRowBar">
