@@ -462,6 +462,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final String outerInnerRing;
         private final String model;
         private final int quantity;
+        public Long lineId;
 
         private PlanSlice(LocalDate day, String lineName, String customer, String outerInnerRing, String model, int quantity) {
             this.day = day;
