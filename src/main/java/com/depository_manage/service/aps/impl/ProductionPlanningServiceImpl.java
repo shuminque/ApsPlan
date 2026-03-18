@@ -366,6 +366,14 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         dto.setStart(startInclusive.atStartOfDay().format(DATE_TIME_FMT));
         dto.setEnd(endExclusive.atStartOfDay().format(DATE_TIME_FMT));
         dto.setColor(PLAN_COLOR);
+        dto.setEventType("PLAN");
+        dto.setSource("RULE_PRIORITY");
+        dto.setLineId(slice.lineId);
+        dto.setLineName(slice.lineName);
+        dto.setCustomer(slice.customer);
+        dto.setOuterInnerRing(slice.outerInnerRing);
+        dto.setModel(slice.model);
+        dto.setQuantity(quantity);
         return dto;
     }
 

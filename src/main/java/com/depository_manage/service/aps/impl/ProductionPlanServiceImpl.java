@@ -167,6 +167,12 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         if (event == null || event.getTitle() == null || event.getStart() == null || event.getEnd() == null) {
             return null;
         }
+
+        ParsedPlanEvent parsedFromFields = parseEventFromStructuredFields(event);
+        if (parsedFromFields != null) {
+            return parsedFromFields;
+        }
+
         String title = event.getTitle().trim();
         if (title.startsWith("[排产]")) {
             title = title.substring("[排产]".length()).trim();
@@ -192,6 +198,31 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         parsed.outerInnerRing = outerInnerRing;
         parsed.model = model;
         parsed.assignQty = assignQty;
+        parsed.startDate = Date.from(start.atZone(ZoneId.systemDefault()).toInstant());
+        parsed.endDate = Date.from(end.atZone(ZoneId.systemDefault()).toInstant());
+        return parsed;
+    }
+
+    private ParsedPlanEvent parseEventFromStructuredFields(CalendarEventDTO event) {
+        String customer = normalizePlanKeyPart(event.getCustomer());
+        String outerInnerRing = normalizePlanKeyPart(event.getOuterInnerRing());
+        String model = normalizePlanKeyPart(event.getModel());
+        String lineName = normalizePlanKeyPart(event.getLineName());
+        Integer quantity = event.getQuantity();
+        if (customer.isEmpty() || outerInnerRing.isEmpty() || model.isEmpty() || lineName.isEmpty() || quantity == null || quantity <= 0) {
+            return null;
+        }
+
+        LocalDateTime start = LocalDateTime.parse(event.getStart(), DATE_TIME_FMT);
+        LocalDateTime end = LocalDateTime.parse(event.getEnd(), DATE_TIME_FMT);
+
+        ParsedPlanEvent parsed = new ParsedPlanEvent();
+        parsed.lineName = lineName;
+        parsed.lineId = event.getLineId() != null ? event.getLineId() : resolveLineId(lineName);
+        parsed.customer = customer;
+        parsed.outerInnerRing = outerInnerRing;
+        parsed.model = model;
+        parsed.assignQty = quantity;
         parsed.startDate = Date.from(start.atZone(ZoneId.systemDefault()).toInstant());
         parsed.endDate = Date.from(end.atZone(ZoneId.systemDefault()).toInstant());
         return parsed;
