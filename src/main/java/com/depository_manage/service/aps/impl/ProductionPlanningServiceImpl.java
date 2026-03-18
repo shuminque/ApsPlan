@@ -32,10 +32,12 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -113,19 +115,23 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, endExclusive);
         Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities();
         Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(start, endExclusive, shiftHoursByDay, lineCapByModel);
+        List<RingPairDemand> ringPairDemands = buildRingPairDemands(demands);
 
         List<PlanSlice> plannedSlices = new ArrayList<>();
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
             final LocalDate day = cursor;
+            schedulePairedBarDemands(day, ringPairDemands, lineCapByModel, remainingCapacityByLineDay, plannedSlices);
             for (DemandItem demand : demands) {
-                if (demand.remaining <= 0) {
+                if (demand.remaining() <= 0) {
                     continue;
                 }
-                List<LineCapacity> lines = findMatchingLines(demand.model, lineCapByModel);
-                List<LineCapacity> prioritizedLines = prioritizeCandidateLines(lines, day, demand.remaining, remainingCapacityByLineDay);
+                List<LineCapacity> lines = findMatchingLines(demand.model, lineCapByModel).stream()
+                        .filter(line -> !line.isBarCraft())
+                        .collect(Collectors.toList());
+                List<LineCapacity> prioritizedLines = prioritizeCandidateLines(lines, day, demand.remaining(), remainingCapacityByLineDay);
                 for (LineCapacity line : prioritizedLines) {
-                    if (demand.remaining <= 0) {
+                    if (demand.remaining() <= 0) {
                         break;
                     }
                     LineDayKey lineDayKey = new LineDayKey(line.lineId, day);
@@ -133,10 +139,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     if (remainingCapacity <= 0) {
                         continue;
                     }
-                    int assignQty = Math.min(remainingCapacity, demand.remaining);
-                    demand.remaining -= assignQty;
+                    int assignQty = Math.min(remainingCapacity, demand.remaining());
+                    demand.applyPlan(assignQty, day);
                     remainingCapacityByLineDay.put(lineDayKey, remainingCapacity - assignQty);
-                    demand.recordPlanDay(day);
                     plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, demand.customer, demand.outerInnerRing, demand.model, assignQty));
                 }
             }
@@ -229,7 +234,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private Map<String, List<LineCapacity>> buildModelCapacities() {
         List<ProductionLineModelConfig> configs = modelConfigMapper.selectPageList(null, null, 0L, 2000L);
         List<ProductionLine> lines = productionLineMapper.selectPageList(null, 0L, 1000L);
-        Map<Long, String> lineNameById = lines.stream().collect(Collectors.toMap(ProductionLine::getId, ProductionLine::getLineName, (a, b) -> a));
+        Map<Long, ProductionLine> lineById = lines.stream()
+                .filter(line -> line.getId() != null)
+                .collect(Collectors.toMap(ProductionLine::getId, line -> line, (a, b) -> a));
 
         Map<String, List<LineCapacity>> map = new HashMap<>();
         for (ProductionLineModelConfig cfg : configs) {
@@ -243,9 +250,14 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             if (configModel.isEmpty()) {
                 continue;
             }
-            String lineName = lineNameById.getOrDefault(cfg.getLineId(), "产线" + cfg.getLineId());
+            ProductionLine productionLine = lineById.get(cfg.getLineId());
+            if (productionLine != null && productionLine.getStatus() != null && productionLine.getStatus() == 0) {
+                continue;
+            }
+            String lineName = productionLine == null ? "产线" + cfg.getLineId() : productionLine.getLineName();
+            String craft = productionLine == null ? null : productionLine.getCraft();
             map.computeIfAbsent(configModel, k -> new ArrayList<>())
-                    .add(new LineCapacity(cfg.getLineId(), lineName, configModel, cfg.getCapacityPerHour(), cfg.getPriority()));
+                    .add(LineCapacity.of(cfg.getLineId(), lineName, configModel, cfg.getCapacityPerHour(), cfg.getPriority(), craft));
         }
         map.values().forEach(this::sortLineCapacities);
         return map;
@@ -418,7 +430,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             row.setEarliestDeliveryDate(earliest == null ? "" : earliest.toString());
             row.setCurrentInventory(item.currentInventory);
             row.setRequiredQuantity(item.required);
-            row.setPlannedQuantity(item.required - item.remaining);
+            row.setPlannedQuantity(item.plannedQuantity());
             row.setPlannedDays(item.plannedDays.size());
             rows.add(row);
         }
@@ -501,23 +513,93 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return ProductionPlanServiceImpl.buildNormalizedOrderKey(record.getCustomer(), record.getOuterInnerRing(), record.getModel());
     }
 
+    private List<RingPairDemand> buildRingPairDemands(List<DemandItem> demands) {
+        Map<String, DemandItem> demandByPairKey = demands.stream()
+                .filter(DemandItem::isLaOrLb)
+                .collect(Collectors.toMap(DemandItem::fullPairKey, d -> d, (left, right) -> left));
+
+        List<RingPairDemand> pairDemands = new ArrayList<>();
+        Set<String> visited = new HashSet<>();
+        for (DemandItem demand : demands) {
+            if (!demand.isLaOrLb()) {
+                continue;
+            }
+            String pairKey = demand.pairKey();
+            if (!visited.add(pairKey)) {
+                continue;
+            }
+            DemandItem laDemand = demandByPairKey.get(pairKey + "|LA");
+            DemandItem lbDemand = demandByPairKey.get(pairKey + "|LB");
+            if (laDemand == null || lbDemand == null) {
+                continue;
+            }
+            pairDemands.add(new RingPairDemand(laDemand, lbDemand));
+        }
+
+        pairDemands.sort(Comparator
+                .comparingInt(RingPairDemand::deliveryUrgencyDays)
+                .thenComparing(RingPairDemand::maxRequired, Comparator.reverseOrder()));
+        return pairDemands;
+    }
+
+    private void schedulePairedBarDemands(LocalDate day,
+                                          List<RingPairDemand> pairDemands,
+                                          Map<String, List<LineCapacity>> lineCapByModel,
+                                          Map<LineDayKey, Integer> remainingCapacityByLineDay,
+                                          List<PlanSlice> plannedSlices) {
+        for (RingPairDemand pairDemand : pairDemands) {
+            if (pairDemand.remaining() <= 0) {
+                continue;
+            }
+            List<LineCapacity> lines = findMatchingLines(pairDemand.model(), lineCapByModel).stream()
+                    .filter(LineCapacity::isBarCraft)
+                    .collect(Collectors.toList());
+            List<LineCapacity> prioritizedLines = prioritizeCandidateLines(lines, day, pairDemand.remaining(), remainingCapacityByLineDay);
+            for (LineCapacity line : prioritizedLines) {
+                if (pairDemand.remaining() <= 0) {
+                    break;
+                }
+                LineDayKey lineDayKey = new LineDayKey(line.lineId, day);
+                int remainingCapacity = remainingCapacityByLineDay.getOrDefault(lineDayKey, 0);
+                if (remainingCapacity <= 0) {
+                    continue;
+                }
+                int assignQty = Math.min(remainingCapacity, pairDemand.remaining());
+                pairDemand.applyPlan(assignQty, day);
+                remainingCapacityByLineDay.put(lineDayKey, remainingCapacity - assignQty);
+                plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LA", pairDemand.model(), assignQty));
+                plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LB", pairDemand.model(), assignQty));
+            }
+        }
+    }
+
     private static class DemandItem {
         private final String customer;
         private final String outerInnerRing;
         private final String model;
         private final int required;
         private final int currentInventory;
-        private int remaining;
+        private int coveredQuantity;
+        private int plannedQuantity;
         private final Date earliestDelivery;
-        private final java.util.Set<LocalDate> plannedDays = new java.util.HashSet<>();
+        private final Set<LocalDate> plannedDays = new HashSet<>();
         private DemandItem(String customer, String outerInnerRing, String model, int required, int currentInventory, Date earliestDelivery) {
             this.customer = customer;
             this.outerInnerRing = outerInnerRing;
             this.model = model;
             this.required = required;
             this.currentInventory = currentInventory;
-            this.remaining = required;
+            this.coveredQuantity = 0;
+            this.plannedQuantity = 0;
             this.earliestDelivery = earliestDelivery;
+        }
+
+        private int remaining() {
+            return Math.max(0, required - coveredQuantity);
+        }
+
+        private int plannedQuantity() {
+            return plannedQuantity;
         }
 
         private int deliveryUrgencyDays() {
@@ -535,8 +617,64 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return earliestDelivery.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
         }
 
-        private void recordPlanDay(LocalDate day) {
+        private void applyPlan(int quantity, LocalDate day) {
+            if (quantity <= 0) {
+                return;
+            }
+            plannedQuantity += quantity;
+            coveredQuantity = Math.min(required, coveredQuantity + quantity);
             plannedDays.add(day);
+        }
+
+        private boolean isLaOrLb() {
+            return "LA".equalsIgnoreCase(outerInnerRing) || "LB".equalsIgnoreCase(outerInnerRing);
+        }
+
+        private String pairKey() {
+            return normalize(customer) + "|" + normalize(model);
+        }
+
+        private String fullPairKey() {
+            return pairKey() + "|" + normalize(outerInnerRing);
+        }
+
+        private String normalize(String value) {
+            return value == null ? "" : value.trim().toUpperCase();
+        }
+    }
+
+    private static class RingPairDemand {
+        private final DemandItem laDemand;
+        private final DemandItem lbDemand;
+
+        private RingPairDemand(DemandItem laDemand, DemandItem lbDemand) {
+            this.laDemand = laDemand;
+            this.lbDemand = lbDemand;
+        }
+
+        private int remaining() {
+            return Math.max(laDemand.remaining(), lbDemand.remaining());
+        }
+
+        private Integer maxRequired() {
+            return Math.max(laDemand.required, lbDemand.required);
+        }
+
+        private int deliveryUrgencyDays() {
+            return Math.min(laDemand.deliveryUrgencyDays(), lbDemand.deliveryUrgencyDays());
+        }
+
+        private String customer() {
+            return laDemand.customer;
+        }
+
+        private String model() {
+            return laDemand.model;
+        }
+
+        private void applyPlan(int quantity, LocalDate day) {
+            laDemand.applyPlan(quantity, day);
+            lbDemand.applyPlan(quantity, day);
         }
     }
 
@@ -570,21 +708,27 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final String model;
         private final BigDecimal capacityPerHour;
         private final Integer priority;
+        private final String craft;
 
-        private LineCapacity(Long lineId, String lineName, String model, BigDecimal capacityPerHour, Integer priority) {
+        private LineCapacity(Long lineId, String lineName, String model, BigDecimal capacityPerHour, Integer priority, String craft) {
             this.lineId = lineId;
             this.lineName = lineName;
             this.model = model;
             this.capacityPerHour = capacityPerHour;
             this.priority = priority;
+            this.craft = craft;
         }
 
-        static LineCapacity of(Long lineId, String lineName, String model, BigDecimal capacityPerHour, Integer priority) {
-            return new LineCapacity(lineId, lineName, model, capacityPerHour, priority);
+        static LineCapacity of(Long lineId, String lineName, String model, BigDecimal capacityPerHour, Integer priority, String craft) {
+            return new LineCapacity(lineId, lineName, model, capacityPerHour, priority, craft);
         }
 
         Long getLineId() {
             return lineId;
+        }
+
+        boolean isBarCraft() {
+            return craft != null && craft.contains("棒材");
         }
     }
 
