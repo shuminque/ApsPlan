@@ -452,6 +452,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         dto.setEnd(endExclusive.atStartOfDay().format(DATE_TIME_FMT));
         dto.setColor(PLAN_COLOR);
         dto.setEventType("PLAN");
+        dto.setLineId(slice.lineId);
         dto.setSource("RULE_PRIORITY");
         dto.setLineName(slice.lineName);
         dto.setCustomer(slice.customer);
@@ -547,7 +548,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final String outerInnerRing;
         private final String model;
         private final int quantity;
-        public Long lineId;
 
         private PlanSlice(LocalDate day, Long lineId, String lineName, String customer, String outerInnerRing, String model, int quantity) {
             this.day = day;
