@@ -6,6 +6,7 @@ import com.depository_manage.entity.aps.ProductionOrder;
 import com.depository_manage.entity.aps.ProductionOrderStatus;
 import com.depository_manage.entity.aps.ProductionPlan;
 import com.depository_manage.entity.aps.ProductionPlanItem;
+import com.depository_manage.exception.MyException;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionOrderMapper;
 import com.depository_manage.mapper.aps.ProductionPlanItemMapper;
@@ -61,6 +62,17 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
             return 0;
         }
 
+        Map<String, List<ProductionOrder>> orderGroupMap = loadOpenOrdersByKey();
+        boolean hasMatchedOrder = parsedEvents.stream()
+                .map(ParsedPlanEvent::orderKey)
+                .anyMatch(orderKey -> {
+                    List<ProductionOrder> candidates = orderGroupMap.get(orderKey);
+                    return candidates != null && !candidates.isEmpty();
+                });
+        if (!hasMatchedOrder) {
+            throw new MyException("未写入任何排产明细，请检查订单匹配条件或预览数据");
+        }
+
         String batchNo = "PLAN-" + LocalDateTime.now().format(BATCH_FMT);
         Date now = new Date();
 
@@ -78,7 +90,6 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         plan.setUpdatedAt(now);
         productionPlanMapper.insert(plan);
 
-        Map<String, List<ProductionOrder>> orderGroupMap = loadOpenOrdersByKey();
         int inserted = 0;
         for (ParsedPlanEvent parsed : parsedEvents) {
             List<ProductionOrder> candidates = orderGroupMap.getOrDefault(parsed.orderKey(), new ArrayList<>());
@@ -121,6 +132,10 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
                 productionOrderMapper.updateById(order);
                 left -= assignToOrder;
             }
+        }
+
+        if (inserted == 0) {
+            throw new MyException("未写入任何排产明细，请检查订单匹配条件或预览数据");
         }
 
         return inserted;
