@@ -157,7 +157,7 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
             if (assigned >= total) {
                 continue;
             }
-            map.computeIfAbsent(order.getCustomer() + "|" + order.getOuterInnerRing() + "|" + order.getModel(), k -> new ArrayList<>())
+            map.computeIfAbsent(buildNormalizedOrderKey(order.getCustomer(), order.getOuterInnerRing(), order.getModel()), k -> new ArrayList<>())
                     .add(order);
         }
         return map;
@@ -176,10 +176,10 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
             return null;
         }
 
-        String lineName = matcher.group(1).trim();
-        String customer = matcher.group(2).trim();
-        String outerInnerRing = matcher.group(3).trim();
-        String model = matcher.group(4).trim();
+        String lineName = normalizePlanKeyPart(matcher.group(1));
+        String customer = normalizePlanKeyPart(matcher.group(2));
+        String outerInnerRing = normalizePlanKeyPart(matcher.group(3));
+        String model = normalizePlanKeyPart(matcher.group(4));
         int assignQty = Integer.parseInt(matcher.group(5).replace(",", ""));
 
         LocalDateTime start = LocalDateTime.parse(event.getStart(), DATE_TIME_FMT);
@@ -198,14 +198,30 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
     }
 
     private Long resolveLineId(String lineName) {
-        if (lineName == null || lineName.isEmpty()) {
+        String normalizedLineName = normalizePlanKeyPart(lineName);
+        if (normalizedLineName == null || normalizedLineName.isEmpty()) {
             return null;
         }
-        List<ProductionLine> lines = productionLineMapper.selectPageList(lineName, 0L, 1L);
+        List<ProductionLine> lines = productionLineMapper.selectPageList(normalizedLineName, 0L, 50L);
         if (lines.isEmpty()) {
             return null;
         }
-        return lines.get(0).getId();
+        return lines.stream()
+                .filter(line -> normalizedLineName.equals(normalizePlanKeyPart(line.getLineName())))
+                .map(ProductionLine::getId)
+                .findFirst()
+                .orElse(lines.get(0).getId());
+    }
+
+    static String buildNormalizedOrderKey(String customer, String outerInnerRing, String model) {
+        return normalizePlanKeyPart(customer) + "|" + normalizePlanKeyPart(outerInnerRing) + "|" + normalizePlanKeyPart(model);
+    }
+
+    static String normalizePlanKeyPart(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().replaceAll("\\s+", " ");
     }
 
     private static class ParsedPlanEvent {
@@ -219,7 +235,7 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         private int assignQty;
 
         private String orderKey() {
-            return customer + "|" + outerInnerRing + "|" + model;
+            return buildNormalizedOrderKey(customer, outerInnerRing, model);
         }
     }
 }
