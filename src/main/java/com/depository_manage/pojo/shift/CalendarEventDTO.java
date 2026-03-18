@@ -14,4 +14,14 @@ public class CalendarEventDTO {
     private String color;    // 颜色
     private String eventType; // SHIFT / PLAN
     private String source;    // 来源标识
+    /**
+     * 以下字段用于自动排产预览/提交之间传递结构化信息，
+     * 避免 commit 阶段只能依赖标题文本反解析，导致匹配失败。
+     */
+    private Long lineId;
+    private String lineName;
+    private String customer;
+    private String outerInnerRing;
+    private String model;
+    private Integer quantity;
 }
