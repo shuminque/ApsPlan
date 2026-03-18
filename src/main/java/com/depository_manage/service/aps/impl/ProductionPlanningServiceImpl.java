@@ -377,7 +377,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     }
 
     private String toKey(ProductionOrder o) {
-        return o.getCustomer() + "|" + o.getOuterInnerRing() + "|" + o.getModel();
+        return ProductionPlanServiceImpl.buildNormalizedOrderKey(o.getCustomer(), o.getOuterInnerRing(), o.getModel());
     }
 
     /**
@@ -401,11 +401,11 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     }
 
     private String toKey(SafetyStock s) {
-        return s.getCustomer() + "|" + s.getOuterInnerRing() + "|" + s.getModel();
+        return ProductionPlanServiceImpl.buildNormalizedOrderKey(s.getCustomer(), s.getOuterInnerRing(), s.getModel());
     }
 
     private String toKey(com.depository_manage.entity.BearingRecord record) {
-        return record.getCustomer() + "|" + record.getOuterInnerRing() + "|" + record.getModel();
+        return ProductionPlanServiceImpl.buildNormalizedOrderKey(record.getCustomer(), record.getOuterInnerRing(), record.getModel());
     }
 
     private static class DemandItem {

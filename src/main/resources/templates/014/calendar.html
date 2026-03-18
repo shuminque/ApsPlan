@@ -214,9 +214,28 @@
             .catch(() => layer.msg('自动排产预览失败'));
     }
 
+    function parsePlanEventTitle(title) {
+        if (!title) return null;
+        const normalizedTitle = title.replace(/^\[排产\]\s*/, '').trim();
+        const match = normalizedTitle.match(/^(.*?)\s+(.*?)\/(.*?)\s+(.*?)\s+x\s+([0-9,]+)$/);
+        if (!match) return null;
+        return {
+            lineName: match[1] || '',
+            customer: match[2] || '',
+            outerInnerRing: match[3] || '',
+            model: match[4] || '',
+            quantity: Number((match[5] || '0').replace(/,/g, '')) || 0
+        };
+    }
+
+    function formatRangeDate(dateTime) {
+        if (!dateTime) return '';
+        return dateTime.slice(0, 10);
+    }
+
     function openPlanPreviewDialog(data) {
         const orders = data.orders || [];
-        const dailyOutputs = data.dailyOutputs || [];
+        const events = data.events || [];
 
         const orderRows = orders.map(item => `
             <tr>
@@ -231,16 +250,19 @@
             </tr>
         `).join('');
 
-        const dailyRows = dailyOutputs.map(item => `
-            <tr>
-                <td>${item.day || ''}</td>
-                <td>${item.lineName || ''}</td>
-                <td>${item.customer || ''}</td>
-                <td>${item.outerInnerRing || ''}</td>
-                <td>${item.model || ''}</td>
-                <td>${item.quantity || 0}</td>
-            </tr>
-        `).join('');
+        const resultRows = events.map(event => {
+            const parsed = parsePlanEventTitle(event.title) || {};
+            return `
+                <tr>
+                    <td>${parsed.lineName || ''}</td>
+                    <td>${parsed.customer || ''}</td>
+                    <td>${parsed.outerInnerRing || ''}</td>
+                    <td>${parsed.model || ''}</td>
+                    <td>${formatRangeDate(event.start)} ~ ${formatRangeDate(event.end)}</td>
+                    <td>${parsed.quantity || 0}</td>
+                </tr>
+            `;
+        }).join('');
 
         layer.open({
             type: 1,
@@ -260,14 +282,14 @@
                         <tbody>${orderRows || '<tr><td colspan="8" style="text-align:center;color:#999;">无可排产需求</td></tr>'}</tbody>
                     </table>
 
-                    <div style="margin: 14px 0 8px; font-weight: 700;">每日排产明细</div>
+                    <div style="margin: 14px 0 8px; font-weight: 700;">排产结果</div>
                     <table class="layui-table">
                         <thead>
                             <tr>
-                                <th>日期</th><th>产线</th><th>客户</th><th>内外圈</th><th>型号</th><th>当日产量</th>
+                                <th>产线</th><th>客户</th><th>内外圈</th><th>型号</th><th>排产时间范围</th><th>总产量</th>
                             </tr>
                         </thead>
-                        <tbody>${dailyRows || '<tr><td colspan="6" style="text-align:center;color:#999;">暂无排产结果</td></tr>'}</tbody>
+                        <tbody>${resultRows || '<tr><td colspan="6" style="text-align:center;color:#999;">暂无排产结果</td></tr>'}</tbody>
                     </table>
                 </div>
             `,
