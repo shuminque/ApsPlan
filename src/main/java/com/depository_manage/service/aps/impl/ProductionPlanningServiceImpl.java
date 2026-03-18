@@ -368,7 +368,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         dto.setColor(PLAN_COLOR);
         dto.setEventType("PLAN");
         dto.setSource("RULE_PRIORITY");
-        dto.setLineId(slice.lineId);
         dto.setLineName(slice.lineName);
         dto.setCustomer(slice.customer);
         dto.setOuterInnerRing(slice.outerInnerRing);
