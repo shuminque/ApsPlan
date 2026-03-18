@@ -291,16 +291,36 @@
             },
             body: JSON.stringify(events)
         })
-            .then(res => {
-                if (!res.ok) throw new Error('写入失败');
-                return res.text();
+            .then(async res => {
+                const responseText = await res.text();
+                if (!res.ok) {
+                    throw new Error(responseText || '写入失败');
+                }
+                return Number(responseText);
             })
-            .then(() => {
-                previewPlanData = null;
-                calendar.getEventSourceById('shiftScheduleSource').refetch();
-                layer.msg('自动排产已写入班次排班');
+            .then(inserted => {
+                if (inserted > 0) {
+                    previewPlanData = null;
+                    calendar.getEventSourceById('shiftScheduleSource').refetch();
+                    layer.msg('自动排产已写入班次排班');
+                    return;
+                }
+                layer.msg('未写入任何排产明细，请检查订单匹配条件或预览数据');
             })
-            .catch(() => layer.msg('写入排产失败'));
+            .catch(err => {
+                let message = '写入排产失败';
+                if (err && err.message) {
+                    try {
+                        const parsed = JSON.parse(err.message);
+                        if (parsed && parsed.message) {
+                            message = parsed.message;
+                        }
+                    } catch (e) {
+                        message = err.message;
+                    }
+                }
+                layer.msg(message);
+            });
     }
 
     function clearAutoPlanPreview() {
