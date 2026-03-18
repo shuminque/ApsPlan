@@ -112,31 +112,32 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, endExclusive);
         Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities();
+        Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(start, endExclusive, shiftHoursByDay, lineCapByModel);
 
         List<PlanSlice> plannedSlices = new ArrayList<>();
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
             final LocalDate day = cursor;
-            final BigDecimal shiftHours = shiftHoursByDay.getOrDefault(day, DEFAULT_SHIFT_HOURS);
             for (DemandItem demand : demands) {
                 if (demand.remaining <= 0) {
                     continue;
                 }
                 List<LineCapacity> lines = findMatchingLines(demand.model, lineCapByModel);
-                for (LineCapacity line : lines) {
+                List<LineCapacity> prioritizedLines = prioritizeCandidateLines(lines, day, demand.remaining, remainingCapacityByLineDay);
+                for (LineCapacity line : prioritizedLines) {
                     if (demand.remaining <= 0) {
                         break;
                     }
-                    int dayCapacity = line.capacityPerHour.multiply(shiftHours)
-                            .setScale(0, RoundingMode.FLOOR)
-                            .intValue();
-                    if (dayCapacity <= 0) {
+                    LineDayKey lineDayKey = new LineDayKey(line.lineId, day);
+                    int remainingCapacity = remainingCapacityByLineDay.getOrDefault(lineDayKey, 0);
+                    if (remainingCapacity <= 0) {
                         continue;
                     }
-                    int assignQty = Math.min(dayCapacity, demand.remaining);
+                    int assignQty = Math.min(remainingCapacity, demand.remaining);
                     demand.remaining -= assignQty;
+                    remainingCapacityByLineDay.put(lineDayKey, remainingCapacity - assignQty);
                     demand.recordPlanDay(day);
-                    plannedSlices.add(new PlanSlice(day, line.lineName, demand.customer, demand.outerInnerRing, demand.model, assignQty));
+                    plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, demand.customer, demand.outerInnerRing, demand.model, assignQty));
                 }
             }
             cursor = cursor.plusDays(1);
@@ -250,6 +251,43 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return map;
     }
 
+    private Map<LineDayKey, Integer> buildRemainingCapacityByLineDay(LocalDate start,
+                                                                     LocalDate endExclusive,
+                                                                     Map<LocalDate, BigDecimal> shiftHoursByDay,
+                                                                     Map<String, List<LineCapacity>> lineCapByModel) {
+        Map<Long, LineCapacity> lineCapacityById = new HashMap<>();
+        for (List<LineCapacity> capacities : lineCapByModel.values()) {
+            for (LineCapacity capacity : capacities) {
+                lineCapacityById.merge(capacity.lineId, capacity, this::pickHigherCapacityLine);
+            }
+        }
+
+        Map<LineDayKey, Integer> remainingCapacityByLineDay = new HashMap<>();
+        LocalDate cursor = start;
+        while (cursor.isBefore(endExclusive)) {
+            BigDecimal shiftHours = shiftHoursByDay.getOrDefault(cursor, DEFAULT_SHIFT_HOURS);
+            for (LineCapacity lineCapacity : lineCapacityById.values()) {
+                int dayCapacity = lineCapacity.capacityPerHour.multiply(shiftHours)
+                        .setScale(0, RoundingMode.FLOOR)
+                        .intValue();
+                remainingCapacityByLineDay.put(new LineDayKey(lineCapacity.lineId, cursor), Math.max(dayCapacity, 0));
+            }
+            cursor = cursor.plusDays(1);
+        }
+        return remainingCapacityByLineDay;
+    }
+
+    private LineCapacity pickHigherCapacityLine(LineCapacity left, LineCapacity right) {
+        int compare = left.capacityPerHour.compareTo(right.capacityPerHour);
+        if (compare > 0) {
+            return left;
+        }
+        if (compare < 0) {
+            return right;
+        }
+        return compareLinePriority(left, right) <= 0 ? left : right;
+    }
+
     List<LineCapacity> findMatchingLines(String demandModel, Map<String, List<LineCapacity>> lineCapByModel) {
         if (demandModel == null || demandModel.trim().isEmpty() || lineCapByModel == null || lineCapByModel.isEmpty()) {
             return Collections.emptyList();
@@ -274,6 +312,48 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return seriesMatches;
     }
 
+    private List<LineCapacity> prioritizeCandidateLines(List<LineCapacity> lines,
+                                                        LocalDate day,
+                                                        int demandRemaining,
+                                                        Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+        if (lines == null || lines.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<Long, LineCapacity> uniqueLines = new HashMap<>();
+        for (LineCapacity line : lines) {
+            uniqueLines.merge(line.lineId, line, (existing, candidate) -> compareLinePriority(existing, candidate) <= 0 ? existing : candidate);
+        }
+
+        List<LineCapacity> availableLines = uniqueLines.values().stream()
+                .filter(line -> remainingCapacityByLineDay.getOrDefault(new LineDayKey(line.lineId, day), 0) > 0)
+                .sorted((left, right) -> {
+                    int remainingCompare = Integer.compare(
+                            remainingCapacityByLineDay.getOrDefault(new LineDayKey(right.lineId, day), 0),
+                            remainingCapacityByLineDay.getOrDefault(new LineDayKey(left.lineId, day), 0)
+                    );
+                    if (remainingCompare != 0) {
+                        return remainingCompare;
+                    }
+                    return compareLinePriority(left, right);
+                })
+                .collect(Collectors.toList());
+
+        if (availableLines.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<LineCapacity> selected = new ArrayList<>();
+        int coveredCapacity = 0;
+        for (LineCapacity line : availableLines) {
+            selected.add(line);
+            coveredCapacity += remainingCapacityByLineDay.getOrDefault(new LineDayKey(line.lineId, day), 0);
+            if (coveredCapacity >= demandRemaining) {
+                break;
+            }
+        }
+        return selected;
+    }
+
     private boolean isSeriesMatch(String demandModel, String configModel) {
         if (configModel == null || configModel.trim().isEmpty()) {
             return false;
@@ -283,9 +363,14 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     }
 
     private void sortLineCapacities(List<LineCapacity> lineCapacities) {
-        lineCapacities.sort(Comparator
+        lineCapacities.sort(this::compareLinePriority);
+    }
+
+    private int compareLinePriority(LineCapacity left, LineCapacity right) {
+        return Comparator
                 .comparing((LineCapacity l) -> l.priority, Comparator.nullsLast(Integer::compareTo))
-                .thenComparing(l -> l.lineId));
+                .thenComparing(l -> l.lineId)
+                .compare(left, right);
     }
 
     private List<CalendarEventDTO> mergeSlicesToEvents(List<PlanSlice> slices) {
@@ -457,14 +542,16 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
     private static class PlanSlice {
         private final LocalDate day;
+        private final Long lineId;
         private final String lineName;
         private final String customer;
         private final String outerInnerRing;
         private final String model;
         private final int quantity;
 
-        private PlanSlice(LocalDate day, String lineName, String customer, String outerInnerRing, String model, int quantity) {
+        private PlanSlice(LocalDate day, Long lineId, String lineName, String customer, String outerInnerRing, String model, int quantity) {
             this.day = day;
+            this.lineId = lineId;
             this.lineName = lineName;
             this.customer = customer;
             this.outerInnerRing = outerInnerRing;
@@ -498,6 +585,33 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         Long getLineId() {
             return lineId;
+        }
+    }
+
+    private static class LineDayKey {
+        private final Long lineId;
+        private final LocalDate day;
+
+        private LineDayKey(Long lineId, LocalDate day) {
+            this.lineId = lineId;
+            this.day = day;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof LineDayKey)) {
+                return false;
+            }
+            LineDayKey that = (LineDayKey) o;
+            return Objects.equals(lineId, that.lineId) && Objects.equals(day, that.day);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(lineId, day);
         }
     }
 }
