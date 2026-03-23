@@ -115,13 +115,14 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, endExclusive);
         Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities();
         Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(start, endExclusive, shiftHoursByDay, lineCapByModel);
-        List<RingPairDemand> ringPairDemands = buildRingPairDemands(demands);
+        Map<DemandItem, DemandLineMatch> barLineMatchesByDemand = buildBarLineMatchesByDemand(demands, lineCapByModel);
+        List<RingPairDemand> ringPairDemands = buildRingPairDemands(demands, barLineMatchesByDemand);
 
         List<PlanSlice> plannedSlices = new ArrayList<>();
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
             final LocalDate day = cursor;
-            schedulePairedBarDemands(day, ringPairDemands, lineCapByModel, remainingCapacityByLineDay, plannedSlices);
+            schedulePairedBarDemands(day, ringPairDemands, remainingCapacityByLineDay, plannedSlices);
             for (DemandItem demand : demands) {
                 if (demand.remaining() <= 0) {
                     continue;
@@ -513,27 +514,72 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return ProductionPlanServiceImpl.buildNormalizedOrderKey(record.getCustomer(), record.getOuterInnerRing(), record.getModel());
     }
 
-    private List<RingPairDemand> buildRingPairDemands(List<DemandItem> demands) {
-        Map<String, DemandItem> demandByPairKey = demands.stream()
-                .filter(DemandItem::isLaOrLb)
-                .collect(Collectors.toMap(DemandItem::fullPairKey, d -> d, (left, right) -> left));
-
-        List<RingPairDemand> pairDemands = new ArrayList<>();
-        Set<String> visited = new HashSet<>();
+    private Map<DemandItem, DemandLineMatch> buildBarLineMatchesByDemand(List<DemandItem> demands,
+                                                                         Map<String, List<LineCapacity>> lineCapByModel) {
+        Map<DemandItem, DemandLineMatch> result = new HashMap<>();
         for (DemandItem demand : demands) {
-            if (!demand.isLaOrLb()) {
+            Map<String, List<LineCapacity>> barLinesBySeries = new HashMap<>();
+            for (Map.Entry<String, List<LineCapacity>> entry : lineCapByModel.entrySet()) {
+                if (!isSeriesMatch(demand.model, entry.getKey())) {
+                    continue;
+                }
+                List<LineCapacity> barLines = entry.getValue().stream()
+                        .filter(LineCapacity::isBarCraft)
+                        .collect(Collectors.toList());
+                if (barLines.isEmpty()) {
+                    continue;
+                }
+                sortLineCapacities(barLines);
+                barLinesBySeries.put(entry.getKey(), barLines);
+            }
+            result.put(demand, new DemandLineMatch(barLinesBySeries));
+        }
+        return result;
+    }
+
+    private List<RingPairDemand> buildRingPairDemands(List<DemandItem> demands,
+                                                      Map<DemandItem, DemandLineMatch> barLineMatchesByDemand) {
+        Map<String, List<DemandItem>> laDemandByCustomer = demands.stream()
+                .filter(demand -> "LA".equalsIgnoreCase(demand.outerInnerRing))
+                .collect(Collectors.groupingBy(DemandItem::normalizedCustomer));
+        Map<String, List<DemandItem>> lbDemandByCustomer = demands.stream()
+                .filter(demand -> "LB".equalsIgnoreCase(demand.outerInnerRing))
+                .collect(Collectors.groupingBy(DemandItem::normalizedCustomer));
+        List<RingPairDemand> pairDemands = new ArrayList<>();
+        for (Map.Entry<String, List<DemandItem>> entry : laDemandByCustomer.entrySet()) {
+            List<DemandItem> laDemands = entry.getValue();
+            List<DemandItem> lbDemands = lbDemandByCustomer.getOrDefault(entry.getKey(), Collections.emptyList());
+            if (lbDemands.isEmpty()) {
                 continue;
             }
-            String pairKey = demand.pairKey();
-            if (!visited.add(pairKey)) {
-                continue;
+            Set<DemandItem> matchedLbDemands = new HashSet<>();
+            for (DemandItem laDemand : laDemands) {
+                PairCandidate bestCandidate = null;
+                for (DemandItem lbDemand : lbDemands) {
+                    if (matchedLbDemands.contains(lbDemand)) {
+                        continue;
+                    }
+                    DemandLineMatch laMatch = barLineMatchesByDemand.get(laDemand);
+                    DemandLineMatch lbMatch = barLineMatchesByDemand.get(lbDemand);
+                    String sharedSeries = findBestSharedSeries(laMatch, lbMatch);
+                    if (sharedSeries == null) {
+                        continue;
+                    }
+                    List<LineCapacity> sharedBarLines = findSharedBarLines(laMatch, lbMatch, sharedSeries);
+                    if (sharedBarLines.isEmpty()) {
+                        continue;
+                    }
+                    PairCandidate candidate = new PairCandidate(lbDemand, sharedSeries, sharedBarLines);
+                    if (bestCandidate == null || comparePairCandidate(candidate, bestCandidate) < 0) {
+                        bestCandidate = candidate;
+                    }
+                }
+                if (bestCandidate == null) {
+                    continue;
+                }
+                matchedLbDemands.add(bestCandidate.lbDemand);
+                pairDemands.add(new RingPairDemand(laDemand, bestCandidate.lbDemand, bestCandidate.sharedSeries, bestCandidate.sharedBarLines));
             }
-            DemandItem laDemand = demandByPairKey.get(pairKey + "|LA");
-            DemandItem lbDemand = demandByPairKey.get(pairKey + "|LB");
-            if (laDemand == null || lbDemand == null) {
-                continue;
-            }
-            pairDemands.add(new RingPairDemand(laDemand, lbDemand));
         }
 
         pairDemands.sort(Comparator
@@ -542,19 +588,67 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return pairDemands;
     }
 
+    private int comparePairCandidate(PairCandidate left, PairCandidate right) {
+        int sharedSeriesCompare = Integer.compare(right.sharedSeries.length(), left.sharedSeries.length());
+        if (sharedSeriesCompare != 0) {
+            return sharedSeriesCompare;
+        }
+        int sharedLineCountCompare = Integer.compare(right.sharedBarLines.size(), left.sharedBarLines.size());
+        if (sharedLineCountCompare != 0) {
+            return sharedLineCountCompare;
+        }
+        int deliveryCompare = Integer.compare(left.lbDemand.deliveryUrgencyDays(), right.lbDemand.deliveryUrgencyDays());
+        if (deliveryCompare != 0) {
+            return deliveryCompare;
+        }
+        int requiredCompare = Integer.compare(right.lbDemand.required, left.lbDemand.required);
+        if (requiredCompare != 0) {
+            return requiredCompare;
+        }
+        return compareLinePriority(left.sharedBarLines.get(0), right.sharedBarLines.get(0));
+    }
+
+    private String findBestSharedSeries(DemandLineMatch left, DemandLineMatch right) {
+        if (left == null || right == null) {
+            return null;
+        }
+        return left.seriesKeys().stream()
+                .filter(right.seriesKeys()::contains)
+                .sorted(Comparator.comparingInt(String::length).reversed().thenComparing(Comparator.naturalOrder()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private List<LineCapacity> findSharedBarLines(DemandLineMatch left, DemandLineMatch right, String sharedSeries) {
+        if (left == null || right == null || sharedSeries == null) {
+            return Collections.emptyList();
+        }
+        List<LineCapacity> leftLines = left.barLinesBySeries(sharedSeries);
+        List<LineCapacity> rightLines = right.barLinesBySeries(sharedSeries);
+        if (leftLines.isEmpty() || rightLines.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<Long, LineCapacity> rightByLineId = rightLines.stream()
+                .collect(Collectors.toMap(LineCapacity::getLineId, line -> line, (existing, candidate) -> compareLinePriority(existing, candidate) <= 0 ? existing : candidate));
+        List<LineCapacity> sharedLines = new ArrayList<>();
+        for (LineCapacity leftLine : leftLines) {
+            if (rightByLineId.containsKey(leftLine.getLineId())) {
+                sharedLines.add(leftLine);
+            }
+        }
+        sortLineCapacities(sharedLines);
+        return sharedLines;
+    }
+
     private void schedulePairedBarDemands(LocalDate day,
                                           List<RingPairDemand> pairDemands,
-                                          Map<String, List<LineCapacity>> lineCapByModel,
                                           Map<LineDayKey, Integer> remainingCapacityByLineDay,
                                           List<PlanSlice> plannedSlices) {
         for (RingPairDemand pairDemand : pairDemands) {
             if (pairDemand.remaining() <= 0) {
                 continue;
             }
-            List<LineCapacity> lines = findMatchingLines(pairDemand.model(), lineCapByModel).stream()
-                    .filter(LineCapacity::isBarCraft)
-                    .collect(Collectors.toList());
-            List<LineCapacity> prioritizedLines = prioritizeCandidateLines(lines, day, pairDemand.remaining(), remainingCapacityByLineDay);
+            List<LineCapacity> prioritizedLines = prioritizeCandidateLines(pairDemand.sharedBarLines(), day, pairDemand.remaining(), remainingCapacityByLineDay);
             for (LineCapacity line : prioritizedLines) {
                 if (pairDemand.remaining() <= 0) {
                     break;
@@ -567,8 +661,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 int assignQty = Math.min(remainingCapacity, pairDemand.remaining());
                 pairDemand.applyPlan(assignQty, day);
                 remainingCapacityByLineDay.put(lineDayKey, remainingCapacity - assignQty);
-                plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LA", pairDemand.model(), assignQty));
-                plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LB", pairDemand.model(), assignQty));
+                plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LA", pairDemand.laModel(), assignQty));
+                plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LB", pairDemand.lbModel(), assignQty));
             }
         }
     }
@@ -630,12 +724,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return "LA".equalsIgnoreCase(outerInnerRing) || "LB".equalsIgnoreCase(outerInnerRing);
         }
 
-        private String pairKey() {
-            return normalize(customer) + "|" + normalize(model);
-        }
-
-        private String fullPairKey() {
-            return pairKey() + "|" + normalize(outerInnerRing);
+        private String normalizedCustomer() {
+            return normalize(customer);
         }
 
         private String normalize(String value) {
@@ -646,10 +736,14 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private static class RingPairDemand {
         private final DemandItem laDemand;
         private final DemandItem lbDemand;
+        private final String sharedSeries;
+        private final List<LineCapacity> sharedBarLines;
 
-        private RingPairDemand(DemandItem laDemand, DemandItem lbDemand) {
+        private RingPairDemand(DemandItem laDemand, DemandItem lbDemand, String sharedSeries, List<LineCapacity> sharedBarLines) {
             this.laDemand = laDemand;
             this.lbDemand = lbDemand;
+            this.sharedSeries = sharedSeries;
+            this.sharedBarLines = sharedBarLines;
         }
 
         private int remaining() {
@@ -668,13 +762,49 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return laDemand.customer;
         }
 
-        private String model() {
+        private String laModel() {
             return laDemand.model;
+        }
+
+        private String lbModel() {
+            return lbDemand.model;
+        }
+
+        private List<LineCapacity> sharedBarLines() {
+            return sharedBarLines;
         }
 
         private void applyPlan(int quantity, LocalDate day) {
             laDemand.applyPlan(quantity, day);
             lbDemand.applyPlan(quantity, day);
+        }
+    }
+
+    private static class DemandLineMatch {
+        private final Map<String, List<LineCapacity>> barLinesBySeries;
+
+        private DemandLineMatch(Map<String, List<LineCapacity>> barLinesBySeries) {
+            this.barLinesBySeries = barLinesBySeries;
+        }
+
+        private Set<String> seriesKeys() {
+            return barLinesBySeries.keySet();
+        }
+
+        private List<LineCapacity> barLinesBySeries(String series) {
+            return barLinesBySeries.getOrDefault(series, Collections.emptyList());
+        }
+    }
+
+    private static class PairCandidate {
+        private final DemandItem lbDemand;
+        private final String sharedSeries;
+        private final List<LineCapacity> sharedBarLines;
+
+        private PairCandidate(DemandItem lbDemand, String sharedSeries, List<LineCapacity> sharedBarLines) {
+            this.lbDemand = lbDemand;
+            this.sharedSeries = sharedSeries;
+            this.sharedBarLines = sharedBarLines;
         }
     }
 
