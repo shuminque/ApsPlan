@@ -33,7 +33,13 @@
             s.scheduleId,
             s.teamID AS title,
             DATE_FORMAT(s.startDateTime, '%Y-%m-%dT%H:%i:%s') AS start,
-            DATE_FORMAT(s.endDateTime,   '%Y-%m-%dT%H:%i:%s') AS end,
+            DATE_FORMAT(
+                CASE
+                    WHEN DATE(s.endDateTime) > DATE(s.startDateTime) THEN CONCAT(DATE_FORMAT(s.startDateTime, '%Y-%m-%d'), ' 23:59:59')
+                    ELSE s.endDateTime
+                END,
+                '%Y-%m-%dT%H:%i:%s'
+            ) AS end,
             DATE_FORMAT(s.startDateTime, '%H:%i:%s') AS startTime,
             DATE_FORMAT(s.endDateTime, '%H:%i:%s') AS endTime,
             ELT((CRC32(IFNULL(s.teamID,'')) % 10) + 1,

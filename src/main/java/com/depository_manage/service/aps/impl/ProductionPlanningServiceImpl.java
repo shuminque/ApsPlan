@@ -24,6 +24,7 @@ import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -67,7 +68,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
     @Override
     public PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate) {
-        LocalDate requestStart = toLocalDate(startDate);
+        LocalDateTime requestStartAt = toLocalDateTime(startDate);
+        LocalDate requestStart = requestStartAt == null ? null : requestStartAt.toLocalDate();
         LocalDate endExclusive = toLocalDate(endDate);
         if (requestStart == null || endExclusive == null) {
             return new PlanPreviewResponseDTO();
@@ -75,6 +77,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         LocalDate today = LocalDate.now();
         LocalDate start = requestStart.isBefore(today) ? today : requestStart;
+        LocalDateTime effectiveStartAt = requestStartAt == null ? null : requestStartAt.withSecond(0).withNano(0);
+        if (effectiveStartAt != null && effectiveStartAt.toLocalDate().isBefore(start)) {
+            effectiveStartAt = start.atStartOfDay();
+        }
         if (!start.isBefore(endExclusive)) {
             endExclusive = start.plusMonths(1);
         }
@@ -112,7 +118,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             endExclusive = latestDeliveryExclusive;
         }
 
-        Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, endExclusive);
+        Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, endExclusive, effectiveStartAt);
         Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities();
         Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(start, endExclusive, shiftHoursByDay, lineCapByModel);
         Map<DemandItem, DemandLineMatch> barLineMatchesByDemand = buildBarLineMatchesByDemand(demands, lineCapByModel);
@@ -151,7 +157,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             cursor = cursor.plusDays(1);
         }
         PlanPreviewResponseDTO response = new PlanPreviewResponseDTO();
-        response.setEvents(mergeSlicesToEvents(plannedSlices));
+        response.setEvents(mergeSlicesToEvents(plannedSlices, effectiveStartAt));
         response.setOrders(buildOrderPreviewRows(demands));
         response.setDailyOutputs(buildDailyPreviewRows(plannedSlices));
         return response;
@@ -198,15 +204,18 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return result;
     }
 
-    private Map<LocalDate, BigDecimal> buildShiftHours(LocalDate start, LocalDate endExclusive) {
+    private Map<LocalDate, BigDecimal> buildShiftHours(LocalDate start, LocalDate endExclusive, LocalDateTime planStartAt) {
         Map<LocalDate, BigDecimal> result = new HashMap<>();
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
             List<ShiftSchedule> schedules = shiftCalendarService.getSchedulesByDate(cursor.toString());
             BigDecimal hours = schedules.stream()
-                    .map(this::calcHours)
+                    .map(schedule -> calcHours(schedule, planStartAt))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-            if (hours.compareTo(BigDecimal.ZERO) <= 0) {
+            boolean isCustomStartDay = planStartAt != null
+                    && cursor.equals(planStartAt.toLocalDate())
+                    && !planStartAt.toLocalTime().equals(java.time.LocalTime.MIDNIGHT);
+            if (hours.compareTo(BigDecimal.ZERO) <= 0 && !isCustomStartDay) {
                 hours = DEFAULT_SHIFT_HOURS;
             }
             result.put(cursor, hours);
@@ -215,16 +224,18 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return result;
     }
 
-    private BigDecimal calcHours(ShiftSchedule schedule) {
+    private BigDecimal calcHours(ShiftSchedule schedule, LocalDateTime planStartAt) {
         if (schedule.getStartDateTime() == null || schedule.getEndDateTime() == null) {
             return BigDecimal.ZERO;
         }
-        LocalDate startDate = schedule.getStartDateTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-        LocalDate endDate = schedule.getEndDateTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
-        long minutes = ChronoUnit.MINUTES.between(
-                schedule.getStartDateTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime(),
-                schedule.getEndDateTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime()
-        );
+        LocalDateTime scheduleStart = schedule.getStartDateTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+        LocalDateTime scheduleEnd = schedule.getEndDateTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+        LocalDate startDate = scheduleStart.toLocalDate();
+        LocalDate endDate = scheduleEnd.toLocalDate();
+        if (planStartAt != null && scheduleStart.toLocalDate().equals(planStartAt.toLocalDate()) && scheduleEnd.isAfter(planStartAt)) {
+            scheduleStart = scheduleStart.isBefore(planStartAt) ? planStartAt : scheduleStart;
+        }
+        long minutes = ChronoUnit.MINUTES.between(scheduleStart, scheduleEnd);
         if (minutes <= 0 && endDate.isAfter(startDate)) {
             minutes = 24 * 60;
         }
@@ -411,7 +422,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 .compare(left, right);
     }
 
-    private List<CalendarEventDTO> mergeSlicesToEvents(List<PlanSlice> slices) {
+    private List<CalendarEventDTO> mergeSlicesToEvents(List<PlanSlice> slices, LocalDateTime planStartAt) {
         List<CalendarEventDTO> result = new ArrayList<>();
         if (slices.isEmpty()) {
             return result;
@@ -435,13 +446,13 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 blockQty += next.quantity;
                 continue;
             }
-            result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty));
+            result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty, planStartAt));
             current = next;
             blockStart = next.day;
             blockEnd = next.day;
             blockQty = next.quantity;
         }
-        result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty));
+        result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty, planStartAt));
         return result;
     }
 
@@ -483,10 +494,14 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return rows;
     }
 
-    private CalendarEventDTO buildEvent(LocalDate startInclusive, LocalDate endExclusive, PlanSlice slice, int quantity) {
+    private CalendarEventDTO buildEvent(LocalDate startInclusive, LocalDate endExclusive, PlanSlice slice, int quantity, LocalDateTime planStartAt) {
         CalendarEventDTO dto = new CalendarEventDTO();
         dto.setTitle(String.format("[排产] %s %s/%s %s x %,d", slice.lineName, slice.customer, slice.outerInnerRing, slice.model, quantity));
-        dto.setStart(startInclusive.atStartOfDay().format(DATE_TIME_FMT));
+        LocalDateTime eventStart = startInclusive.atStartOfDay();
+        if (planStartAt != null && startInclusive.equals(planStartAt.toLocalDate())) {
+            eventStart = planStartAt;
+        }
+        dto.setStart(eventStart.format(DATE_TIME_FMT));
         dto.setEnd(endExclusive.atStartOfDay().format(DATE_TIME_FMT));
         dto.setColor(PLAN_COLOR);
         dto.setEventType("PLAN");
@@ -498,6 +513,23 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         dto.setModel(slice.model);
         dto.setQuantity(quantity);
         return dto;
+    }
+
+    private LocalDateTime toLocalDateTime(String dateTime) {
+        if (dateTime == null || dateTime.trim().isEmpty()) {
+            return null;
+        }
+        String normalized = dateTime.trim();
+        if (normalized.length() == 10) {
+            return LocalDate.parse(normalized).atStartOfDay();
+        }
+        if (normalized.length() == 16) {
+            return LocalDateTime.parse(normalized + ":00", DATE_TIME_FMT);
+        }
+        if (normalized.length() >= 19) {
+            return LocalDateTime.parse(normalized.substring(0, 19), DATE_TIME_FMT);
+        }
+        return LocalDate.parse(normalized.substring(0, 10)).atStartOfDay();
     }
 
     private LocalDate toLocalDate(String dateTime) {

@@ -46,8 +46,6 @@
 <div class="container-fluid">
     <div style="display:flex;gap:10px;align-items:center;padding:10px 0 8px 2px;">
         <button class="layui-btn layui-btn-sm" onclick="previewAutoPlan()">自动排产预览</button>
-        <button class="layui-btn layui-btn-normal layui-btn-sm" onclick="commitAutoPlan()">确认写入排产</button>
-        <button class="layui-btn layui-btn-primary layui-btn-sm" onclick="clearAutoPlanPreview()">清除预览</button>
     </div>
     <div style="display:flex;gap:16px;align-items:center;padding:0 0 12px 2px;color:#555;">
         <span><i class="layui-icon layui-icon-circle-dot" style="color:#1e9fff;"></i> 班次排班</span>
@@ -194,24 +192,69 @@
         };
     }
 
-    function previewAutoPlan() {
+    function toDateTimeLocalValue(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    function getDefaultPlanStart() {
+        const now = new Date();
+        const activeStart = new Date(calendar.view.activeStart);
+        return now > activeStart ? now : activeStart;
+    }
+
+    function requestPlanStartTime() {
         const range = getCurrentRange();
-        fetch('/api/shift/plan/preview', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(range)
-        })
-            .then(res => {
-                if (!res.ok) throw new Error('预览失败');
-                return res.json();
-            })
-            .then(data => {
-                previewPlanData = data || {events: [], orders: [], dailyOutputs: []};
-                openPlanPreviewDialog(previewPlanData);
-            })
-            .catch(() => layer.msg('自动排产预览失败'));
+        const defaultStart = toDateTimeLocalValue(getDefaultPlanStart());
+
+        layer.open({
+            type: 1,
+            title: '选择自动排产开始时间',
+            area: ['420px', '220px'],
+            btn: ['开始预览', '取消'],
+            content: `
+                <div style="padding:16px;">
+                    <div style="margin-bottom:10px;color:#666;">请选择自动排产的开始时间，系统将从该时间点开始计算首日剩余产能。</div>
+                    <input id="planStartTimeInput" type="datetime-local" class="layui-input" value="${defaultStart}">
+                </div>
+            `,
+            yes: function(index) {
+                const input = document.getElementById('planStartTimeInput');
+                const selectedStart = input && input.value;
+                if (!selectedStart) {
+                    layer.msg('请选择开始时间');
+                    return;
+                }
+                layer.close(index);
+                fetch('/api/shift/plan/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        start: selectedStart,
+                        end: range.end
+                    })
+                })
+                    .then(res => {
+                        if (!res.ok) throw new Error('预览失败');
+                        return res.json();
+                    })
+                    .then(data => {
+                        previewPlanData = data || {events: [], orders: [], dailyOutputs: []};
+                        openPlanPreviewDialog(previewPlanData);
+                    })
+                    .catch(() => layer.msg('自动排产预览失败'));
+            }
+        });
+    }
+
+    function previewAutoPlan() {
+        requestPlanStartTime();
     }
 
     function parsePlanEventTitle(title) {
@@ -343,17 +386,6 @@
                 }
                 layer.msg(message);
             });
-    }
-
-    function clearAutoPlanPreview() {
-        fetch('/api/shift/plan/preview', {
-            method: 'DELETE'
-        })
-            .then(() => {
-                previewPlanData = null;
-                layer.msg('已清除预览');
-            })
-            .catch(() => layer.msg('清除预览失败'));
     }
 
     document.addEventListener('DOMContentLoaded', function () {
