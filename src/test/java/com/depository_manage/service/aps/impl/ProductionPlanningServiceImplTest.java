@@ -23,11 +23,13 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.Set;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.when;
@@ -112,6 +114,39 @@ class ProductionPlanningServiceImplTest {
                         .map(item -> item.getOuterInnerRing())
                         .sorted()
                         .collect(Collectors.toList()));
+    }
+
+    @Test
+    void pairedBarDemandShouldUseMinimumActivatedLines() {
+        LocalDate start = LocalDate.now().plusDays(1);
+        LocalDate end = start.plusDays(5);
+
+        when(productionOrderService.list(any())).thenReturn(Arrays.asList(
+                order("昆山NSK", "LA", "6201VVN*XC2", 3000, start.plusDays(10)),
+                order("昆山NSK", "LB", "6201-A-2*XC2", 3000, start.plusDays(10))
+        ));
+        when(safetyStockService.list()).thenReturn(Collections.emptyList());
+        when(shiftCalendarService.getSchedulesByDate(any())).thenReturn(Collections.emptyList());
+        when(bearingRecordService.selectInventoryByCutoffDate(anyMap())).thenReturn(Collections.emptyList());
+        when(productionLineMapper.selectPageList(any(), any(), any())).thenReturn(Arrays.asList(
+                line(1L, "A线", "棒材工艺"),
+                line(2L, "D线", "棒材工艺"),
+                line(3L, "FB2线", "棒材工艺")
+        ));
+        when(modelConfigMapper.selectPageList(any(), any(), any(), any())).thenReturn(Arrays.asList(
+                config(1L, "6201", 100),
+                config(2L, "6201", 80),
+                config(3L, "6201", 60)
+        ));
+
+        PlanPreviewResponseDTO response = service.generatePlanPreview(start.toString(), end.toString());
+
+        Set<String> usedLines = response.getDailyOutputs().stream()
+                .map(item -> item.getLineName())
+                .collect(Collectors.toSet());
+
+        assertEquals(Collections.singleton("A线"), usedLines);
+        assertFalse(response.getDailyOutputs().isEmpty());
     }
 
     private Integer plannedQty(List<PlanPreviewOrderDTO> orders, String ring) {
