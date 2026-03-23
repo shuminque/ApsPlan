@@ -117,12 +117,13 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(start, endExclusive, shiftHoursByDay, lineCapByModel);
         Map<DemandItem, DemandLineMatch> barLineMatchesByDemand = buildBarLineMatchesByDemand(demands, lineCapByModel);
         List<RingPairDemand> ringPairDemands = buildRingPairDemands(demands, barLineMatchesByDemand);
+        Map<String, LineActivationPlan> activationPlanByKey = new HashMap<>();
 
         List<PlanSlice> plannedSlices = new ArrayList<>();
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
             final LocalDate day = cursor;
-            schedulePairedBarDemands(day, ringPairDemands, remainingCapacityByLineDay, plannedSlices);
+            schedulePairedBarDemands(day, endExclusive, ringPairDemands, remainingCapacityByLineDay, plannedSlices, activationPlanByKey);
             for (DemandItem demand : demands) {
                 if (demand.remaining() <= 0) {
                     continue;
@@ -130,7 +131,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 List<LineCapacity> lines = findMatchingLines(demand.model, lineCapByModel).stream()
                         .filter(line -> !line.isBarCraft())
                         .collect(Collectors.toList());
-                List<LineCapacity> prioritizedLines = prioritizeCandidateLines(lines, day, demand.remaining(), remainingCapacityByLineDay);
+                List<LineCapacity> prioritizedLines = prioritizeCandidateLines(demand.activationKey(), lines, day, endExclusive,
+                        demand.remaining(), remainingCapacityByLineDay, activationPlanByKey);
                 for (LineCapacity line : prioritizedLines) {
                     if (demand.remaining() <= 0) {
                         break;
@@ -325,10 +327,13 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return seriesMatches;
     }
 
-    private List<LineCapacity> prioritizeCandidateLines(List<LineCapacity> lines,
+    private List<LineCapacity> prioritizeCandidateLines(String activationKey,
+                                                        List<LineCapacity> lines,
                                                         LocalDate day,
+                                                        LocalDate endExclusive,
                                                         int demandRemaining,
-                                                        Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+                                                        Map<LineDayKey, Integer> remainingCapacityByLineDay,
+                                                        Map<String, LineActivationPlan> activationPlanByKey) {
         if (lines == null || lines.isEmpty()) {
             return Collections.emptyList();
         }
@@ -337,34 +342,54 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             uniqueLines.merge(line.lineId, line, (existing, candidate) -> compareLinePriority(existing, candidate) <= 0 ? existing : candidate);
         }
 
-        List<LineCapacity> availableLines = uniqueLines.values().stream()
-                .filter(line -> remainingCapacityByLineDay.getOrDefault(new LineDayKey(line.lineId, day), 0) > 0)
-                .sorted((left, right) -> {
-                    int remainingCompare = Integer.compare(
-                            remainingCapacityByLineDay.getOrDefault(new LineDayKey(right.lineId, day), 0),
-                            remainingCapacityByLineDay.getOrDefault(new LineDayKey(left.lineId, day), 0)
-                    );
-                    if (remainingCompare != 0) {
-                        return remainingCompare;
-                    }
-                    return compareLinePriority(left, right);
-                })
+        List<LineCapacity> candidates = uniqueLines.values().stream()
+                .sorted((left, right) -> compareByRemainingHorizonCapacity(left, right, day, endExclusive, remainingCapacityByLineDay))
                 .collect(Collectors.toList());
 
-        if (availableLines.isEmpty()) {
-            return Collections.emptyList();
+        LineActivationPlan activationPlan = activationPlanByKey.computeIfAbsent(activationKey, key -> new LineActivationPlan());
+        activationPlan.ensureMinimumLines(candidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
+
+        List<LineCapacity> availableLines = activationPlan.activatedLines(candidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
+        if (!availableLines.isEmpty()) {
+            return availableLines;
         }
 
-        List<LineCapacity> selected = new ArrayList<>();
-        int coveredCapacity = 0;
-        for (LineCapacity line : availableLines) {
-            selected.add(line);
-            coveredCapacity += remainingCapacityByLineDay.getOrDefault(new LineDayKey(line.lineId, day), 0);
-            if (coveredCapacity >= demandRemaining) {
-                break;
-            }
+        List<LineCapacity> fallbackLines = candidates.stream()
+                .filter(line -> remainingCapacityByLineDay.getOrDefault(new LineDayKey(line.lineId, day), 0) > 0)
+                .collect(Collectors.toList());
+        if (fallbackLines.isEmpty()) {
+            return Collections.emptyList();
         }
-        return selected;
+        activationPlan.ensureMinimumLines(fallbackLines, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
+        return activationPlan.activatedLines(fallbackLines, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
+    }
+
+    private int compareByRemainingHorizonCapacity(LineCapacity left,
+                                                  LineCapacity right,
+                                                  LocalDate startDay,
+                                                  LocalDate endExclusive,
+                                                  Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+        int capacityCompare = Integer.compare(
+                totalRemainingCapacity(right, startDay, endExclusive, remainingCapacityByLineDay),
+                totalRemainingCapacity(left, startDay, endExclusive, remainingCapacityByLineDay)
+        );
+        if (capacityCompare != 0) {
+            return capacityCompare;
+        }
+        return compareLinePriority(left, right);
+    }
+
+    private int totalRemainingCapacity(LineCapacity line,
+                                       LocalDate startDay,
+                                       LocalDate endExclusive,
+                                       Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+        int total = 0;
+        LocalDate cursor = startDay;
+        while (cursor.isBefore(endExclusive)) {
+            total += remainingCapacityByLineDay.getOrDefault(new LineDayKey(line.lineId, cursor), 0);
+            cursor = cursor.plusDays(1);
+        }
+        return total;
     }
 
     private boolean isSeriesMatch(String demandModel, String configModel) {
@@ -641,14 +666,17 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     }
 
     private void schedulePairedBarDemands(LocalDate day,
+                                          LocalDate endExclusive,
                                           List<RingPairDemand> pairDemands,
                                           Map<LineDayKey, Integer> remainingCapacityByLineDay,
-                                          List<PlanSlice> plannedSlices) {
+                                          List<PlanSlice> plannedSlices,
+                                          Map<String, LineActivationPlan> activationPlanByKey) {
         for (RingPairDemand pairDemand : pairDemands) {
             if (pairDemand.remaining() <= 0) {
                 continue;
             }
-            List<LineCapacity> prioritizedLines = prioritizeCandidateLines(pairDemand.sharedBarLines(), day, pairDemand.remaining(), remainingCapacityByLineDay);
+            List<LineCapacity> prioritizedLines = prioritizeCandidateLines(pairDemand.activationKey(), pairDemand.sharedBarLines(), day,
+                    endExclusive, pairDemand.remaining(), remainingCapacityByLineDay, activationPlanByKey);
             for (LineCapacity line : prioritizedLines) {
                 if (pairDemand.remaining() <= 0) {
                     break;
@@ -728,6 +756,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return normalize(customer);
         }
 
+        private String activationKey() {
+            return normalizedCustomer() + "|" + normalize(outerInnerRing) + "|" + normalize(model);
+        }
+
         private String normalize(String value) {
             return value == null ? "" : value.trim().toUpperCase();
         }
@@ -774,9 +806,17 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return sharedBarLines;
         }
 
+        private String activationKey() {
+            return laDemand.normalizedCustomer() + "|PAIR|" + normalize(sharedSeries) + "|" + normalize(laDemand.model) + "|" + normalize(lbDemand.model);
+        }
+
         private void applyPlan(int quantity, LocalDate day) {
             laDemand.applyPlan(quantity, day);
             lbDemand.applyPlan(quantity, day);
+        }
+
+        private String normalize(String value) {
+            return value == null ? "" : value.trim().toUpperCase();
         }
     }
 
@@ -859,6 +899,60 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         boolean isBarCraft() {
             return craft != null && craft.contains("棒材");
+        }
+    }
+
+    private class LineActivationPlan {
+        private final Set<Long> activatedLineIds = new HashSet<>();
+
+        private void ensureMinimumLines(List<LineCapacity> sortedCandidates,
+                                        LocalDate day,
+                                        LocalDate endExclusive,
+                                        int demandRemaining,
+                                        Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+            if (sortedCandidates == null || sortedCandidates.isEmpty() || demandRemaining <= 0) {
+                return;
+            }
+            int coveredCapacity = activatedCapacity(sortedCandidates, day, endExclusive, remainingCapacityByLineDay);
+            if (coveredCapacity >= demandRemaining) {
+                return;
+            }
+            for (LineCapacity candidate : sortedCandidates) {
+                if (activatedLineIds.contains(candidate.lineId)) {
+                    continue;
+                }
+                activatedLineIds.add(candidate.lineId);
+                coveredCapacity += totalRemainingCapacity(candidate, day, endExclusive, remainingCapacityByLineDay);
+                if (coveredCapacity >= demandRemaining) {
+                    break;
+                }
+            }
+        }
+
+        private int activatedCapacity(List<LineCapacity> sortedCandidates,
+                                      LocalDate day,
+                                      LocalDate endExclusive,
+                                      Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+            int total = 0;
+            for (LineCapacity line : sortedCandidates) {
+                if (!activatedLineIds.contains(line.lineId)) {
+                    continue;
+                }
+                total += totalRemainingCapacity(line, day, endExclusive, remainingCapacityByLineDay);
+            }
+            return total;
+        }
+
+        private List<LineCapacity> activatedLines(List<LineCapacity> sortedCandidates,
+                                                  LocalDate day,
+                                                  LocalDate endExclusive,
+                                                  int demandRemaining,
+                                                  Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+            ensureMinimumLines(sortedCandidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
+            return sortedCandidates.stream()
+                    .filter(line -> activatedLineIds.contains(line.lineId))
+                    .filter(line -> remainingCapacityByLineDay.getOrDefault(new LineDayKey(line.lineId, day), 0) > 0)
+                    .collect(Collectors.toList());
         }
     }
 
