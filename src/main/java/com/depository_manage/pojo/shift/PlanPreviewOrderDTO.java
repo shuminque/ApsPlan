@@ -7,6 +7,7 @@ public class PlanPreviewOrderDTO {
     private String customer;
     private String outerInnerRing;
     private String model;
+    private Integer priority;
     private String earliestDeliveryDate;
     private Integer currentInventory;
     private Integer requiredQuantity;
