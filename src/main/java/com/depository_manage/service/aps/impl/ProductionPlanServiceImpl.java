@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -37,6 +38,7 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
     private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final DateTimeFormatter BATCH_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final Pattern PLAN_TITLE_PATTERN = Pattern.compile("^(.*?)\\s+(.*?)\\/(.*?)\\s+(.*?)\\s+x\\s+([0-9,]+)$");
+    private static final long ROLLBACK_FREEZE_HOURS = 4L;
 
     @Resource
     private ProductionPlanMapper productionPlanMapper;
@@ -61,6 +63,20 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         if (parsedEvents.isEmpty()) {
             return 0;
         }
+
+        LocalDateTime rollbackFrom = parsedEvents.stream()
+                .map(p -> toLocalDateTime(p.startDate))
+                .min(LocalDateTime::compareTo)
+                .orElse(null);
+        LocalDateTime rollbackTo = parsedEvents.stream()
+                .map(p -> toLocalDateTime(p.endDate))
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+        Set<Long> rollbackLineIds = parsedEvents.stream()
+                .map(p -> p.lineId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        rollbackPlanWindow(rollbackFrom, rollbackTo, rollbackLineIds);
 
         Map<String, List<ProductionOrder>> orderGroupMap = loadOpenOrdersByKey();
         boolean hasMatchedOrder = parsedEvents.stream()
@@ -139,6 +155,59 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         }
 
         return inserted;
+    }
+
+    @Override
+    public int rollbackPlanWindow(LocalDateTime from, LocalDateTime to, Set<Long> lineIds) {
+        if (from == null || to == null || from.isAfter(to)) {
+            return 0;
+        }
+        if (lineIds == null || lineIds.isEmpty()) {
+            return 0;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime freezeEnd = now.plusHours(ROLLBACK_FREEZE_HOURS);
+        LocalDateTime rollbackStart = from.isAfter(freezeEnd) ? from : freezeEnd;
+        if (!rollbackStart.isBefore(to)) {
+            return 0;
+        }
+
+        Date rollbackStartDate = toDate(rollbackStart);
+        Date rollbackEndDate = toDate(to);
+        List<ProductionPlanItem> rollbackItems = productionPlanItemMapper.selectList(new LambdaQueryWrapper<ProductionPlanItem>()
+                .in(ProductionPlanItem::getLineId, lineIds)
+                .gt(ProductionPlanItem::getEndDate, rollbackStartDate)
+                .lt(ProductionPlanItem::getStartDate, rollbackEndDate));
+        if (rollbackItems.isEmpty()) {
+            return 0;
+        }
+
+        Map<Long, Integer> rollbackQtyByOrder = rollbackItems.stream()
+                .filter(item -> item.getOrderId() != null)
+                .collect(Collectors.groupingBy(ProductionPlanItem::getOrderId, Collectors.summingInt(item -> Optional.ofNullable(item.getAssignQty()).orElse(0))));
+        if (!rollbackQtyByOrder.isEmpty()) {
+            List<ProductionOrder> rollbackOrders = productionOrderMapper.selectBatchIds(rollbackQtyByOrder.keySet());
+            Date nowDate = new Date();
+            for (ProductionOrder order : rollbackOrders) {
+                int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
+                int rollbackQty = rollbackQtyByOrder.getOrDefault(order.getId(), 0);
+                int updatedAssigned = Math.max(0, assigned - rollbackQty);
+                order.setAssignedQuantity(updatedAssigned);
+                refreshOrderStatus(order, updatedAssigned);
+                order.setUpdatedAt(nowDate);
+                productionOrderMapper.updateById(order);
+            }
+        }
+
+        List<Long> itemIds = rollbackItems.stream()
+                .map(ProductionPlanItem::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (!itemIds.isEmpty()) {
+            return productionPlanItemMapper.deleteBatchIds(itemIds);
+        }
+        return 0;
     }
 
     private Map<String, List<ProductionOrder>> loadOpenOrdersByKey() {
@@ -253,6 +322,26 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
             return "";
         }
         return value.trim().replaceAll("\\s+", " ");
+    }
+
+    private void refreshOrderStatus(ProductionOrder order, int assignedQty) {
+        String normalizedStatus = ProductionOrderStatus.normalize(order.getStatus());
+        if (ProductionOrderStatus.COMPLETED.getCode().equals(normalizedStatus)) {
+            return;
+        }
+        if (assignedQty <= 0) {
+            order.setStatus(ProductionOrderStatus.PENDING.getCode());
+            return;
+        }
+        order.setStatus(ProductionOrderStatus.PLANNED.getCode());
+    }
+
+    private static Date toDate(LocalDateTime dateTime) {
+        return Date.from(dateTime.atZone(ZoneId.systemDefault()).toInstant());
+    }
+
+    private static LocalDateTime toLocalDateTime(Date date) {
+        return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
     }
 
     private static class ParsedPlanEvent {
