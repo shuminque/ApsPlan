@@ -250,8 +250,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
 
         result.sort(Comparator
-                .comparing(DemandItem::lockedInsert).reversed()
-                .comparingInt(DemandItem::priority).reversed()
+                .comparing((DemandItem d) -> d.lockedInsert()).reversed()
+                .thenComparing(Comparator.comparingInt((DemandItem d) -> d.priority()).reversed())
                 .thenComparingInt(DemandItem::deliveryUrgencyDays)
                 .thenComparing((DemandItem d) -> d.required, Comparator.reverseOrder()));
         return result;
@@ -718,8 +718,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
 
         pairDemands.sort(Comparator
-                .comparing(RingPairDemand::lockedInsert).reversed()
-                .comparingInt(RingPairDemand::priority).reversed()
+                .comparing((RingPairDemand d) -> d.lockedInsert()).reversed()
+                .thenComparing(Comparator.comparingInt((RingPairDemand d) -> d.priority()).reversed())
                 .thenComparingInt(RingPairDemand::deliveryUrgencyDays)
                 .thenComparing(RingPairDemand::maxRequired, Comparator.reverseOrder()));
         return pairDemands;
