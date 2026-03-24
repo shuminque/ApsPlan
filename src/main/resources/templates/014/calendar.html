@@ -46,10 +46,12 @@
 <div class="container-fluid">
     <div style="display:flex;gap:10px;align-items:center;padding:10px 0 8px 2px;">
         <button class="layui-btn layui-btn-sm" onclick="previewAutoPlan()">自动排产预览</button>
+        <button class="layui-btn layui-btn-sm layui-btn-normal" onclick="openInsertPlanWizard()">插单排产</button>
     </div>
     <div style="display:flex;gap:16px;align-items:center;padding:0 0 12px 2px;color:#555;">
         <span><i class="layui-icon layui-icon-circle-dot" style="color:#1e9fff;"></i> 班次排班</span>
         <span><i class="layui-icon layui-icon-tabs" style="color:#FFB020;"></i> 自动排产预览（弹窗明细）</span>
+        <span><i class="layui-icon layui-icon-release" style="color:#16baaa;"></i> 插单排产（两步向导）</span>
     </div>
     <div id="calendar"></div>
 </div>
@@ -59,6 +61,8 @@
 <script>
     let calendar;
     let previewPlanData = null;
+    let insertPlanPreviewData = null;
+    let insertPlanRequestPayload = null;
     // --- 工具函数 ---
     const formatTime = (dateTime) => {
         if (!dateTime) return '';
@@ -255,6 +259,306 @@
 
     function previewAutoPlan() {
         requestPlanStartTime();
+    }
+
+    function readListResult(data) {
+        if (Array.isArray(data)) return data;
+        if (data && Array.isArray(data.data)) return data.data;
+        if (data && Array.isArray(data.records)) return data.records;
+        if (data && data.data && Array.isArray(data.data.records)) return data.data.records;
+        return [];
+    }
+
+    function normalizeOrder(item) {
+        return {
+            orderId: item.id || item.orderId || item.productionOrderId || '',
+            orderNo: item.orderNo || item.productionOrderNo || item.code || '',
+            customer: item.customer || item.customerName || '',
+            model: item.model || item.productModel || '',
+            priority: item.priority || item.orderPriority || '',
+            status: item.status || item.orderStatus || '',
+            dueDate: item.earliestDeliveryDate || item.deliveryDate || item.dueDate || '',
+            quantity: item.quantity || item.requiredQuantity || item.planQuantity || 0
+        };
+    }
+
+    function isInsertCandidate(order) {
+        const status = String(order.status || '').trim();
+        const priority = String(order.priority || '').trim();
+        const isPending = ['待排产', 'PENDING', 'UNPLANNED'].includes(status);
+        const isPriorityMatched = ['加急', '插单', 'URGENT', 'INSERT'].includes(priority);
+        return isPending && isPriorityMatched;
+    }
+
+    function escapeHtml(raw) {
+        if (raw === null || raw === undefined) return '';
+        return String(raw)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function openInsertPlanWizard() {
+        layer.load(1, {shade: 0.15});
+        fetch('/production-order/list')
+            .then(res => {
+                if (!res.ok) throw new Error('拉取插单候选订单失败');
+                return res.json();
+            })
+            .then(data => {
+                const candidates = readListResult(data).map(normalizeOrder).filter(isInsertCandidate);
+                openInsertOrderSelector(candidates);
+            })
+            .catch((err) => {
+                layer.msg(err && err.message ? err.message : '拉取插单候选订单失败');
+            })
+            .finally(() => layer.closeAll('loading'));
+    }
+
+    function openInsertOrderSelector(candidates) {
+        const rows = candidates.map(item => `
+            <tr>
+                <td><input type="checkbox" class="insert-order-checkbox" value="${escapeHtml(item.orderId)}"></td>
+                <td>${escapeHtml(item.orderNo || item.orderId)}</td>
+                <td>${escapeHtml(item.customer)}</td>
+                <td>${escapeHtml(item.model)}</td>
+                <td>${escapeHtml(item.priority)}</td>
+                <td>${escapeHtml(item.status)}</td>
+                <td>${escapeHtml(item.dueDate)}</td>
+                <td>${escapeHtml(item.quantity)}</td>
+            </tr>
+        `).join('');
+
+        layer.open({
+            type: 1,
+            title: '插单排产 - 第一步：选择订单',
+            area: ['1100px', '680px'],
+            maxmin: true,
+            btn: ['下一步', '取消'],
+            content: `
+                <div style="padding: 12px;">
+                    <div style="margin-bottom: 8px;color:#666;">
+                        仅展示状态=待排产 且 priority=加急/插单 的候选订单，可多选。
+                    </div>
+                    <table class="layui-table">
+                        <thead>
+                            <tr>
+                                <th style="width:68px;">
+                                    <input type="checkbox" id="insertOrderCheckAll">
+                                    全选
+                                </th>
+                                <th>订单号</th>
+                                <th>客户</th>
+                                <th>型号</th>
+                                <th>优先级</th>
+                                <th>状态</th>
+                                <th>交期</th>
+                                <th>数量</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:#999;">没有符合条件的候选订单</td></tr>'}</tbody>
+                    </table>
+                </div>
+            `,
+            success: function() {
+                const checkAll = document.getElementById('insertOrderCheckAll');
+                if (checkAll) {
+                    checkAll.addEventListener('change', function() {
+                        document.querySelectorAll('.insert-order-checkbox').forEach(el => {
+                            el.checked = checkAll.checked;
+                        });
+                    });
+                }
+            },
+            yes: function(index) {
+                const selected = Array.from(document.querySelectorAll('.insert-order-checkbox:checked')).map(el => el.value);
+                if (!selected.length) {
+                    layer.msg('请至少选择一条插单订单');
+                    return;
+                }
+                layer.close(index);
+                openInsertPlanConfig(selected);
+            }
+        });
+    }
+
+    function openInsertPlanConfig(orderIds) {
+        const defaultStart = toDateTimeLocalValue(new Date());
+        layer.open({
+            type: 1,
+            title: '插单排产 - 第二步：参数设置',
+            area: ['560px', '360px'],
+            btn: ['预览插单影响', '取消'],
+            content: `
+                <div style="padding:16px;">
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">开始时间</label>
+                        <div class="layui-input-block">
+                            <input id="insertStartTime" type="datetime-local" class="layui-input" value="${defaultStart}">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">作用产线</label>
+                        <div class="layui-input-block">
+                            <input id="insertLineName" type="text" class="layui-input" placeholder="请输入产线编码/名称（可逗号分隔）">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">冻结窗(小时)</label>
+                        <div class="layui-input-block">
+                            <input id="insertFreezeHours" type="number" min="0" step="1" class="layui-input" value="24">
+                        </div>
+                    </div>
+                </div>
+            `,
+            yes: function(index) {
+                const startTime = (document.getElementById('insertStartTime') || {}).value;
+                const lineValue = (document.getElementById('insertLineName') || {}).value || '';
+                const freezeWindowHours = Number((document.getElementById('insertFreezeHours') || {}).value || 0);
+                if (!startTime) {
+                    layer.msg('请选择开始时间');
+                    return;
+                }
+                if (!lineValue.trim()) {
+                    layer.msg('请输入至少一条作用产线');
+                    return;
+                }
+                if (Number.isNaN(freezeWindowHours) || freezeWindowHours < 0) {
+                    layer.msg('冻结窗必须是大于等于0的整数');
+                    return;
+                }
+                const lines = lineValue.split(',').map(item => item.trim()).filter(Boolean);
+                insertPlanRequestPayload = {
+                    mode: 'INSERT',
+                    orderIds: orderIds,
+                    start: startTime,
+                    end: getCurrentRange().end,
+                    lines: lines,
+                    freezeWindowHours: freezeWindowHours
+                };
+                layer.close(index);
+                requestInsertPlanPreview();
+            }
+        });
+    }
+
+    function getInsertPreviewSection(data, keys) {
+        for (let i = 0; i < keys.length; i++) {
+            const value = data ? data[keys[i]] : null;
+            if (Array.isArray(value)) return value;
+        }
+        return [];
+    }
+
+    function requestInsertPlanPreview() {
+        if (!insertPlanRequestPayload) {
+            layer.msg('插单请求参数缺失');
+            return;
+        }
+        fetch('/api/shift/plan/preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(insertPlanRequestPayload)
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('插单排产预览失败');
+                return res.json();
+            })
+            .then(data => {
+                insertPlanPreviewData = data || {};
+                openInsertPreviewDialog(insertPlanPreviewData);
+            })
+            .catch(err => layer.msg((err && err.message) || '插单排产预览失败'));
+    }
+
+    function openInsertPreviewDialog(data) {
+        const insertedOrders = getInsertPreviewSection(data, ['insertOrders', 'insertOrderAchieves', 'insertAchievements', 'orders']);
+        const impactedOrders = getInsertPreviewSection(data, ['impactedOrders', 'affectedOrders', 'normalOrderImpacts']);
+
+        const insertedRows = insertedOrders.map(item => `
+            <tr>
+                <td>${escapeHtml(item.orderNo || item.productionOrderNo || item.orderId || '')}</td>
+                <td>${escapeHtml(item.customer || item.customerName || '')}</td>
+                <td>${escapeHtml(item.model || item.productModel || '')}</td>
+                <td>${escapeHtml(item.requiredQuantity || item.quantity || 0)}</td>
+                <td>${escapeHtml(item.plannedQuantity || item.achievedQuantity || 0)}</td>
+                <td>${escapeHtml(item.achievementRate || item.reachRate || '')}</td>
+            </tr>
+        `).join('');
+
+        const impactedRows = impactedOrders.map(item => `
+            <tr>
+                <td>${escapeHtml(item.orderNo || item.productionOrderNo || item.orderId || '')}</td>
+                <td>${escapeHtml(item.customer || item.customerName || '')}</td>
+                <td>${escapeHtml(item.model || item.productModel || '')}</td>
+                <td>${escapeHtml(item.delayQuantity || item.deferredQuantity || 0)}</td>
+                <td>${escapeHtml(item.delayDays || item.deferredDays || 0)}</td>
+            </tr>
+        `).join('');
+
+        layer.open({
+            type: 1,
+            title: '插单排产预览（INSERT）',
+            area: ['100%', '82%'],
+            maxmin: true,
+            btn: ['确认写入', '关闭'],
+            content: `
+                <div style="padding: 12px; max-height: 650px; overflow: auto;">
+                    <div style="font-weight:700;margin-bottom:8px;">插单订单达成情况</div>
+                    <table class="layui-table">
+                        <thead>
+                            <tr>
+                                <th>订单</th><th>客户</th><th>型号</th><th>需求数量</th><th>计划数量</th><th>达成率</th>
+                            </tr>
+                        </thead>
+                        <tbody>${insertedRows || '<tr><td colspan="6" style="text-align:center;color:#999;">无插单达成数据</td></tr>'}</tbody>
+                    </table>
+
+                    <div style="font-weight:700;margin:14px 0 8px;">被影响普通订单（延后数量/天数）</div>
+                    <table class="layui-table">
+                        <thead>
+                            <tr>
+                                <th>订单</th><th>客户</th><th>型号</th><th>延后数量</th><th>延后天数</th>
+                            </tr>
+                        </thead>
+                        <tbody>${impactedRows || '<tr><td colspan="5" style="text-align:center;color:#999;">无普通订单影响数据</td></tr>'}</tbody>
+                    </table>
+                </div>
+            `,
+            yes: function(index) {
+                commitInsertPlan();
+                layer.close(index);
+            }
+        });
+    }
+
+    function commitInsertPlan() {
+        if (!insertPlanPreviewData) {
+            layer.msg('当前没有可提交的插单预览数据');
+            return;
+        }
+        fetch('/api/shift/plan/commit-insert', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                request: insertPlanRequestPayload,
+                preview: insertPlanPreviewData
+            })
+        })
+            .then(async res => {
+                const text = await res.text();
+                if (!res.ok) throw new Error(text || '插单提交失败');
+                return text;
+            })
+            .then(() => {
+                insertPlanPreviewData = null;
+                insertPlanRequestPayload = null;
+                calendar.getEventSourceById('shiftScheduleSource').refetch();
+                layer.msg('插单排产已写入');
+            })
+            .catch(err => layer.msg((err && err.message) || '插单提交失败'));
     }
 
     function parsePlanEventTitle(title) {
