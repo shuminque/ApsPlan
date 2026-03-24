@@ -275,18 +275,50 @@
             orderNo: item.orderNo || item.productionOrderNo || item.code || '',
             customer: item.customer || item.customerName || '',
             model: item.model || item.productModel || '',
-            priority: item.priority || item.orderPriority || '',
-            status: item.status || item.orderStatus || '',
+            priority: normalizeOrderPriority(item.priority || item.orderPriority || ''),
+            status: normalizeOrderStatus(item.status || item.orderStatus || ''),
             dueDate: item.earliestDeliveryDate || item.deliveryDate || item.dueDate || '',
             quantity: item.quantity || item.requiredQuantity || item.planQuantity || 0
         };
     }
 
+    function normalizeOrderStatus(status) {
+        const value = String(status || '').trim();
+        if (['0', '待排产', 'PENDING', 'UNPLANNED'].includes(value)) return '0';
+        if (['1', '已排产', 'PLANNED'].includes(value)) return '1';
+        if (['2', '已完成', 'COMPLETED'].includes(value)) return '2';
+        return value;
+    }
+
+    function normalizeOrderPriority(priority) {
+        const value = String(priority || '').trim();
+        if (['0', '普通', 'NORMAL'].includes(value)) return '0';
+        if (['1', '加急', 'URGENT'].includes(value)) return '1';
+        if (['2', '插单', 'INSERT'].includes(value)) return '2';
+        return value;
+    }
+
+    function renderOrderStatus(status) {
+        const normalized = normalizeOrderStatus(status);
+        if (normalized === '0') return '待排产';
+        if (normalized === '1') return '已排产';
+        if (normalized === '2') return '已完成';
+        return normalized || '-';
+    }
+
+    function renderOrderPriority(priority) {
+        const normalized = normalizeOrderPriority(priority);
+        if (normalized === '0') return '普通';
+        if (normalized === '1') return '加急';
+        if (normalized === '2') return '插单';
+        return normalized || '-';
+    }
+
     function isInsertCandidate(order) {
-        const status = String(order.status || '').trim();
-        const priority = String(order.priority || '').trim();
-        const isPending = ['待排产', 'PENDING', 'UNPLANNED'].includes(status);
-        const isPriorityMatched = ['加急', '插单', 'URGENT', 'INSERT'].includes(priority);
+        const status = normalizeOrderStatus(order.status);
+        const priority = normalizeOrderPriority(order.priority);
+        const isPending = status === '0';
+        const isPriorityMatched = priority === '1' || priority === '2';
         return isPending && isPriorityMatched;
     }
 
@@ -324,8 +356,8 @@
                 <td>${escapeHtml(item.orderNo || item.orderId)}</td>
                 <td>${escapeHtml(item.customer)}</td>
                 <td>${escapeHtml(item.model)}</td>
-                <td>${escapeHtml(item.priority)}</td>
-                <td>${escapeHtml(item.status)}</td>
+                <td>${escapeHtml(renderOrderPriority(item.priority))}</td>
+                <td>${escapeHtml(renderOrderStatus(item.status))}</td>
                 <td>${escapeHtml(item.dueDate)}</td>
                 <td>${escapeHtml(item.quantity)}</td>
             </tr>
