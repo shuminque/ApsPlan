@@ -405,25 +405,55 @@
                 }
             },
             yes: function(index) {
-                const selected = Array.from(document.querySelectorAll('.insert-order-checkbox:checked')).map(el => el.value);
-                if (!selected.length) {
+                const selectedIds = Array.from(document.querySelectorAll('.insert-order-checkbox:checked')).map(el => el.value);
+                if (!selectedIds.length) {
                     layer.msg('请至少选择一条插单订单');
                     return;
                 }
+                const selectedOrders = candidates.filter(item => selectedIds.includes(String(item.orderId)));
                 layer.close(index);
-                openInsertPlanConfig(selected);
+                openInsertPlanConfig(selectedOrders);
             }
         });
     }
 
-    function openInsertPlanConfig(orderIds) {
+    function fetchMatchedLinesByOrders(selectedOrders) {
+        const models = Array.from(new Set((selectedOrders || [])
+            .map(item => (item && item.model ? String(item.model).trim() : ''))
+            .filter(Boolean)));
+        if (!models.length) {
+            return Promise.resolve([]);
+        }
+        return fetch('/api/model-config/matched-lines', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({models: models})
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('拉取可用产线失败');
+                return res.json();
+            })
+            .then(data => readListResult(data));
+    }
+
+    function openInsertPlanConfig(selectedOrders) {
+        const orderIds = (selectedOrders || []).map(item => Number(item.orderId)).filter(item => !Number.isNaN(item));
         const defaultStart = toDateTimeLocalValue(new Date());
-        layer.open({
-            type: 1,
-            title: '插单排产 - 第二步：参数设置',
-            area: ['560px', '360px'],
-            btn: ['预览插单影响', '取消'],
-            content: `
+        fetchMatchedLinesByOrders(selectedOrders)
+            .then(lineOptions => {
+                if (!lineOptions.length) {
+                    layer.msg('所选订单型号未匹配到可生产产线，请先维护产线系列配置');
+                    return;
+                }
+                const optionHtml = lineOptions.map(line => `
+                    <option value="${escapeHtml(line.id)}">${escapeHtml(line.lineCode || '')} ${escapeHtml(line.lineName || '')}</option>
+                `).join('');
+                layer.open({
+                    type: 1,
+                    title: '插单排产 - 第二步：参数设置',
+                    area: ['560px', '430px'],
+                    btn: ['预览插单影响', '取消'],
+                    content: `
                 <div style="padding:16px;">
                     <div class="layui-form-item">
                         <label class="layui-form-label">开始时间</label>
@@ -434,7 +464,10 @@
                     <div class="layui-form-item">
                         <label class="layui-form-label">作用产线</label>
                         <div class="layui-input-block">
-                            <input id="insertLineName" type="text" class="layui-input" placeholder="请输入产线编码/名称（可逗号分隔）">
+                            <select id="insertLineIds" class="layui-input" multiple size="8" style="height:auto;min-height:180px;">
+                                ${optionHtml}
+                            </select>
+                            <div style="margin-top:4px;color:#999;">已根据所选订单型号匹配可生产该系列的产线，可多选。</div>
                         </div>
                     </div>
                     <div class="layui-form-item">
@@ -445,35 +478,40 @@
                     </div>
                 </div>
             `,
-            yes: function(index) {
-                const startTime = (document.getElementById('insertStartTime') || {}).value;
-                const lineValue = (document.getElementById('insertLineName') || {}).value || '';
-                const freezeWindowHours = Number((document.getElementById('insertFreezeHours') || {}).value || 0);
-                if (!startTime) {
-                    layer.msg('请选择开始时间');
-                    return;
-                }
-                if (!lineValue.trim()) {
-                    layer.msg('请输入至少一条作用产线');
-                    return;
-                }
-                if (Number.isNaN(freezeWindowHours) || freezeWindowHours < 0) {
-                    layer.msg('冻结窗必须是大于等于0的整数');
-                    return;
-                }
-                const lines = lineValue.split(',').map(item => item.trim()).filter(Boolean);
-                insertPlanRequestPayload = {
-                    mode: 'INSERT',
-                    orderIds: orderIds,
-                    start: startTime,
-                    end: getCurrentRange().end,
-                    lines: lines,
-                    freezeWindowHours: freezeWindowHours
-                };
-                layer.close(index);
-                requestInsertPlanPreview();
-            }
-        });
+                    yes: function(index) {
+                        const startTime = (document.getElementById('insertStartTime') || {}).value;
+                        const lineSelect = document.getElementById('insertLineIds');
+                        const freezeWindowHours = Number((document.getElementById('insertFreezeHours') || {}).value || 0);
+                        if (!startTime) {
+                            layer.msg('请选择开始时间');
+                            return;
+                        }
+                        const selectedLineIds = Array.from((lineSelect && lineSelect.selectedOptions) || [])
+                            .map(item => Number(item.value))
+                            .filter(item => !Number.isNaN(item));
+                        if (!selectedLineIds.length) {
+                            layer.msg('请至少选择一条作用产线');
+                            return;
+                        }
+                        if (Number.isNaN(freezeWindowHours) || freezeWindowHours < 0) {
+                            layer.msg('冻结窗必须是大于等于0的整数');
+                            return;
+                        }
+                        insertPlanRequestPayload = {
+                            planMode: 'INSERT',
+                            insertOrderIds: orderIds,
+                            start: startTime,
+                            end: getCurrentRange().end,
+                            lineIds: selectedLineIds,
+                            lineScope: 'PARTIAL',
+                            freezeHours: freezeWindowHours
+                        };
+                        layer.close(index);
+                        requestInsertPlanPreview();
+                    }
+                });
+            })
+            .catch(err => layer.msg((err && err.message) || '拉取可用产线失败'));
     }
 
     function getInsertPreviewSection(data, keys) {

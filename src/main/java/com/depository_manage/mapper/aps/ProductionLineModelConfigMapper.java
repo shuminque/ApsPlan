@@ -27,4 +27,6 @@ public interface ProductionLineModelConfigMapper {
     int updateStatus(@Param("id") Long id, @Param("status") Integer status);
 
     List<ProductionLine> selectLineOptions();
+
+    List<ProductionLine> selectMatchedLines(@Param("demandModels") List<String> demandModels);
 }

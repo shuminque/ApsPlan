@@ -19,4 +19,6 @@ public interface ProductionLineModelConfigService {
     boolean updateStatus(Long id, Integer status);
 
     List<ProductionLine> listLineOptions();
+
+    List<ProductionLine> listMatchedLines(List<String> demandModels);
 }

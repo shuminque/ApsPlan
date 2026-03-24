@@ -116,4 +116,21 @@
         ORDER BY line_code ASC
     </select>
 
+    <select id="selectMatchedLines" resultMap="LineOptionResultMap">
+        SELECT DISTINCT l.id, l.line_code, l.line_name
+        FROM production_line_model_config c
+        INNER JOIN production_line l ON l.id = c.line_id
+        WHERE c.status = 1
+          AND c.model IS NOT NULL
+          AND c.model != ''
+          <if test="demandModels != null and demandModels.size() > 0">
+              AND (
+              <foreach collection="demandModels" item="demandModel" separator=" OR ">
+                  #{demandModel} LIKE CONCAT(c.model, '%')
+              </foreach>
+              )
+          </if>
+        ORDER BY l.line_code ASC
+    </select>
+
 </mapper>
