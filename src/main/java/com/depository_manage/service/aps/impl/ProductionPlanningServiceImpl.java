@@ -194,14 +194,41 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     .filter(Objects::nonNull)
                     .min(Date::compareTo)
                     .orElse(null);
+            int priority = groupOrders.stream()
+                    .map(ProductionOrder::getPriority)
+                    .mapToInt(this::parseOrderPriority)
+                    .max()
+                    .orElse(0);
 
-            result.add(new DemandItem(any.getCustomer(), any.getOuterInnerRing(), any.getModel(), required, currentInventory, earliestDelivery));
+            result.add(new DemandItem(any.getCustomer(), any.getOuterInnerRing(), any.getModel(), required, currentInventory, earliestDelivery, priority));
         }
 
         result.sort(Comparator
-                .comparingInt(DemandItem::deliveryUrgencyDays)
+                .comparingInt(DemandItem::priority).reversed()
+                .thenComparingInt(DemandItem::deliveryUrgencyDays)
                 .thenComparing((DemandItem d) -> d.required, Comparator.reverseOrder()));
         return result;
+    }
+
+    private int parseOrderPriority(String priority) {
+        if (priority == null || priority.trim().isEmpty()) {
+            return 0;
+        }
+        String normalized = priority.trim();
+        if ("插单".equals(normalized)) {
+            return 2;
+        }
+        if ("加急".equals(normalized)) {
+            return 1;
+        }
+        if ("普通".equals(normalized)) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(normalized);
+        } catch (NumberFormatException ignore) {
+            return 0;
+        }
     }
 
     private Map<LocalDate, BigDecimal> buildShiftHours(LocalDate start, LocalDate endExclusive, LocalDateTime planStartAt) {
@@ -463,6 +490,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             row.setCustomer(item.customer);
             row.setOuterInnerRing(item.outerInnerRing);
             row.setModel(item.model);
+            row.setPriority(item.priority);
             LocalDate earliest = item.earliestDeliveryDate();
             row.setEarliestDeliveryDate(earliest == null ? "" : earliest.toString());
             row.setCurrentInventory(item.currentInventory);
@@ -640,7 +668,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
 
         pairDemands.sort(Comparator
-                .comparingInt(RingPairDemand::deliveryUrgencyDays)
+                .comparingInt(RingPairDemand::priority).reversed()
+                .thenComparingInt(RingPairDemand::deliveryUrgencyDays)
                 .thenComparing(RingPairDemand::maxRequired, Comparator.reverseOrder()));
         return pairDemands;
     }
@@ -733,16 +762,18 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final String model;
         private final int required;
         private final int currentInventory;
+        private final int priority;
         private int coveredQuantity;
         private int plannedQuantity;
         private final Date earliestDelivery;
         private final Set<LocalDate> plannedDays = new HashSet<>();
-        private DemandItem(String customer, String outerInnerRing, String model, int required, int currentInventory, Date earliestDelivery) {
+        private DemandItem(String customer, String outerInnerRing, String model, int required, int currentInventory, Date earliestDelivery, int priority) {
             this.customer = customer;
             this.outerInnerRing = outerInnerRing;
             this.model = model;
             this.required = required;
             this.currentInventory = currentInventory;
+            this.priority = priority;
             this.coveredQuantity = 0;
             this.plannedQuantity = 0;
             this.earliestDelivery = earliestDelivery;
@@ -754,6 +785,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         private int plannedQuantity() {
             return plannedQuantity;
+        }
+
+        private int priority() {
+            return priority;
         }
 
         private int deliveryUrgencyDays() {
@@ -816,6 +851,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         private Integer maxRequired() {
             return Math.max(laDemand.required, lbDemand.required);
+        }
+
+        private int priority() {
+            return Math.max(laDemand.priority(), lbDemand.priority());
         }
 
         private int deliveryUrgencyDays() {
