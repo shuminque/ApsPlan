@@ -36,7 +36,14 @@ public class ShiftCalendarController {
 
     @PostMapping("/plan/preview")
     public PlanPreviewResponseDTO previewPlan(@RequestBody PlanRangeRequest request, HttpSession session) {
-        PlanPreviewResponseDTO preview = productionPlanningService.generatePlanPreview(request.getStart(), request.getEnd());
+        PlanPreviewResponseDTO preview = productionPlanningService.generatePlanPreview(
+                request.getStart(),
+                request.getEnd(),
+                request.getPlanMode(),
+                request.getInsertOrderIds(),
+                request.getLineScope(),
+                request.getLineIds(),
+                request.getFreezeHours());
         PREVIEW_CACHE.put(session.getId(), preview.getEvents());
         return preview;
     }
@@ -93,6 +100,11 @@ public class ShiftCalendarController {
     public static class PlanRangeRequest {
         private String start;
         private String end;
+        private String planMode;
+        private List<Long> insertOrderIds;
+        private String lineScope;
+        private List<Long> lineIds;
+        private Integer freezeHours;
 
         public String getStart() {
             return start;
@@ -108,6 +120,46 @@ public class ShiftCalendarController {
 
         public void setEnd(String end) {
             this.end = end;
+        }
+
+        public String getPlanMode() {
+            return planMode;
+        }
+
+        public void setPlanMode(String planMode) {
+            this.planMode = planMode;
+        }
+
+        public List<Long> getInsertOrderIds() {
+            return insertOrderIds;
+        }
+
+        public void setInsertOrderIds(List<Long> insertOrderIds) {
+            this.insertOrderIds = insertOrderIds;
+        }
+
+        public String getLineScope() {
+            return lineScope;
+        }
+
+        public void setLineScope(String lineScope) {
+            this.lineScope = lineScope;
+        }
+
+        public List<Long> getLineIds() {
+            return lineIds;
+        }
+
+        public void setLineIds(List<Long> lineIds) {
+            this.lineIds = lineIds;
+        }
+
+        public Integer getFreezeHours() {
+            return freezeHours;
+        }
+
+        public void setFreezeHours(Integer freezeHours) {
+            this.freezeHours = freezeHours;
         }
     }
 }

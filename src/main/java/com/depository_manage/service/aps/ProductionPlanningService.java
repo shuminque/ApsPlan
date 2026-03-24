@@ -16,4 +16,12 @@ public interface ProductionPlanningService {
     List<CalendarEventDTO> generatePlanCalendarEvents(String startDate, String endDate);
 
     PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate);
+
+    PlanPreviewResponseDTO generatePlanPreview(String startDate,
+                                               String endDate,
+                                               String planMode,
+                                               List<Long> insertOrderIds,
+                                               String lineScope,
+                                               List<Long> lineIds,
+                                               Integer freezeHours);
 }
