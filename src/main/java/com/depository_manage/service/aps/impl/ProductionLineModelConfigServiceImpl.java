@@ -7,9 +7,11 @@ import com.depository_manage.service.aps.ProductionLineModelConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class ProductionLineModelConfigServiceImpl implements ProductionLineModelConfigService {
@@ -61,5 +63,21 @@ public class ProductionLineModelConfigServiceImpl implements ProductionLineModel
     @Override
     public List<ProductionLine> listLineOptions() {
         return productionLineModelConfigMapper.selectLineOptions();
+    }
+
+    @Override
+    public List<ProductionLine> listMatchedLines(List<String> demandModels) {
+        if (demandModels == null || demandModels.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<String> normalizedModels = demandModels.stream()
+                .filter(model -> model != null && !model.trim().isEmpty())
+                .map(String::trim)
+                .distinct()
+                .collect(Collectors.toList());
+        if (normalizedModels.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return productionLineModelConfigMapper.selectMatchedLines(normalizedModels);
     }
 }

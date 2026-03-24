@@ -49,4 +49,10 @@ public class ProductionLineModelConfigController {
     public Result<List<ProductionLine>> lineOptions() {
         return Result.success(productionLineModelConfigService.listLineOptions());
     }
+
+    @PostMapping("/matched-lines")
+    public Result<List<ProductionLine>> matchedLines(@RequestBody Map<String, List<String>> request) {
+        List<String> models = request == null ? null : request.get("models");
+        return Result.success(productionLineModelConfigService.listMatchedLines(models));
+    }
 }
