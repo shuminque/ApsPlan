@@ -32,6 +32,7 @@ public class CalendarEventDTO {
     private BigDecimal avgDailyWorkHours;
     private BigDecimal dailyOutput;
     private BigDecimal capacityPerHour;
+    private Long plannedDays;
     /**
      * 指标诊断标记：
      * - OK：指标完整可计算

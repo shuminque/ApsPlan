@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -202,9 +203,13 @@ public class ShiftCalendarController {
         }
 
         private LocalDateTime parseDateTime(String value, String orderId) {
+            DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
             DateTimeFormatter minuteFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm");
             DateTimeFormatter secondFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
             try {
+                if (value.length() == 10) {
+                    return LocalDate.parse(value, dateFormatter).atStartOfDay();
+                }
                 if (value.length() == 16) {
                     return LocalDateTime.parse(value, minuteFormatter);
                 }
@@ -213,10 +218,10 @@ public class ShiftCalendarController {
                 }
             } catch (DateTimeParseException ex) {
                 throw new MyException(400, "订单 " + orderId + " 的开始时间格式错误: " + value
-                        + "，仅支持 yyyy-MM-ddTHH:mm 或 yyyy-MM-ddTHH:mm:ss");
+                        + "，仅支持 yyyy-MM-dd / yyyy-MM-ddTHH:mm / yyyy-MM-ddTHH:mm:ss");
             }
             throw new MyException(400, "订单 " + orderId + " 的开始时间格式错误: " + value
-                    + "，仅支持 yyyy-MM-ddTHH:mm 或 yyyy-MM-ddTHH:mm:ss");
+                    + "，仅支持 yyyy-MM-dd / yyyy-MM-ddTHH:mm / yyyy-MM-ddTHH:mm:ss");
         }
     }
 }
