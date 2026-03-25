@@ -189,12 +189,47 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
         PlanPreviewResponseDTO response = new PlanPreviewResponseDTO();
         response.setEvents(mergeSlicesToEvents(plannedSlices, effectiveStartAt));
+        LocalDateTime actualStart = resolveActualPlanStart(plannedSlices, effectiveStartAt, start);
+        LocalDateTime actualEnd = resolveActualPlanEnd(plannedSlices, actualStart);
+        response.setPlanStart(actualStart == null ? null : actualStart.format(DATE_TIME_FMT));
+        response.setPlanEnd(actualEnd == null ? null : actualEnd.format(DATE_TIME_FMT));
         response.setOrders(buildOrderPreviewRows(demands));
         response.setDailyOutputs(buildDailyPreviewRows(plannedSlices));
         response.setSqueezedOrderCount(calculateSqueezedOrderCount(demands));
         response.setDelayedDays(calculateDelayedDays(demands, endExclusive));
         response.setInsertFulfillmentRate(calculateInsertFulfillmentRate(demands));
         return response;
+    }
+
+    private LocalDateTime resolveActualPlanStart(List<PlanSlice> slices, LocalDateTime effectiveStartAt, LocalDate fallbackStart) {
+        if (slices == null || slices.isEmpty()) {
+            return fallbackStart == null ? null : fallbackStart.atStartOfDay();
+        }
+        LocalDate earliestSliceDay = slices.stream()
+                .map(slice -> slice.day)
+                .min(LocalDate::compareTo)
+                .orElse(fallbackStart);
+        if (earliestSliceDay == null) {
+            return null;
+        }
+        if (effectiveStartAt != null && earliestSliceDay.equals(effectiveStartAt.toLocalDate())) {
+            return effectiveStartAt;
+        }
+        return earliestSliceDay.atStartOfDay();
+    }
+
+    private LocalDateTime resolveActualPlanEnd(List<PlanSlice> slices, LocalDateTime actualStart) {
+        if (slices == null || slices.isEmpty()) {
+            return actualStart;
+        }
+        LocalDate latestSliceDay = slices.stream()
+                .map(slice -> slice.day)
+                .max(LocalDate::compareTo)
+                .orElse(null);
+        if (latestSliceDay == null) {
+            return actualStart;
+        }
+        return latestSliceDay.plusDays(1).atStartOfDay();
     }
 
     private boolean allDemandsCompleted(List<DemandItem> demands) {
