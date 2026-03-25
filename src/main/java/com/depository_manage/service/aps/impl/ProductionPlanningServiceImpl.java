@@ -47,6 +47,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final BigDecimal DEFAULT_SHIFT_HOURS = new BigDecimal("8");
     private static final String PLAN_COLOR = "#FFB020";
+    private static final long CAPACITY_BUFFER_DAYS = 180L;
 
     @Resource
     private ProductionOrderService productionOrderService;
@@ -145,21 +146,22 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             endExclusive = latestDeliveryExclusive;
         }
 
-        Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, endExclusive, effectiveStartAt);
+        LocalDate planningCapacityEndExclusive = endExclusive.plusDays(CAPACITY_BUFFER_DAYS);
+        Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, planningCapacityEndExclusive, effectiveStartAt);
         Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities(scopedLineIds);
-        Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(start, endExclusive, shiftHoursByDay, lineCapByModel);
+        Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(start, planningCapacityEndExclusive, shiftHoursByDay, lineCapByModel);
         Map<DemandItem, DemandLineMatch> barLineMatchesByDemand = buildBarLineMatchesByDemand(demands, lineCapByModel);
         List<RingPairDemand> ringPairDemands = buildRingPairDemands(demands, barLineMatchesByDemand);
         Map<String, LineActivationPlan> activationPlanByKey = new HashMap<>();
 
         List<PlanSlice> plannedSlices = new ArrayList<>();
         LocalDate cursor = start;
-        while (cursor.isBefore(endExclusive)) {
+        while (cursor.isBefore(planningCapacityEndExclusive)) {
             if (allDemandsCompleted(demands)) {
                 break;
             }
             final LocalDate day = cursor;
-            schedulePairedBarDemands(day, endExclusive, ringPairDemands, remainingCapacityByLineDay, plannedSlices, activationPlanByKey);
+            schedulePairedBarDemands(day, planningCapacityEndExclusive, ringPairDemands, remainingCapacityByLineDay, plannedSlices, activationPlanByKey);
             for (DemandItem demand : demands) {
                 if (demand.remaining() <= 0 || !demand.canScheduleOn(day)) {
                     continue;
@@ -167,7 +169,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 List<LineCapacity> lines = findMatchingLines(demand.model, lineCapByModel).stream()
                         .filter(line -> !line.isBarCraft())
                         .collect(Collectors.toList());
-                List<LineCapacity> prioritizedLines = prioritizeCandidateLines(demand.activationKey(), lines, day, endExclusive,
+                List<LineCapacity> prioritizedLines = prioritizeCandidateLines(demand.activationKey(), lines, day, planningCapacityEndExclusive,
                         demand.remaining(), remainingCapacityByLineDay, activationPlanByKey);
                 assignDemandToLines(day, demand, prioritizedLines, remainingCapacityByLineDay,
                         (line, assignQty) -> plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName,
@@ -245,8 +247,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             int orderCount = groupOrders.size();
             int orderDemandQuantity = groupOrders.stream().mapToInt(this::remainingOrderQuantity).sum();
             int currentInventory = currentInventoryByKey.getOrDefault(entry.getKey(), 0);
-            int inventoryPool = currentInventory;
-            int orderDemandTotal = 0;
             SafetyStock stock = safetyStockByKey.get(entry.getKey());
             BigDecimal safetyTarget = BigDecimal.ZERO;
             if (stock != null && stock.getStockCycle() != null && stock.getMonthlyStockQty() != null) {
@@ -260,18 +260,27 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     .thenComparing((ProductionOrder o) -> parseOrderPriority(o.getPriority()), Comparator.reverseOrder())
                     .thenComparing(ProductionOrder::getId, Comparator.nullsLast(Long::compareTo)));
 
+            List<OrderDemandSeed> orderDemandSeeds = new ArrayList<>();
             for (ProductionOrder order : sortedOrders) {
                 int remainingQty = remainingOrderQuantity(order);
                 if (remainingQty <= 0) {
                     continue;
                 }
-                int coveredByInventory = Math.min(inventoryPool, remainingQty);
+                orderDemandSeeds.add(new OrderDemandSeed(order, remainingQty));
+            }
+
+            int inventoryPool = Math.max(currentInventory, 0);
+            int safetyRequired = Math.max(safetyTargetQty - inventoryPool, 0);
+            inventoryPool = Math.max(0, inventoryPool - safetyTargetQty);
+
+            for (OrderDemandSeed seed : orderDemandSeeds) {
+                int coveredByInventory = Math.min(inventoryPool, seed.requiredQty);
                 inventoryPool -= coveredByInventory;
-                int required = remainingQty - coveredByInventory;
+                int required = seed.requiredQty - coveredByInventory;
                 if (required <= 0) {
                     continue;
                 }
-                orderDemandTotal += required;
+                ProductionOrder order = seed.order;
                 LocalDateTime orderStartAt = resolveDemandStartAt(order.getId(), orderStartTimes, defaultStartAt);
                 int priority = parseOrderPriority(order.getPriority());
                 boolean locked = insertMode && order.getId() != null && insertOrderIdSet.contains(order.getId());
@@ -280,8 +289,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                         Math.max(priority, locked ? 2 : priority), locked, orderStartAt));
             }
 
-            if (safetyTargetQty > orderDemandTotal) {
-                int safetyRequired = safetyTargetQty - orderDemandTotal;
+            if (safetyRequired > 0) {
                 Date earliestDelivery = sortedOrders.stream()
                         .map(ProductionOrder::getDeliveryDate)
                         .filter(Objects::nonNull)
@@ -842,28 +850,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             dto.setMetricDiagnosticTag("INVALID_CAPACITY_CONFIG");
             return;
         }
-        dto.setAvgDailyWorkHours(averageShiftHours(startInclusive, endExclusive, shiftHoursByDay));
+        dto.setAvgDailyWorkHours(dailyOutput.divide(capacityPerHour, 2, RoundingMode.HALF_UP));
         dto.setMetricDiagnosticTag("OK");
-    }
-
-    private BigDecimal averageShiftHours(LocalDate startInclusive,
-                                         LocalDate endExclusive,
-                                         Map<LocalDate, BigDecimal> shiftHoursByDay) {
-        if (shiftHoursByDay == null || shiftHoursByDay.isEmpty()) {
-            return DEFAULT_SHIFT_HOURS;
-        }
-        BigDecimal total = BigDecimal.ZERO;
-        long days = 0;
-        LocalDate cursor = startInclusive;
-        while (cursor.isBefore(endExclusive)) {
-            total = total.add(shiftHoursByDay.getOrDefault(cursor, BigDecimal.ZERO));
-            days++;
-            cursor = cursor.plusDays(1);
-        }
-        if (days <= 0) {
-            return BigDecimal.ZERO;
-        }
-        return total.divide(BigDecimal.valueOf(days), 2, RoundingMode.HALF_UP);
     }
 
     private LocalDateTime toLocalDateTime(String dateTime) {
@@ -1395,6 +1383,16 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         private List<LineCapacity> barLinesBySeries(String series) {
             return barLinesBySeries.getOrDefault(series, Collections.emptyList());
+        }
+    }
+
+    private static class OrderDemandSeed {
+        private final ProductionOrder order;
+        private final int requiredQty;
+
+        private OrderDemandSeed(ProductionOrder order, int requiredQty) {
+            this.order = order;
+            this.requiredQty = requiredQty;
         }
     }
 
