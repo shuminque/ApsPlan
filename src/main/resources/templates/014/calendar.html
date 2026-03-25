@@ -262,8 +262,9 @@
                 <td>${item.model || ''}</td>
                 <td>${item.earliestDeliveryDate || ''}</td>
                 <td>${item.currentInventory || 0}</td>
+                <td>${item.orderCount || 0}</td>
+                <td>${item.safetyStockQuantity || 0}</td>
                 <td>${item.requiredQuantity || 0}</td>
-                <td>${item.plannedDays || 0}</td>
                 <td><input type="datetime-local" class="layui-input plan-order-start-input" value="${escapeHtml(startValue)}"></td>
             </tr>
             `;
@@ -282,10 +283,10 @@
                     <table class="layui-table">
                         <thead>
                             <tr>
-                                <th>客户</th><th>内外圈</th><th>型号</th><th>最早交期</th><th>在库数量</th><th>计划排产数</th><th>计划天数</th><th>开始时间</th>
+                                <th>客户</th><th>内外圈</th><th>型号</th><th>最早交期</th><th>在库数量</th><th>订单数</th><th>安全库存数</th><th>计划排产数</th><th>开始时间</th>
                             </tr>
                         </thead>
-                        <tbody>${orderRows || '<tr><td colspan="8" style="text-align:center;color:#999;">无可排产需求</td></tr>'}</tbody>
+                        <tbody>${orderRows || '<tr><td colspan="9" style="text-align:center;color:#999;">无可排产需求</td></tr>'}</tbody>
                     </table>
                 </div>
             `,
@@ -802,8 +803,9 @@
                 <td>${item.model || ''}</td>
                 <td>${item.earliestDeliveryDate || ''}</td>
                 <td>${item.currentInventory || 0}</td>
+                <td>${item.orderCount || 0}</td>
+                <td>${item.safetyStockQuantity || 0}</td>
                 <td>${item.requiredQuantity || 0}</td>
-                <td>${item.plannedDays || 0}</td>
             </tr>
         `).join('');
         // <td>${item.plannedQuantity || 0}</td>
@@ -835,7 +837,7 @@
                     <table class="layui-table">
                         <thead>
                             <tr>
-                                <th>客户</th><th>内外圈</th><th>型号</th><th>最早交期</th><th>在库数量</th><th>计划排产数</th><th>计划天数</th>
+                                <th>客户</th><th>内外圈</th><th>型号</th><th>最早交期</th><th>在库数量</th><th>订单数</th><th>安全库存数</th><th>计划排产数</th>
                             </tr>
                         </thead>
                         <tbody>${orderRows || '<tr><td colspan="8" style="text-align:center;color:#999;">无可排产需求</td></tr>'}</tbody>

@@ -10,6 +10,8 @@ public class PlanPreviewOrderDTO {
     private Integer priority;
     private String earliestDeliveryDate;
     private Integer currentInventory;
+    private Integer orderCount;
+    private Integer safetyStockQuantity;
     private Integer requiredQuantity;
     private Integer plannedQuantity;
     private Integer plannedDays;
