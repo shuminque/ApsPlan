@@ -7,6 +7,7 @@ import com.depository_manage.entity.ProductId;
 import com.depository_manage.entity.SteelGrade;
 import com.depository_manage.service.BearingService;
 import com.depository_manage.service.ProductIdService;
+import com.depository_manage.utils.CraftMappingUtil;
 import com.depository_manage.utils.Result;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -319,5 +320,16 @@ public class BearingController {
                                    @RequestParam String model) {
         Integer quantity = bearingService.getPackQuantity(customer, ring, model);
         return Result.success(quantity);
+    }
+
+    @GetMapping("/craft-suggestion")
+    public Result craftSuggestion(@RequestParam String customer,
+                                  @RequestParam String ring,
+                                  @RequestParam String model) {
+        String size = bearingService.getMaterialSize(customer, ring, model);
+        Map<String, String> data = new HashMap<>();
+        data.put("size", size);
+        data.put("craft", CraftMappingUtil.inferCraftBySize(size));
+        return Result.success(data);
     }
 }

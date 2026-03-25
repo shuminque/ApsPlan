@@ -4,8 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.depository_manage.entity.aps.ProductionOrder;
 import com.depository_manage.mapper.aps.ProductionOrderMapper;
+import com.depository_manage.service.BearingService;
 import com.depository_manage.service.aps.ProductionOrderService;
+import com.depository_manage.utils.CraftMappingUtil;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
@@ -16,9 +19,16 @@ import java.util.List;
 @Service
 public class ProductionOrderServiceImpl extends ServiceImpl<ProductionOrderMapper, ProductionOrder> implements ProductionOrderService {
 
+    private final BearingService bearingService;
+
+    public ProductionOrderServiceImpl(BearingService bearingService) {
+        this.bearingService = bearingService;
+    }
+
     @Override
     @Transactional
     public boolean saveWithOrderNo(ProductionOrder order) {
+        enrichCraft(order);
         // 1. 生成年月前缀，例如 "202601-"
         String prefix = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
 
@@ -80,6 +90,7 @@ public class ProductionOrderServiceImpl extends ServiceImpl<ProductionOrderMappe
 
         // 4. 所有订单使用同一个订单号
         for (ProductionOrder order : orders) {
+            enrichCraft(order);
             order.setOrderNo(batchOrderNo);
             if (order.getOrderDate() == null) {
                 order.setOrderDate(today);
@@ -88,6 +99,25 @@ public class ProductionOrderServiceImpl extends ServiceImpl<ProductionOrderMappe
 
         // 5. 批量保存
         return this.saveBatch(orders);
+    }
+
+    @Override
+    public void enrichCraft(ProductionOrder order) {
+        if (order == null) {
+            return;
+        }
+        String normalizedCraft = CraftMappingUtil.normalizeCraft(order.getCraft());
+        if (StringUtils.hasText(normalizedCraft)) {
+            order.setCraft(normalizedCraft);
+            return;
+        }
+        if (!StringUtils.hasText(order.getCustomer())
+                || !StringUtils.hasText(order.getOuterInnerRing())
+                || !StringUtils.hasText(order.getModel())) {
+            return;
+        }
+        String size = bearingService.getMaterialSize(order.getCustomer(), order.getOuterInnerRing(), order.getModel());
+        order.setCraft(CraftMappingUtil.inferCraftBySize(size));
     }
 
 }

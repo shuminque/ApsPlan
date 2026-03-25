@@ -12,4 +12,6 @@ public interface ProductionOrderService extends IService<ProductionOrder> {
 
     @Transactional
     boolean saveBatchWithOrderNo(List<ProductionOrder> orders);
+
+    void enrichCraft(ProductionOrder order);
 }

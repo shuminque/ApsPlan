@@ -36,6 +36,7 @@
               <th style="width: 15%">客户 <span class="text-danger">*</span></th>
               <th style="width: 12%">内外轮 <span class="text-danger">*</span></th>
               <th style="width: 20%">产品型号 <span class="text-danger">*</span></th>
+              <th style="width: 10%">工艺</th>
               <th style="width: 10%">数量 <span class="text-danger">*</span></th>
               <th style="width: 12%">交货期 <span class="text-danger">*</span></th>
               <th style="width: 10%">优先级</th>
@@ -64,6 +65,14 @@
               <td>
                 <select class="form-select model-select" required disabled>
                   <option value="">请先选择前两项</option>
+                </select>
+              </td>
+              <td>
+                <select class="form-select craft-select">
+                  <option value="">自动判定</option>
+                  <option value="棒材工艺">棒材工艺</option>
+                  <option value="管材工艺">管材工艺</option>
+                  <option value="锻造工艺">锻造工艺</option>
                 </select>
               </td>
               <td>
@@ -181,6 +190,38 @@
         }
       });
     }
+
+    function loadCraftSuggestion(row) {
+      var customer = row.find('.customer-select').val();
+      var ring = row.find('.ring-select').val();
+      var model = row.find('.model-select').val();
+      var $craftSelect = row.find('.craft-select');
+
+      if (!(customer && ring && model)) {
+        $craftSelect.val('');
+        return;
+      }
+
+      $.ajax({
+        url: '/bearings/craft-suggestion',
+        type: 'GET',
+        data: {
+          customer: customer,
+          ring: ring,
+          model: model
+        },
+        success: function(res) {
+          if (res.code === 200 && res.data && res.data.craft) {
+            $craftSelect.val(res.data.craft);
+          } else {
+            $craftSelect.val('');
+          }
+        },
+        error: function() {
+          $craftSelect.val('');
+        }
+      });
+    }
     // 绑定日期选择器的函数
     function bindDate() {
       $('.date-input').each(function(){
@@ -207,6 +248,7 @@
               .val('')
               .prop('disabled', true)
               .html('<option value="">请先选择前两项</option>');
+      newRow.find('.craft-select').val('');
       resetQuantityHint(newRow);
 
       // ⭐ 优先级默认普通
@@ -240,6 +282,7 @@
       var $modelSelect = row.find('.model-select');
 
       resetQuantityHint(row);
+      row.find('.craft-select').val('');
 
       // 只有当两个都选择了才触发
       if(customer && ring) {
@@ -295,6 +338,7 @@
     $(document).on('change', '.model-select', function() {
       var row = $(this).closest('tr');
       loadPackQuantity(row);
+      loadCraftSuggestion(row);
     });
 
     $(document).on('input', 'input[name="quantity"]', function() {
@@ -320,6 +364,7 @@
           customer: row.find('.customer-select').val(),
           outerInnerRing: row.find('.ring-select').val(),
           model: row.find('.model-select').val(),
+          craft: row.find('.craft-select').val(),
           quantity: row.find('input[name="quantity"]').val(),
           deliveryDate: row.find('.date-input').val(),
           priority: row.find('.priority-select').val(),
@@ -354,6 +399,7 @@
               this.selectedIndex = 0;
             });
             newRow.find('.priority-select').val('0');
+            newRow.find('.craft-select').val('');
             newRow.find('.model-select')
                     .prop('disabled', true)
                     .html('<option value="">请先选择前两项</option>');

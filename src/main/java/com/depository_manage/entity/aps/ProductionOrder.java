@@ -17,6 +17,7 @@ public class ProductionOrder {
     private String customer;
     private String outerInnerRing;
     private String model;
+    private String craft;
     private Integer quantity;
 
     private Date orderDate;

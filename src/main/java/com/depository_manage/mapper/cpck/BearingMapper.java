@@ -28,4 +28,8 @@ public interface BearingMapper {
     Integer findQuantityByCustomerRingAndModel(@Param("customer") String customer,
                                                @Param("ring") String ring,
                                                @Param("model") String model);
+
+    String findSizeByCustomerRingAndModel(@Param("customer") String customer,
+                                          @Param("ring") String ring,
+                                          @Param("model") String model);
 }

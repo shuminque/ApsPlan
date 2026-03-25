@@ -195,5 +195,16 @@
         ORDER BY id DESC
         LIMIT 1
     </select>
-</mapper>
 
+    <select id="findSizeByCustomerRingAndModel" resultType="java.lang.String">
+        SELECT size
+        FROM bearings
+        WHERE customer = #{customer}
+          AND outer_inner_ring = #{ring}
+          AND model = #{model}
+          AND size IS NOT NULL
+          AND size != ''
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+</mapper>

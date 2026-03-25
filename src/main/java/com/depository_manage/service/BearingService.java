@@ -23,4 +23,6 @@ public interface BearingService {
     List<String> getModels(String customer, String ring);
 
     Integer getPackQuantity(String customer, String ring, String model);
+
+    String getMaterialSize(String customer, String ring, String model);
 }
