@@ -372,7 +372,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         BigDecimal fallbackShiftHours = resolveFallbackShiftHours(start, endExclusive, planStartAt);
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
-            List<ShiftSchedule> schedules = shiftCalendarService.getSchedulesByDate(cursor.toString());
+            List<ShiftSchedule> schedules = getSchedulesImpactingDay(cursor);
             BigDecimal hours = calcDailyShiftHours(cursor, schedules, planStartAt);
             boolean isCustomStartDay = planStartAt != null
                     && cursor.equals(planStartAt.toLocalDate())
@@ -402,7 +402,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         BigDecimal maxShiftHours = BigDecimal.ZERO;
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
-            List<ShiftSchedule> schedules = shiftCalendarService.getSchedulesByDate(cursor.toString());
+            List<ShiftSchedule> schedules = getSchedulesImpactingDay(cursor);
             BigDecimal dayHours = calcDailyShiftHours(cursor, schedules, planStartAt);
             if (dayHours.compareTo(maxShiftHours) > 0) {
                 maxShiftHours = dayHours;
@@ -416,13 +416,25 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         BigDecimal maxShiftHours = BigDecimal.ZERO;
         for (int i = 1; i <= days; i++) {
             LocalDate day = start.minusDays(i);
-            List<ShiftSchedule> schedules = shiftCalendarService.getSchedulesByDate(day.toString());
+            List<ShiftSchedule> schedules = getSchedulesImpactingDay(day);
             BigDecimal dayHours = calcDailyShiftHours(day, schedules, planStartAt);
             if (dayHours.compareTo(maxShiftHours) > 0) {
                 maxShiftHours = dayHours;
             }
         }
         return maxShiftHours;
+    }
+
+    /**
+     * 获取会影响指定自然日工时的班次：
+     * - 当天排班；
+     * - 前一天排班中跨入当天的班次（如 17:00~次日02:00）。
+     */
+    private List<ShiftSchedule> getSchedulesImpactingDay(LocalDate day) {
+        List<ShiftSchedule> merged = new ArrayList<>();
+        merged.addAll(shiftCalendarService.getSchedulesByDate(day.toString()));
+        merged.addAll(shiftCalendarService.getSchedulesByDate(day.minusDays(1).toString()));
+        return merged;
     }
 
     private BigDecimal calcDailyShiftHours(LocalDate day, List<ShiftSchedule> schedules, LocalDateTime planStartAt) {
