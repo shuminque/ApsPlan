@@ -153,6 +153,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         List<PlanSlice> plannedSlices = new ArrayList<>();
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
+            if (allDemandsCompleted(demands)) {
+                break;
+            }
             final LocalDate day = cursor;
             schedulePairedBarDemands(day, endExclusive, ringPairDemands, remainingCapacityByLineDay, plannedSlices, activationPlanByKey);
             for (DemandItem demand : demands) {
@@ -179,6 +182,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, demand.customer, demand.outerInnerRing, demand.model, assignQty));
                 }
             }
+            if (allDemandsCompleted(demands)) {
+                break;
+            }
             cursor = cursor.plusDays(1);
         }
         PlanPreviewResponseDTO response = new PlanPreviewResponseDTO();
@@ -189,6 +195,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         response.setDelayedDays(calculateDelayedDays(demands, endExclusive));
         response.setInsertFulfillmentRate(calculateInsertFulfillmentRate(demands));
         return response;
+    }
+
+    private boolean allDemandsCompleted(List<DemandItem> demands) {
+        return demands.stream().allMatch(demand -> demand.remaining() <= 0);
     }
 
     private List<DemandItem> buildDemands(Map<String, List<ProductionOrder>> orderByKey,
