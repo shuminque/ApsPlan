@@ -3,6 +3,8 @@ package com.depository_manage.pojo.shift;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
+
 @Data
 public class CalendarEventDTO {
     private Long id;         // 对应 scheduleId
@@ -24,4 +26,17 @@ public class CalendarEventDTO {
     private String outerInnerRing;
     private String model;
     private Integer quantity;
+    /**
+     * 结果指标（结构化输出，前端直接渲染）
+     */
+    private BigDecimal avgDailyWorkHours;
+    private BigDecimal dailyOutput;
+    private BigDecimal capacityPerHour;
+    /**
+     * 指标诊断标记：
+     * - OK：指标完整可计算
+     * - MISSING_CAPACITY_CONFIG：缺少产能配置，相关指标无法计算
+     * - INVALID_CAPACITY_CONFIG：产能配置<=0，相关指标无法计算
+     */
+    private String metricDiagnosticTag;
 }

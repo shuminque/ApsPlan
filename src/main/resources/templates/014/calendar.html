@@ -744,18 +744,11 @@
             .catch(err => layer.msg((err && err.message) || '插单提交失败'));
     }
 
-    function parsePlanEventTitle(title) {
-        if (!title) return null;
-        const normalizedTitle = title.replace(/^\[排产\]\s*/, '').trim();
-        const match = normalizedTitle.match(/^(.*?)\s+(.*?)\/(.*?)\s+(.*?)\s+x\s+([0-9,]+)$/);
-        if (!match) return null;
-        return {
-            lineName: match[1] || '',
-            customer: match[2] || '',
-            outerInnerRing: match[3] || '',
-            model: match[4] || '',
-            quantity: Number((match[5] || '0').replace(/,/g, '')) || 0
-        };
+    function formatMetricValue(value) {
+        if (value === null || value === undefined || value === '') return '-';
+        const num = Number(value);
+        if (!Number.isFinite(num)) return '-';
+        return num.toFixed(2);
     }
 
     function formatRangeDate(dateTime) {
@@ -811,15 +804,19 @@
         // <td>${item.plannedQuantity || 0}</td>
 
         const resultRows = events.map(event => {
-            const parsed = parsePlanEventTitle(event.title) || {};
+            const diagnosticTag = event.metricDiagnosticTag || '';
+            const diagnosticNote = diagnosticTag && diagnosticTag !== 'OK' ? `（${diagnosticTag}）` : '';
             return `
                 <tr>
-                    <td>${parsed.lineName || ''}</td>
-                    <td>${parsed.customer || ''}</td>
-                    <td>${parsed.outerInnerRing || ''}</td>
-                    <td>${parsed.model || ''}</td>
+                    <td>${event.lineName || ''}</td>
+                    <td>${event.customer || ''}</td>
+                    <td>${event.outerInnerRing || ''}</td>
+                    <td>${event.model || ''}</td>
                     <td>${formatRangeDate(event.start)} ~ ${formatRangeDate(event.end)}</td>
-                    <td>${parsed.quantity || 0}</td>
+                    <td>${formatMetricValue(event.dailyOutput)}${diagnosticNote}</td>
+                    <td>${formatMetricValue(event.avgDailyWorkHours)}</td>
+                    <td>${formatMetricValue(event.capacityPerHour)}</td>
+                    <td>${event.quantity || 0}</td>
                 </tr>
             `;
         }).join('');
@@ -847,10 +844,10 @@
                     <table class="layui-table">
                         <thead>
                             <tr>
-                                <th>产线</th><th>客户</th><th>内外圈</th><th>型号</th><th>排产时间范围</th><th>总产量</th>
+                                <th>产线</th><th>客户</th><th>内外圈</th><th>型号</th><th>排产时间范围</th><th>日产量</th><th>日均工时</th><th>产能(件/小时)</th><th>总产量</th>
                             </tr>
                         </thead>
-                        <tbody>${resultRows || '<tr><td colspan="6" style="text-align:center;color:#999;">暂无排产结果</td></tr>'}</tbody>
+                        <tbody>${resultRows || '<tr><td colspan="9" style="text-align:center;color:#999;">暂无排产结果</td></tr>'}</tbody>
                     </table>
                 </div>
             `,

@@ -171,7 +171,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                         demand.remaining(), remainingCapacityByLineDay, activationPlanByKey);
                 assignDemandToLines(day, demand, prioritizedLines, remainingCapacityByLineDay,
                         (line, assignQty) -> plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName,
-                                demand.customer, demand.outerInnerRing, demand.model, assignQty)));
+                                demand.customer, demand.outerInnerRing, demand.model, assignQty, line.capacityPerHour)));
             }
             if (allDemandsCompleted(demands)) {
                 break;
@@ -761,7 +761,40 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         dto.setOuterInnerRing(slice.outerInnerRing);
         dto.setModel(slice.model);
         dto.setQuantity(quantity);
+        applyEventMetrics(dto, startInclusive, endExclusive, quantity, slice.capacityPerHour);
         return dto;
+    }
+
+    /**
+     * 指标口径（统一按“排产天数=事件区间自然日数，含首尾天”）：
+     * - 排产天数 = DAYS(startInclusive, endExclusive)
+     * - 日产量 = 总产量 / 排产天数
+     * - 日均工时 = 日产量 / 产能(件/小时)
+     */
+    private void applyEventMetrics(CalendarEventDTO dto,
+                                   LocalDate startInclusive,
+                                   LocalDate endExclusive,
+                                   int quantity,
+                                   BigDecimal capacityPerHour) {
+        long plannedDays = Math.max(1L, ChronoUnit.DAYS.between(startInclusive, endExclusive));
+        BigDecimal dailyOutput = BigDecimal.valueOf(quantity)
+                .divide(BigDecimal.valueOf(plannedDays), 2, RoundingMode.HALF_UP);
+        dto.setDailyOutput(dailyOutput);
+        dto.setCapacityPerHour(capacityPerHour);
+        if (capacityPerHour == null) {
+            dto.setDailyOutput(null);
+            dto.setAvgDailyWorkHours(null);
+            dto.setMetricDiagnosticTag("MISSING_CAPACITY_CONFIG");
+            return;
+        }
+        if (capacityPerHour.compareTo(BigDecimal.ZERO) <= 0) {
+            dto.setDailyOutput(null);
+            dto.setAvgDailyWorkHours(null);
+            dto.setMetricDiagnosticTag("INVALID_CAPACITY_CONFIG");
+            return;
+        }
+        dto.setAvgDailyWorkHours(dailyOutput.divide(capacityPerHour, 2, RoundingMode.HALF_UP));
+        dto.setMetricDiagnosticTag("OK");
     }
 
     private LocalDateTime toLocalDateTime(String dateTime) {
@@ -1022,8 +1055,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     endExclusive, pairDemand.remaining(), remainingCapacityByLineDay, activationPlanByKey);
             assignDemandToLines(day, pairDemand, prioritizedLines, remainingCapacityByLineDay,
                     (line, assignQty) -> {
-                        plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LA", pairDemand.laModel(), assignQty));
-                        plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LB", pairDemand.lbModel(), assignQty));
+                        plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LA", pairDemand.laModel(), assignQty, line.capacityPerHour));
+                        plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LB", pairDemand.lbModel(), assignQty, line.capacityPerHour));
                     });
         }
     }
@@ -1316,8 +1349,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final String outerInnerRing;
         private final String model;
         private final int quantity;
+        private final BigDecimal capacityPerHour;
 
-        private PlanSlice(LocalDate day, Long lineId, String lineName, String customer, String outerInnerRing, String model, int quantity) {
+        private PlanSlice(LocalDate day, Long lineId, String lineName, String customer, String outerInnerRing, String model, int quantity, BigDecimal capacityPerHour) {
             this.day = day;
             this.lineId = lineId;
             this.lineName = lineName;
@@ -1325,6 +1359,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             this.outerInnerRing = outerInnerRing;
             this.model = model;
             this.quantity = quantity;
+            this.capacityPerHour = capacityPerHour;
         }
 
         private String mergeKey() {
