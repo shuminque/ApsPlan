@@ -3,7 +3,9 @@ package com.depository_manage.service.aps;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 规则优先级排产服务。
@@ -23,5 +25,6 @@ public interface ProductionPlanningService {
                                                List<Long> insertOrderIds,
                                                String lineScope,
                                                List<Long> lineIds,
-                                               Integer freezeHours);
+                                               Integer freezeHours,
+                                               Map<Long, LocalDateTime> orderStartTimes);
 }

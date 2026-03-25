@@ -68,7 +68,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
     @Override
     public PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate) {
-        return generatePlanPreview(startDate, endDate, "AUTO", Collections.emptyList(), "ALL", Collections.emptyList(), null);
+        return generatePlanPreview(startDate, endDate, "AUTO", Collections.emptyList(), "ALL", Collections.emptyList(), null, Collections.emptyMap());
     }
 
     @Override
@@ -78,7 +78,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                                       List<Long> insertOrderIds,
                                                       String lineScope,
                                                       List<Long> lineIds,
-                                                      Integer freezeHours) {
+                                                      Integer freezeHours,
+                                                      Map<Long, LocalDateTime> orderStartTimes) {
         LocalDateTime requestStartAt = toLocalDateTime(startDate);
         LocalDate requestStart = requestStartAt == null ? null : requestStartAt.toLocalDate();
         LocalDate endExclusive = toLocalDate(endDate);
@@ -128,7 +129,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         Map<String, Integer> currentInventoryByKey = queryCurrentInventoryByKey(start, orderByKey);
 
-        List<DemandItem> demands = buildDemands(orderByKey, safetyStockByKey, currentInventoryByKey, normalizedMode, insertOrderIdSet);
+        List<DemandItem> demands = buildDemands(orderByKey, safetyStockByKey, currentInventoryByKey, normalizedMode, insertOrderIdSet,
+                normalizeOrderStartTimes(orderStartTimes), effectiveStartAt);
         if (demands.isEmpty()) {
             return new PlanPreviewResponseDTO();
         }
@@ -159,7 +161,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             final LocalDate day = cursor;
             schedulePairedBarDemands(day, endExclusive, ringPairDemands, remainingCapacityByLineDay, plannedSlices, activationPlanByKey);
             for (DemandItem demand : demands) {
-                if (demand.remaining() <= 0) {
+                if (demand.remaining() <= 0 || !demand.canScheduleOn(day)) {
                     continue;
                 }
                 List<LineCapacity> lines = findMatchingLines(demand.model, lineCapByModel).stream()
@@ -229,7 +231,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                           Map<String, SafetyStock> safetyStockByKey,
                                           Map<String, Integer> currentInventoryByKey,
                                           String planMode,
-                                          Set<Long> insertOrderIdSet) {
+                                          Set<Long> insertOrderIdSet,
+                                          Map<Long, LocalDateTime> orderStartTimes,
+                                          LocalDateTime defaultStartAt) {
         List<DemandItem> result = new ArrayList<>();
         boolean insertMode = "INSERT".equals(planMode) && !insertOrderIdSet.isEmpty();
         for (Map.Entry<String, List<ProductionOrder>> entry : orderByKey.entrySet()) {
@@ -238,52 +242,98 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 continue;
             }
             ProductionOrder any = groupOrders.get(0);
-            int orderQty = groupOrders.stream().mapToInt(order -> {
-                return remainingOrderQuantity(order);
-            }).sum();
-            int insertOrderQty = groupOrders.stream()
-                    .filter(order -> order.getId() != null && insertOrderIdSet.contains(order.getId()))
-                    .mapToInt(this::remainingOrderQuantity)
-                    .sum();
             int currentInventory = currentInventoryByKey.getOrDefault(entry.getKey(), 0);
+            int inventoryPool = currentInventory;
+            int orderDemandTotal = 0;
+
+            List<ProductionOrder> sortedOrders = new ArrayList<>(groupOrders);
+            sortedOrders.sort(Comparator
+                    .comparing(ProductionOrder::getDeliveryDate, Comparator.nullsLast(Date::compareTo))
+                    .thenComparing((ProductionOrder o) -> parseOrderPriority(o.getPriority()), Comparator.reverseOrder())
+                    .thenComparing(ProductionOrder::getId, Comparator.nullsLast(Long::compareTo)));
+
+            for (ProductionOrder order : sortedOrders) {
+                int remainingQty = remainingOrderQuantity(order);
+                if (remainingQty <= 0) {
+                    continue;
+                }
+                int coveredByInventory = Math.min(inventoryPool, remainingQty);
+                inventoryPool -= coveredByInventory;
+                int required = remainingQty - coveredByInventory;
+                if (required <= 0) {
+                    continue;
+                }
+                orderDemandTotal += required;
+                LocalDateTime orderStartAt = resolveDemandStartAt(order.getId(), orderStartTimes, defaultStartAt);
+                int priority = parseOrderPriority(order.getPriority());
+                boolean locked = insertMode && order.getId() != null && insertOrderIdSet.contains(order.getId());
+                result.add(new DemandItem(order.getCustomer(), order.getOuterInnerRing(), order.getModel(), required,
+                        currentInventory, order.getDeliveryDate(), Math.max(priority, locked ? 2 : priority), locked, orderStartAt));
+            }
+
             SafetyStock stock = safetyStockByKey.get(entry.getKey());
             BigDecimal safetyTarget = BigDecimal.ZERO;
             if (stock != null && stock.getStockCycle() != null && stock.getMonthlyStockQty() != null) {
                 safetyTarget = stock.getStockCycle().multiply(stock.getMonthlyStockQty());
             }
             int safetyTargetQty = safetyTarget.setScale(0, RoundingMode.HALF_UP).intValue();
-            int required = Math.max(0, orderQty - currentInventory + safetyTargetQty);
-            if (required <= 0) {
-                continue;
-            }
-            Date earliestDelivery = groupOrders.stream()
-                    .map(ProductionOrder::getDeliveryDate)
-                    .filter(Objects::nonNull)
-                    .min(Date::compareTo)
-                    .orElse(null);
-            int priority = groupOrders.stream()
-                    .map(ProductionOrder::getPriority)
-                    .mapToInt(this::parseOrderPriority)
-                    .max()
-                    .orElse(0);
-            int lockedRequired = insertMode ? Math.min(required, insertOrderQty) : 0;
-            int normalRequired = required - lockedRequired;
-            if (lockedRequired > 0) {
-                result.add(DemandItem.lockedInsert(any.getCustomer(), any.getOuterInnerRing(), any.getModel(), lockedRequired,
-                        currentInventory, earliestDelivery, Math.max(priority, 2)));
-            }
-            if (normalRequired > 0) {
-                result.add(DemandItem.normal(any.getCustomer(), any.getOuterInnerRing(), any.getModel(), normalRequired,
-                        currentInventory, earliestDelivery, priority));
+            if (safetyTargetQty > orderDemandTotal) {
+                int safetyRequired = safetyTargetQty - orderDemandTotal;
+                Date earliestDelivery = sortedOrders.stream()
+                        .map(ProductionOrder::getDeliveryDate)
+                        .filter(Objects::nonNull)
+                        .min(Date::compareTo)
+                        .orElse(null);
+                int groupPriority = sortedOrders.stream()
+                        .map(ProductionOrder::getPriority)
+                        .mapToInt(this::parseOrderPriority)
+                        .max()
+                        .orElse(0);
+                result.add(new DemandItem(any.getCustomer(), any.getOuterInnerRing(), any.getModel(), safetyRequired,
+                        currentInventory, earliestDelivery, groupPriority, false, normalizePlanStart(defaultStartAt)));
             }
         }
 
         result.sort(Comparator
                 .comparing((DemandItem d) -> d.lockedInsert()).reversed()
                 .thenComparing(Comparator.comparingInt((DemandItem d) -> d.priority()).reversed())
+                .thenComparing(DemandItem::earliestStartDate, Comparator.nullsLast(LocalDate::compareTo))
                 .thenComparingInt(DemandItem::deliveryUrgencyDays)
                 .thenComparing((DemandItem d) -> d.required, Comparator.reverseOrder()));
         return result;
+    }
+
+    private Map<Long, LocalDateTime> normalizeOrderStartTimes(Map<Long, LocalDateTime> orderStartTimes) {
+        if (orderStartTimes == null || orderStartTimes.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, LocalDateTime> normalized = new HashMap<>();
+        for (Map.Entry<Long, LocalDateTime> entry : orderStartTimes.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                continue;
+            }
+            normalized.put(entry.getKey(), normalizePlanStart(entry.getValue()));
+        }
+        return normalized;
+    }
+
+    private LocalDateTime normalizePlanStart(LocalDateTime startAt) {
+        if (startAt == null) {
+            return null;
+        }
+        return startAt.withNano(0);
+    }
+
+    private LocalDateTime resolveDemandStartAt(Long orderId,
+                                               Map<Long, LocalDateTime> orderStartTimes,
+                                               LocalDateTime defaultStartAt) {
+        if (orderId != null && orderStartTimes != null) {
+            LocalDateTime custom = orderStartTimes.get(orderId);
+            if (custom != null) {
+                return custom;
+            }
+        }
+        return normalizePlanStart(defaultStartAt);
     }
 
     private int parseOrderPriority(String priority) {
@@ -960,7 +1010,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                           List<PlanSlice> plannedSlices,
                                           Map<String, LineActivationPlan> activationPlanByKey) {
         for (RingPairDemand pairDemand : pairDemands) {
-            if (pairDemand.remaining() <= 0) {
+            if (pairDemand.remaining() <= 0 || !pairDemand.canScheduleOn(day)) {
                 continue;
             }
             List<LineCapacity> prioritizedLines = prioritizeCandidateLines(pairDemand.activationKey(), pairDemand.sharedBarLines(), day,
@@ -1003,6 +1053,13 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         int remaining();
 
         void applyPlan(int assigned, LocalDate planDay);
+
+        LocalDate earliestStartDate();
+
+        default boolean canScheduleOn(LocalDate day) {
+            LocalDate earliest = earliestStartDate();
+            return earliest == null || !day.isBefore(earliest);
+        }
     }
 
     private static class DemandItem implements PlannableDemand {
@@ -1017,6 +1074,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private int plannedQuantity;
         private final Date earliestDelivery;
         private final Set<LocalDate> plannedDays = new HashSet<>();
+        private final LocalDateTime earliestStartAt;
+
         private DemandItem(String customer,
                            String outerInnerRing,
                            String model,
@@ -1024,7 +1083,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                            int currentInventory,
                            Date earliestDelivery,
                            int priority,
-                           boolean lockedInsert) {
+                           boolean lockedInsert,
+                           LocalDateTime earliestStartAt) {
             this.customer = customer;
             this.outerInnerRing = outerInnerRing;
             this.model = model;
@@ -1035,16 +1095,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             this.coveredQuantity = 0;
             this.plannedQuantity = 0;
             this.earliestDelivery = earliestDelivery;
-        }
-
-        private static DemandItem lockedInsert(String customer, String outerInnerRing, String model, int required,
-                                               int currentInventory, Date earliestDelivery, int priority) {
-            return new DemandItem(customer, outerInnerRing, model, required, currentInventory, earliestDelivery, priority, true);
-        }
-
-        private static DemandItem normal(String customer, String outerInnerRing, String model, int required,
-                                         int currentInventory, Date earliestDelivery, int priority) {
-            return new DemandItem(customer, outerInnerRing, model, required, currentInventory, earliestDelivery, priority, false);
+            this.earliestStartAt = earliestStartAt == null ? null : earliestStartAt.withNano(0);
         }
 
         @Override
@@ -1077,6 +1128,11 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 return null;
             }
             return earliestDelivery.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+        }
+
+        @Override
+        public LocalDate earliestStartDate() {
+            return earliestStartAt == null ? null : earliestStartAt.toLocalDate();
         }
 
         @Override
@@ -1165,6 +1221,19 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         private String activationKey() {
             return laDemand.normalizedCustomer() + "|PAIR|" + normalize(sharedSeries) + "|" + normalize(laDemand.model) + "|" + normalize(lbDemand.model);
+        }
+
+        @Override
+        public LocalDate earliestStartDate() {
+            LocalDate laStart = laDemand.earliestStartDate();
+            LocalDate lbStart = lbDemand.earliestStartDate();
+            if (laStart == null) {
+                return lbStart;
+            }
+            if (lbStart == null) {
+                return laStart;
+            }
+            return laStart.isAfter(lbStart) ? laStart : lbStart;
         }
 
         @Override
