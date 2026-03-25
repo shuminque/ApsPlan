@@ -2,6 +2,8 @@ package com.depository_manage.pojo.shift;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class PlanPreviewOrderDTO {
     private String customer;
@@ -15,4 +17,5 @@ public class PlanPreviewOrderDTO {
     private Integer requiredQuantity;
     private Integer plannedQuantity;
     private Integer plannedDays;
+    private List<Long> orderIds;
 }
