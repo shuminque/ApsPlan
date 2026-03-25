@@ -179,7 +179,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             cursor = cursor.plusDays(1);
         }
         PlanPreviewResponseDTO response = new PlanPreviewResponseDTO();
-        response.setEvents(mergeSlicesToEvents(plannedSlices, effectiveStartAt));
+        response.setEvents(mergeSlicesToEvents(plannedSlices, effectiveStartAt, shiftHoursByDay));
         LocalDateTime actualStart = resolveActualPlanStart(plannedSlices, effectiveStartAt, start);
         LocalDateTime actualEnd = resolveActualPlanEnd(plannedSlices, actualStart);
         response.setPlanStart(actualStart == null ? null : actualStart.format(DATE_TIME_FMT));
@@ -243,6 +243,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             }
             ProductionOrder any = groupOrders.get(0);
             int orderCount = groupOrders.size();
+            int orderDemandQuantity = groupOrders.stream().mapToInt(this::remainingOrderQuantity).sum();
             int currentInventory = currentInventoryByKey.getOrDefault(entry.getKey(), 0);
             int inventoryPool = currentInventory;
             int orderDemandTotal = 0;
@@ -275,7 +276,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 int priority = parseOrderPriority(order.getPriority());
                 boolean locked = insertMode && order.getId() != null && insertOrderIdSet.contains(order.getId());
                 result.add(new DemandItem(order.getId(), order.getCustomer(), order.getOuterInnerRing(), order.getModel(), required,
-                        currentInventory, orderCount, safetyTargetQty, order.getDeliveryDate(),
+                        currentInventory, orderCount, orderDemandQuantity, safetyTargetQty, order.getDeliveryDate(),
                         Math.max(priority, locked ? 2 : priority), locked, orderStartAt));
             }
 
@@ -292,7 +293,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                         .max()
                         .orElse(0);
                 result.add(new DemandItem(null, any.getCustomer(), any.getOuterInnerRing(), any.getModel(), safetyRequired,
-                        currentInventory, orderCount, safetyTargetQty, earliestDelivery, groupPriority, false,
+                        currentInventory, orderCount, orderDemandQuantity, safetyTargetQty, earliestDelivery, groupPriority, false,
                         normalizePlanStart(defaultStartAt)));
             }
         }
@@ -668,7 +669,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 .compare(left, right);
     }
 
-    private List<CalendarEventDTO> mergeSlicesToEvents(List<PlanSlice> slices, LocalDateTime planStartAt) {
+    private List<CalendarEventDTO> mergeSlicesToEvents(List<PlanSlice> slices,
+                                                       LocalDateTime planStartAt,
+                                                       Map<LocalDate, BigDecimal> shiftHoursByDay) {
         List<CalendarEventDTO> result = new ArrayList<>();
         if (slices.isEmpty()) {
             return result;
@@ -692,13 +695,13 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 blockQty += next.quantity;
                 continue;
             }
-            result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty, planStartAt));
+            result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty, planStartAt, shiftHoursByDay));
             current = next;
             blockStart = next.day;
             blockEnd = next.day;
             blockQty = next.quantity;
         }
-        result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty, planStartAt));
+        result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty, planStartAt, shiftHoursByDay));
         return result;
     }
 
@@ -726,10 +729,13 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     .orElse(null);
             row.setEarliestDeliveryDate(earliest == null ? "" : earliest.toString());
             row.setCurrentInventory(item.currentInventory);
-            row.setOrderCount(item.orderCount());
+            row.setOrderCount(groupItems.stream().mapToInt(DemandItem::orderDemandQuantity).max().orElse(0));
             row.setSafetyStockQuantity(item.safetyStockQuantity());
-            row.setRequiredQuantity(groupItems.stream().mapToInt(d -> d.required).sum());
-            row.setPlannedQuantity(groupItems.stream().mapToInt(DemandItem::plannedQuantity).sum());
+            int plannedBaseQuantity = Math.max(0, row.getOrderCount()
+                    + Optional.ofNullable(row.getSafetyStockQuantity()).orElse(0)
+                    - Optional.ofNullable(row.getCurrentInventory()).orElse(0));
+            row.setRequiredQuantity(plannedBaseQuantity);
+            row.setPlannedQuantity(plannedBaseQuantity);
             row.setPlannedDays(groupItems.stream()
                     .flatMap(d -> d.plannedDays.stream())
                     .collect(Collectors.toSet()).size());
@@ -767,7 +773,12 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return rows;
     }
 
-    private CalendarEventDTO buildEvent(LocalDate startInclusive, LocalDate endExclusive, PlanSlice slice, int quantity, LocalDateTime planStartAt) {
+    private CalendarEventDTO buildEvent(LocalDate startInclusive,
+                                        LocalDate endExclusive,
+                                        PlanSlice slice,
+                                        int quantity,
+                                        LocalDateTime planStartAt,
+                                        Map<LocalDate, BigDecimal> shiftHoursByDay) {
         CalendarEventDTO dto = new CalendarEventDTO();
         dto.setTitle(String.format("[排产] %s %s/%s %s x %,d", slice.lineName, slice.customer, slice.outerInnerRing, slice.model, quantity));
         LocalDateTime eventStart = startInclusive.atStartOfDay();
@@ -785,7 +796,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         dto.setOuterInnerRing(slice.outerInnerRing);
         dto.setModel(slice.model);
         dto.setQuantity(quantity);
-        applyEventMetrics(dto, startInclusive, endExclusive, quantity, slice.capacityPerHour);
+        applyEventMetrics(dto, startInclusive, endExclusive, quantity, slice.capacityPerHour, shiftHoursByDay);
         return dto;
     }
 
@@ -799,7 +810,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                    LocalDate startInclusive,
                                    LocalDate endExclusive,
                                    int quantity,
-                                   BigDecimal capacityPerHour) {
+                                   BigDecimal capacityPerHour,
+                                   Map<LocalDate, BigDecimal> shiftHoursByDay) {
         long plannedDays = Math.max(1L, ChronoUnit.DAYS.between(startInclusive, endExclusive));
         BigDecimal dailyOutput = BigDecimal.valueOf(quantity)
                 .divide(BigDecimal.valueOf(plannedDays), 2, RoundingMode.HALF_UP);
@@ -817,8 +829,28 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             dto.setMetricDiagnosticTag("INVALID_CAPACITY_CONFIG");
             return;
         }
-        dto.setAvgDailyWorkHours(dailyOutput.divide(capacityPerHour, 2, RoundingMode.HALF_UP));
+        dto.setAvgDailyWorkHours(averageShiftHours(startInclusive, endExclusive, shiftHoursByDay));
         dto.setMetricDiagnosticTag("OK");
+    }
+
+    private BigDecimal averageShiftHours(LocalDate startInclusive,
+                                         LocalDate endExclusive,
+                                         Map<LocalDate, BigDecimal> shiftHoursByDay) {
+        if (shiftHoursByDay == null || shiftHoursByDay.isEmpty()) {
+            return DEFAULT_SHIFT_HOURS;
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        long days = 0;
+        LocalDate cursor = startInclusive;
+        while (cursor.isBefore(endExclusive)) {
+            total = total.add(shiftHoursByDay.getOrDefault(cursor, BigDecimal.ZERO));
+            days++;
+            cursor = cursor.plusDays(1);
+        }
+        if (days <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return total.divide(BigDecimal.valueOf(days), 2, RoundingMode.HALF_UP);
     }
 
     private LocalDateTime toLocalDateTime(String dateTime) {
@@ -1132,6 +1164,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final int required;
         private final int currentInventory;
         private final int orderCount;
+        private final int orderDemandQuantity;
         private final int safetyStockQuantity;
         private final int priority;
         private final boolean lockedInsert;
@@ -1148,6 +1181,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                            int required,
                            int currentInventory,
                            int orderCount,
+                           int orderDemandQuantity,
                            int safetyStockQuantity,
                            Date earliestDelivery,
                            int priority,
@@ -1160,6 +1194,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             this.required = required;
             this.currentInventory = currentInventory;
             this.orderCount = orderCount;
+            this.orderDemandQuantity = orderDemandQuantity;
             this.safetyStockQuantity = safetyStockQuantity;
             this.priority = priority;
             this.lockedInsert = lockedInsert;
@@ -1184,6 +1219,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         private int orderCount() {
             return orderCount;
+        }
+
+        private int orderDemandQuantity() {
+            return orderDemandQuantity;
         }
 
         private int safetyStockQuantity() {
@@ -1475,10 +1514,25 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                                   int demandRemaining,
                                                   Map<LineDayKey, Integer> remainingCapacityByLineDay) {
             ensureMinimumLines(sortedCandidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
-            return sortedCandidates.stream()
+            List<LineCapacity> activatedToday = sortedCandidates.stream()
                     .filter(line -> activatedLineIds.contains(line.lineId))
                     .filter(line -> remainingCapacityByLineDay.getOrDefault(new LineDayKey(line.lineId, day), 0) > 0)
                     .collect(Collectors.toList());
+            if (activatedToday.isEmpty() || demandRemaining <= 0) {
+                return activatedToday;
+            }
+            List<LineCapacity> minimalLines = new ArrayList<>();
+            int covered = 0;
+            for (LineCapacity line : activatedToday) {
+                minimalLines.add(line);
+                covered += totalRemainingCapacity(line, day, endExclusive, remainingCapacityByLineDay);
+                if (covered >= demandRemaining) {
+                    break;
+                }
+            }
+            activatedLineIds.clear();
+            minimalLines.stream().map(LineCapacity::getLineId).forEach(activatedLineIds::add);
+            return minimalLines;
         }
     }
 
