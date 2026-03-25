@@ -207,6 +207,13 @@
         return `${year}-${month}-${day}T${hours}:${minutes}`;
     }
 
+    function toDateValue(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
     function getDefaultPlanStart() {
         const now = new Date();
         const activeStart = new Date(calendar.view.activeStart);
@@ -220,7 +227,7 @@
 
     function requestAutoPlanBrowseData() {
         const range = getCurrentRange();
-        const defaultStart = toDateTimeLocalValue(getDefaultPlanStart());
+        const defaultStart = toDateValue(getDefaultPlanStart());
         return fetch('/api/shift/plan/preview', {
             method: 'POST',
             headers: {
@@ -265,8 +272,8 @@
                 <td>${item.currentInventory || 0}</td>
                 <td>${item.orderCount || 0}</td>
                 <td>${item.safetyStockQuantity || 0}</td>
-                <td>${item.requiredQuantity || 0}</td>
-                <td><input type="datetime-local" class="layui-input plan-order-start-input" value="${escapeHtml(startValue)}"></td>
+                <td>${item.plannedQuantity || item.requiredQuantity || 0}</td>
+                <td><input type="date" class="layui-input plan-order-start-input" value="${escapeHtml(startValue)}"></td>
             </tr>
             `;
         }).join('');
@@ -336,7 +343,7 @@
     function requestAutoPlanPreviewByOrderStart(orderStartTimes) {
         const range = getCurrentRange();
         const startList = Object.values(orderStartTimes || {}).filter(Boolean).sort();
-        const fallbackStart = startList.length ? startList[0] : toDateTimeLocalValue(getDefaultPlanStart());
+        const fallbackStart = startList.length ? startList[0] : toDateValue(getDefaultPlanStart());
         fetch('/api/shift/plan/preview', {
             method: 'POST',
             headers: {
@@ -805,7 +812,7 @@
                 <td>${item.currentInventory || 0}</td>
                 <td>${item.orderCount || 0}</td>
                 <td>${item.safetyStockQuantity || 0}</td>
-                <td>${item.requiredQuantity || 0}</td>
+                <td>${item.plannedQuantity || item.requiredQuantity || 0}</td>
             </tr>
         `).join('');
         // <td>${item.plannedQuantity || 0}</td>
@@ -813,6 +820,7 @@
         const resultRows = events.map(event => {
             const diagnosticTag = event.metricDiagnosticTag || '';
             const diagnosticNote = diagnosticTag && diagnosticTag !== 'OK' ? `（${diagnosticTag}）` : '';
+            const plannedDays = Number(event.plannedDays || 0);
             return `
                 <tr>
                     <td>${event.lineName || ''}</td>
@@ -820,6 +828,7 @@
                     <td>${event.outerInnerRing || ''}</td>
                     <td>${event.model || ''}</td>
                     <td>${formatRangeDate(event.start)} ~ ${formatRangeDate(event.end)}</td>
+                    <td>${plannedDays > 0 ? plannedDays : '-'}</td>
                     <td>${formatMetricValue(event.dailyOutput)}${diagnosticNote}</td>
                     <td>${formatMetricValue(event.avgDailyWorkHours)}</td>
                     <td>${formatMetricValue(event.capacityPerHour)}</td>
@@ -851,10 +860,10 @@
                     <table class="layui-table">
                         <thead>
                             <tr>
-                                <th>产线</th><th>客户</th><th>内外圈</th><th>型号</th><th>排产时间范围</th><th>日产量</th><th>日均工时</th><th>产能(件/小时)</th><th>总产量</th>
+                                <th>产线</th><th>客户</th><th>内外圈</th><th>型号</th><th>排产时间范围</th><th>天数</th><th>日产量</th><th>日均工时</th><th>产能(件/小时)</th><th>总产量</th>
                             </tr>
                         </thead>
-                        <tbody>${resultRows || '<tr><td colspan="9" style="text-align:center;color:#999;">暂无排产结果</td></tr>'}</tbody>
+                        <tbody>${resultRows || '<tr><td colspan="10" style="text-align:center;color:#999;">暂无排产结果</td></tr>'}</tbody>
                     </table>
                 </div>
             `,

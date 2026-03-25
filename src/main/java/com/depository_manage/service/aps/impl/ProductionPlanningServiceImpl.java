@@ -825,6 +825,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                    BigDecimal capacityPerHour,
                                    Map<LocalDate, BigDecimal> shiftHoursByDay) {
         long plannedDays = Math.max(1L, ChronoUnit.DAYS.between(startInclusive, endExclusive));
+        dto.setPlannedDays(plannedDays);
         BigDecimal dailyOutput = BigDecimal.valueOf(quantity)
                 .divide(BigDecimal.valueOf(plannedDays), 2, RoundingMode.HALF_UP);
         dto.setDailyOutput(dailyOutput);
