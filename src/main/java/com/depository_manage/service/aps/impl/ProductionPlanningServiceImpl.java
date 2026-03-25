@@ -35,6 +35,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -671,11 +672,20 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     }
 
     private boolean isSeriesMatch(String demandModel, String configModel) {
-        if (configModel == null || configModel.trim().isEmpty()) {
+        if (demandModel == null || demandModel.trim().isEmpty() || configModel == null || configModel.trim().isEmpty()) {
             return false;
         }
-        String normalizedConfigModel = configModel.trim();
-        return demandModel.startsWith(normalizedConfigModel);
+        String normalizedDemandModel = normalizeModelForSeriesMatch(demandModel);
+        String normalizedConfigModel = normalizeModelForSeriesMatch(configModel);
+        if (normalizedDemandModel.isEmpty() || normalizedConfigModel.isEmpty()) {
+            return false;
+        }
+        return normalizedDemandModel.startsWith(normalizedConfigModel)
+                || normalizedDemandModel.contains(normalizedConfigModel);
+    }
+
+    private String normalizeModelForSeriesMatch(String model) {
+        return model == null ? "" : model.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "");
     }
 
     private void sortLineCapacities(List<LineCapacity> lineCapacities) {
