@@ -167,20 +167,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                         .collect(Collectors.toList());
                 List<LineCapacity> prioritizedLines = prioritizeCandidateLines(demand.activationKey(), lines, day, endExclusive,
                         demand.remaining(), remainingCapacityByLineDay, activationPlanByKey);
-                for (LineCapacity line : prioritizedLines) {
-                    if (demand.remaining() <= 0) {
-                        break;
-                    }
-                    LineDayKey lineDayKey = new LineDayKey(line.lineId, day);
-                    int remainingCapacity = remainingCapacityByLineDay.getOrDefault(lineDayKey, 0);
-                    if (remainingCapacity <= 0) {
-                        continue;
-                    }
-                    int assignQty = Math.min(remainingCapacity, demand.remaining());
-                    demand.applyPlan(assignQty, day);
-                    remainingCapacityByLineDay.put(lineDayKey, remainingCapacity - assignQty);
-                    plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, demand.customer, demand.outerInnerRing, demand.model, assignQty));
-                }
+                assignDemandToLines(day, demand, prioritizedLines, remainingCapacityByLineDay,
+                        (line, assignQty) -> plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName,
+                                demand.customer, demand.outerInnerRing, demand.model, assignQty)));
             }
             if (allDemandsCompleted(demands)) {
                 break;
@@ -250,17 +239,12 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             }
             ProductionOrder any = groupOrders.get(0);
             int orderQty = groupOrders.stream().mapToInt(order -> {
-                int qty = Optional.ofNullable(order.getQuantity()).orElse(0);
-                int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
-                return Math.max(0, qty - assigned);
+                return remainingOrderQuantity(order);
             }).sum();
             int insertOrderQty = groupOrders.stream()
                     .filter(order -> order.getId() != null && insertOrderIdSet.contains(order.getId()))
-                    .mapToInt(order -> {
-                        int qty = Optional.ofNullable(order.getQuantity()).orElse(0);
-                        int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
-                        return Math.max(0, qty - assigned);
-                    }).sum();
+                    .mapToInt(this::remainingOrderQuantity)
+                    .sum();
             int currentInventory = currentInventoryByKey.getOrDefault(entry.getKey(), 0);
             SafetyStock stock = safetyStockByKey.get(entry.getKey());
             BigDecimal safetyTarget = BigDecimal.ZERO;
@@ -323,19 +307,24 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
     }
 
+    private int remainingOrderQuantity(ProductionOrder order) {
+        int qty = Optional.ofNullable(order.getQuantity()).orElse(0);
+        int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
+        return Math.max(0, qty - assigned);
+    }
+
     private Map<LocalDate, BigDecimal> buildShiftHours(LocalDate start, LocalDate endExclusive, LocalDateTime planStartAt) {
         Map<LocalDate, BigDecimal> result = new HashMap<>();
+        BigDecimal fallbackShiftHours = resolveFallbackShiftHours(start, endExclusive, planStartAt);
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
             List<ShiftSchedule> schedules = shiftCalendarService.getSchedulesByDate(cursor.toString());
-            BigDecimal hours = schedules.stream()
-                    .map(schedule -> calcHours(schedule, planStartAt))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal hours = calcDailyShiftHours(cursor, schedules, planStartAt);
             boolean isCustomStartDay = planStartAt != null
                     && cursor.equals(planStartAt.toLocalDate())
                     && !planStartAt.toLocalTime().equals(java.time.LocalTime.MIDNIGHT);
             if (hours.compareTo(BigDecimal.ZERO) <= 0 && !isCustomStartDay) {
-                hours = DEFAULT_SHIFT_HOURS;
+                hours = fallbackShiftHours;
             }
             result.put(cursor, hours);
             cursor = cursor.plusDays(1);
@@ -343,25 +332,107 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return result;
     }
 
-    private BigDecimal calcHours(ShiftSchedule schedule, LocalDateTime planStartAt) {
-        if (schedule.getStartDateTime() == null || schedule.getEndDateTime() == null) {
+    private BigDecimal resolveFallbackShiftHours(LocalDate start, LocalDate endExclusive, LocalDateTime planStartAt) {
+        BigDecimal inferred = inferShiftHoursWithinRange(start, endExclusive, planStartAt);
+        if (inferred.compareTo(BigDecimal.ZERO) > 0) {
+            return inferred;
+        }
+        BigDecimal lookbackInferred = inferShiftHoursByLookback(start, 31, planStartAt);
+        if (lookbackInferred.compareTo(BigDecimal.ZERO) > 0) {
+            return lookbackInferred;
+        }
+        return DEFAULT_SHIFT_HOURS;
+    }
+
+    private BigDecimal inferShiftHoursWithinRange(LocalDate start, LocalDate endExclusive, LocalDateTime planStartAt) {
+        BigDecimal maxShiftHours = BigDecimal.ZERO;
+        LocalDate cursor = start;
+        while (cursor.isBefore(endExclusive)) {
+            List<ShiftSchedule> schedules = shiftCalendarService.getSchedulesByDate(cursor.toString());
+            BigDecimal dayHours = calcDailyShiftHours(cursor, schedules, planStartAt);
+            if (dayHours.compareTo(maxShiftHours) > 0) {
+                maxShiftHours = dayHours;
+            }
+            cursor = cursor.plusDays(1);
+        }
+        return maxShiftHours;
+    }
+
+    private BigDecimal inferShiftHoursByLookback(LocalDate start, int days, LocalDateTime planStartAt) {
+        BigDecimal maxShiftHours = BigDecimal.ZERO;
+        for (int i = 1; i <= days; i++) {
+            LocalDate day = start.minusDays(i);
+            List<ShiftSchedule> schedules = shiftCalendarService.getSchedulesByDate(day.toString());
+            BigDecimal dayHours = calcDailyShiftHours(day, schedules, planStartAt);
+            if (dayHours.compareTo(maxShiftHours) > 0) {
+                maxShiftHours = dayHours;
+            }
+        }
+        return maxShiftHours;
+    }
+
+    private BigDecimal calcDailyShiftHours(LocalDate day, List<ShiftSchedule> schedules, LocalDateTime planStartAt) {
+        if (schedules == null || schedules.isEmpty()) {
             return BigDecimal.ZERO;
+        }
+        LocalDateTime dayStart = day.atStartOfDay();
+        LocalDateTime dayEnd = day.plusDays(1).atStartOfDay();
+        List<TimeRange> ranges = new ArrayList<>();
+        for (ShiftSchedule schedule : schedules) {
+            TimeRange range = toEffectiveRange(schedule, dayStart, dayEnd, planStartAt);
+            if (range != null) {
+                ranges.add(range);
+            }
+        }
+        if (ranges.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        ranges.sort(Comparator.comparing(TimeRange::start));
+        long mergedMinutes = 0;
+        LocalDateTime mergedStart = ranges.get(0).start;
+        LocalDateTime mergedEnd = ranges.get(0).end;
+        for (int i = 1; i < ranges.size(); i++) {
+            TimeRange current = ranges.get(i);
+            if (!current.start.isAfter(mergedEnd)) {
+                if (current.end.isAfter(mergedEnd)) {
+                    mergedEnd = current.end;
+                }
+                continue;
+            }
+            mergedMinutes += ChronoUnit.MINUTES.between(mergedStart, mergedEnd);
+            mergedStart = current.start;
+            mergedEnd = current.end;
+        }
+        mergedMinutes += ChronoUnit.MINUTES.between(mergedStart, mergedEnd);
+        if (mergedMinutes <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return BigDecimal.valueOf(mergedMinutes).divide(new BigDecimal("60"), 2, RoundingMode.HALF_UP);
+    }
+
+    private TimeRange toEffectiveRange(ShiftSchedule schedule,
+                                       LocalDateTime dayStart,
+                                       LocalDateTime dayEnd,
+                                       LocalDateTime planStartAt) {
+        if (schedule.getStartDateTime() == null || schedule.getEndDateTime() == null) {
+            return null;
         }
         LocalDateTime scheduleStart = schedule.getStartDateTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
         LocalDateTime scheduleEnd = schedule.getEndDateTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
-        LocalDate startDate = scheduleStart.toLocalDate();
-        LocalDate endDate = scheduleEnd.toLocalDate();
         if (planStartAt != null && scheduleStart.toLocalDate().equals(planStartAt.toLocalDate()) && scheduleEnd.isAfter(planStartAt)) {
             scheduleStart = scheduleStart.isBefore(planStartAt) ? planStartAt : scheduleStart;
         }
-        long minutes = ChronoUnit.MINUTES.between(scheduleStart, scheduleEnd);
-        if (minutes <= 0 && endDate.isAfter(startDate)) {
-            minutes = 24 * 60;
+        LocalDate startDate = scheduleStart.toLocalDate();
+        LocalDate endDate = scheduleEnd.toLocalDate();
+        if (!scheduleEnd.isAfter(scheduleStart) && endDate.isAfter(startDate)) {
+            scheduleEnd = scheduleStart.plusHours(24);
         }
-        if (minutes <= 0) {
-            return BigDecimal.ZERO;
+        LocalDateTime effectiveStart = scheduleStart.isBefore(dayStart) ? dayStart : scheduleStart;
+        LocalDateTime effectiveEnd = scheduleEnd.isAfter(dayEnd) ? dayEnd : scheduleEnd;
+        if (!effectiveEnd.isAfter(effectiveStart)) {
+            return null;
         }
-        return new BigDecimal(minutes).divide(new BigDecimal("60"), 2, RoundingMode.HALF_UP);
+        return new TimeRange(effectiveStart, effectiveEnd);
     }
 
     private Map<String, List<LineCapacity>> buildModelCapacities(Set<Long> scopedLineIds) {
@@ -894,25 +965,47 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             }
             List<LineCapacity> prioritizedLines = prioritizeCandidateLines(pairDemand.activationKey(), pairDemand.sharedBarLines(), day,
                     endExclusive, pairDemand.remaining(), remainingCapacityByLineDay, activationPlanByKey);
-            for (LineCapacity line : prioritizedLines) {
-                if (pairDemand.remaining() <= 0) {
-                    break;
-                }
-                LineDayKey lineDayKey = new LineDayKey(line.lineId, day);
-                int remainingCapacity = remainingCapacityByLineDay.getOrDefault(lineDayKey, 0);
-                if (remainingCapacity <= 0) {
-                    continue;
-                }
-                int assignQty = Math.min(remainingCapacity, pairDemand.remaining());
-                pairDemand.applyPlan(assignQty, day);
-                remainingCapacityByLineDay.put(lineDayKey, remainingCapacity - assignQty);
-                plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LA", pairDemand.laModel(), assignQty));
-                plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LB", pairDemand.lbModel(), assignQty));
-            }
+            assignDemandToLines(day, pairDemand, prioritizedLines, remainingCapacityByLineDay,
+                    (line, assignQty) -> {
+                        plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LA", pairDemand.laModel(), assignQty));
+                        plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LB", pairDemand.lbModel(), assignQty));
+                    });
         }
     }
 
-    private static class DemandItem {
+    private void assignDemandToLines(LocalDate day,
+                                     PlannableDemand demand,
+                                     List<LineCapacity> prioritizedLines,
+                                     Map<LineDayKey, Integer> remainingCapacityByLineDay,
+                                     SliceAppender sliceAppender) {
+        for (LineCapacity line : prioritizedLines) {
+            if (demand.remaining() <= 0) {
+                break;
+            }
+            LineDayKey lineDayKey = new LineDayKey(line.lineId, day);
+            int remainingCapacity = remainingCapacityByLineDay.getOrDefault(lineDayKey, 0);
+            if (remainingCapacity <= 0) {
+                continue;
+            }
+            int assignQty = Math.min(remainingCapacity, demand.remaining());
+            demand.applyPlan(assignQty, day);
+            remainingCapacityByLineDay.put(lineDayKey, remainingCapacity - assignQty);
+            sliceAppender.append(line, assignQty);
+        }
+    }
+
+    @FunctionalInterface
+    private interface SliceAppender {
+        void append(LineCapacity line, int assignQty);
+    }
+
+    private interface PlannableDemand {
+        int remaining();
+
+        void applyPlan(int assigned, LocalDate planDay);
+    }
+
+    private static class DemandItem implements PlannableDemand {
         private final String customer;
         private final String outerInnerRing;
         private final String model;
@@ -954,7 +1047,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return new DemandItem(customer, outerInnerRing, model, required, currentInventory, earliestDelivery, priority, false);
         }
 
-        private int remaining() {
+        @Override
+        public int remaining() {
             return Math.max(0, required - coveredQuantity);
         }
 
@@ -985,7 +1079,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return earliestDelivery.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
         }
 
-        private void applyPlan(int quantity, LocalDate day) {
+        @Override
+        public void applyPlan(int quantity, LocalDate day) {
             if (quantity <= 0) {
                 return;
             }
@@ -1018,7 +1113,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
     }
 
-    private static class RingPairDemand {
+    private static class RingPairDemand implements PlannableDemand {
         private final DemandItem laDemand;
         private final DemandItem lbDemand;
         private final String sharedSeries;
@@ -1031,7 +1126,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             this.sharedBarLines = sharedBarLines;
         }
 
-        private int remaining() {
+        @Override
+        public int remaining() {
             return Math.max(laDemand.remaining(), lbDemand.remaining());
         }
 
@@ -1071,7 +1167,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return laDemand.normalizedCustomer() + "|PAIR|" + normalize(sharedSeries) + "|" + normalize(laDemand.model) + "|" + normalize(lbDemand.model);
         }
 
-        private void applyPlan(int quantity, LocalDate day) {
+        @Override
+        public void applyPlan(int quantity, LocalDate day) {
             laDemand.applyPlan(quantity, day);
             lbDemand.applyPlan(quantity, day);
         }
@@ -1106,6 +1203,20 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             this.lbDemand = lbDemand;
             this.sharedSeries = sharedSeries;
             this.sharedBarLines = sharedBarLines;
+        }
+    }
+
+    private static class TimeRange {
+        private final LocalDateTime start;
+        private final LocalDateTime end;
+
+        private TimeRange(LocalDateTime start, LocalDateTime end) {
+            this.start = start;
+            this.end = end;
+        }
+
+        private LocalDateTime start() {
+            return start;
         }
     }
 
