@@ -242,9 +242,16 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 continue;
             }
             ProductionOrder any = groupOrders.get(0);
+            int orderCount = groupOrders.size();
             int currentInventory = currentInventoryByKey.getOrDefault(entry.getKey(), 0);
             int inventoryPool = currentInventory;
             int orderDemandTotal = 0;
+            SafetyStock stock = safetyStockByKey.get(entry.getKey());
+            BigDecimal safetyTarget = BigDecimal.ZERO;
+            if (stock != null && stock.getStockCycle() != null && stock.getMonthlyStockQty() != null) {
+                safetyTarget = stock.getStockCycle().multiply(stock.getMonthlyStockQty());
+            }
+            int safetyTargetQty = safetyTarget.setScale(0, RoundingMode.HALF_UP).intValue();
 
             List<ProductionOrder> sortedOrders = new ArrayList<>(groupOrders);
             sortedOrders.sort(Comparator
@@ -268,15 +275,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 int priority = parseOrderPriority(order.getPriority());
                 boolean locked = insertMode && order.getId() != null && insertOrderIdSet.contains(order.getId());
                 result.add(new DemandItem(order.getCustomer(), order.getOuterInnerRing(), order.getModel(), required,
-                        currentInventory, order.getDeliveryDate(), Math.max(priority, locked ? 2 : priority), locked, orderStartAt));
+                        currentInventory, orderCount, safetyTargetQty, order.getDeliveryDate(),
+                        Math.max(priority, locked ? 2 : priority), locked, orderStartAt));
             }
 
-            SafetyStock stock = safetyStockByKey.get(entry.getKey());
-            BigDecimal safetyTarget = BigDecimal.ZERO;
-            if (stock != null && stock.getStockCycle() != null && stock.getMonthlyStockQty() != null) {
-                safetyTarget = stock.getStockCycle().multiply(stock.getMonthlyStockQty());
-            }
-            int safetyTargetQty = safetyTarget.setScale(0, RoundingMode.HALF_UP).intValue();
             if (safetyTargetQty > orderDemandTotal) {
                 int safetyRequired = safetyTargetQty - orderDemandTotal;
                 Date earliestDelivery = sortedOrders.stream()
@@ -290,7 +292,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                         .max()
                         .orElse(0);
                 result.add(new DemandItem(any.getCustomer(), any.getOuterInnerRing(), any.getModel(), safetyRequired,
-                        currentInventory, earliestDelivery, groupPriority, false, normalizePlanStart(defaultStartAt)));
+                        currentInventory, orderCount, safetyTargetQty, earliestDelivery, groupPriority, false,
+                        normalizePlanStart(defaultStartAt)));
             }
         }
 
@@ -710,6 +713,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             LocalDate earliest = item.earliestDeliveryDate();
             row.setEarliestDeliveryDate(earliest == null ? "" : earliest.toString());
             row.setCurrentInventory(item.currentInventory);
+            row.setOrderCount(item.orderCount());
+            row.setSafetyStockQuantity(item.safetyStockQuantity());
             row.setRequiredQuantity(item.required);
             row.setPlannedQuantity(item.plannedQuantity());
             row.setPlannedDays(item.plannedDays.size());
@@ -1068,6 +1073,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final String model;
         private final int required;
         private final int currentInventory;
+        private final int orderCount;
+        private final int safetyStockQuantity;
         private final int priority;
         private final boolean lockedInsert;
         private int coveredQuantity;
@@ -1081,6 +1088,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                            String model,
                            int required,
                            int currentInventory,
+                           int orderCount,
+                           int safetyStockQuantity,
                            Date earliestDelivery,
                            int priority,
                            boolean lockedInsert,
@@ -1090,6 +1099,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             this.model = model;
             this.required = required;
             this.currentInventory = currentInventory;
+            this.orderCount = orderCount;
+            this.safetyStockQuantity = safetyStockQuantity;
             this.priority = priority;
             this.lockedInsert = lockedInsert;
             this.coveredQuantity = 0;
@@ -1105,6 +1116,14 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         private int plannedQuantity() {
             return plannedQuantity;
+        }
+
+        private int orderCount() {
+            return orderCount;
+        }
+
+        private int safetyStockQuantity() {
+            return safetyStockQuantity;
         }
 
         private boolean lockedInsert() {
