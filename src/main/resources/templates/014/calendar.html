@@ -672,9 +672,38 @@
         return dateTime.slice(0, 10);
     }
 
+    function resolvePlanRangeText(data, events) {
+        const planStart = data && data.planStart ? String(data.planStart) : '';
+        const planEnd = data && data.planEnd ? String(data.planEnd) : '';
+        if (planStart && planEnd) {
+            return `${planStart} ~ ${planEnd}`;
+        }
+        if (planStart) {
+            return planStart;
+        }
+        if (planEnd) {
+            return planEnd;
+        }
+        if (!events || !events.length) {
+            return '';
+        }
+        const starts = events.map(item => item && item.start).filter(Boolean).sort();
+        const ends = events.map(item => item && item.end).filter(Boolean).sort();
+        if (!starts.length && !ends.length) {
+            return '';
+        }
+        const fallbackStart = starts.length ? starts[0] : '';
+        const fallbackEnd = ends.length ? ends[ends.length - 1] : '';
+        if (fallbackStart && fallbackEnd) {
+            return `${fallbackStart} ~ ${fallbackEnd}`;
+        }
+        return fallbackStart || fallbackEnd;
+    }
+
     function openPlanPreviewDialog(data) {
         const orders = data.orders || [];
         const events = data.events || [];
+        const planRangeText = resolvePlanRangeText(data, events);
 
         const orderRows = orders.map(item => `
             <tr>
@@ -711,6 +740,7 @@
             btn: ['确认写入排产', '关闭'],
             content: `
                 <div style="padding: 12px; max-height: 650px; overflow: auto;">
+                    <div style="margin-bottom: 8px; color: #666;">计划起止：${planRangeText || '-'}</div>
                     <div style="margin-bottom: 8px; font-weight: 700;">待排产订单汇总</div>
                     <table class="layui-table">
                         <thead>
