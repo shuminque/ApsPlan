@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.Set;
 import java.util.List;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -147,6 +148,36 @@ class ProductionPlanningServiceImplTest {
 
         assertEquals(Collections.singleton("A线"), usedLines);
         assertFalse(response.getDailyOutputs().isEmpty());
+    }
+
+    @Test
+    void shouldStopGeneratingDailyOutputsAfterAllDemandCompleted() {
+        LocalDate start = LocalDate.now().plusDays(1);
+        LocalDate end = start.plusDays(10);
+
+        when(productionOrderService.list(any())).thenReturn(Collections.singletonList(
+                order("昆山NSK", "LA", "6200VV*XC2", 1200, start.plusDays(3))
+        ));
+        when(safetyStockService.list()).thenReturn(Collections.emptyList());
+        when(shiftCalendarService.getSchedulesByDate(any())).thenReturn(Collections.emptyList());
+        when(bearingRecordService.selectInventoryByCutoffDate(anyMap())).thenReturn(Collections.emptyList());
+        when(productionLineMapper.selectPageList(any(), any(), any())).thenReturn(Collections.singletonList(
+                line(1L, "A线", "管材工艺")
+        ));
+        when(modelConfigMapper.selectPageList(any(), any(), any(), any())).thenReturn(Collections.singletonList(
+                config(1L, "6200", 100)
+        ));
+
+        PlanPreviewResponseDTO response = service.generatePlanPreview(start.toString(), end.toString());
+
+        assertFalse(response.getDailyOutputs().isEmpty());
+        LocalDate latestOutputDay = response.getDailyOutputs().stream()
+                .map(item -> LocalDate.parse(item.getDay()))
+                .max(Comparator.naturalOrder())
+                .orElseThrow(AssertionError::new);
+        assertEquals(start.plusDays(1), latestOutputDay);
+        assertTrue(response.getDailyOutputs().stream()
+                .noneMatch(item -> LocalDate.parse(item.getDay()).isAfter(latestOutputDay)));
     }
 
     private Integer plannedQty(List<PlanPreviewOrderDTO> orders, String ring) {
