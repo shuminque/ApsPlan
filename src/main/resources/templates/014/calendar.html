@@ -255,8 +255,9 @@
         const orderRows = orders.map(item => {
             const key = buildPlanOrderKey(item);
             const startValue = planOrderStartMap[key] || '';
+            const orderIds = Array.isArray(item.orderIds) ? item.orderIds.filter(id => id !== null && id !== undefined && id !== '') : [];
             return `
-            <tr data-order-key="${escapeHtml(key)}">
+            <tr data-order-key="${escapeHtml(key)}" data-order-ids="${escapeHtml(JSON.stringify(orderIds))}">
                 <td>${item.customer || ''}</td>
                 <td>${item.outerInnerRing || ''}</td>
                 <td>${item.model || ''}</td>
@@ -292,23 +293,29 @@
             `,
             yes: function(index) {
                 const startRows = document.querySelectorAll('tr[data-order-key]');
-                const orderStartTimes = [];
+                const orderStartTimes = {};
                 let invalid = false;
                 startRows.forEach(row => {
                     const key = row.getAttribute('data-order-key') || '';
+                    const rawOrderIds = row.getAttribute('data-order-ids') || '[]';
                     const start = (row.querySelector('.plan-order-start-input') || {}).value || '';
                     if (!start) {
                         invalid = true;
                         return;
                     }
                     planOrderStartMap[key] = start;
-                    const parts = key.split('||');
-                    orderStartTimes.push({
-                        customer: parts[0] || '',
-                        outerInnerRing: parts[1] || '',
-                        model: parts[2] || '',
-                        start: start
-                    });
+                    try {
+                        const orderIds = JSON.parse(rawOrderIds);
+                        if (Array.isArray(orderIds)) {
+                            orderIds.forEach(orderId => {
+                                if (orderId !== null && orderId !== undefined && orderId !== '') {
+                                    orderStartTimes[String(orderId)] = start;
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        // ignore malformed row metadata
+                    }
                 });
                 if (invalid) {
                     layer.msg('请为每条订单汇总填写开始时间');
@@ -328,7 +335,7 @@
 
     function requestAutoPlanPreviewByOrderStart(orderStartTimes) {
         const range = getCurrentRange();
-        const startList = orderStartTimes.map(item => item.start).filter(Boolean).sort();
+        const startList = Object.values(orderStartTimes || {}).filter(Boolean).sort();
         const fallbackStart = startList.length ? startList[0] : toDateTimeLocalValue(getDefaultPlanStart());
         fetch('/api/shift/plan/preview', {
             method: 'POST',

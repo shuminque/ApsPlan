@@ -274,7 +274,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 LocalDateTime orderStartAt = resolveDemandStartAt(order.getId(), orderStartTimes, defaultStartAt);
                 int priority = parseOrderPriority(order.getPriority());
                 boolean locked = insertMode && order.getId() != null && insertOrderIdSet.contains(order.getId());
-                result.add(new DemandItem(order.getCustomer(), order.getOuterInnerRing(), order.getModel(), required,
+                result.add(new DemandItem(order.getId(), order.getCustomer(), order.getOuterInnerRing(), order.getModel(), required,
                         currentInventory, orderCount, safetyTargetQty, order.getDeliveryDate(),
                         Math.max(priority, locked ? 2 : priority), locked, orderStartAt));
             }
@@ -291,7 +291,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                         .mapToInt(this::parseOrderPriority)
                         .max()
                         .orElse(0);
-                result.add(new DemandItem(any.getCustomer(), any.getOuterInnerRing(), any.getModel(), safetyRequired,
+                result.add(new DemandItem(null, any.getCustomer(), any.getOuterInnerRing(), any.getModel(), safetyRequired,
                         currentInventory, orderCount, safetyTargetQty, earliestDelivery, groupPriority, false,
                         normalizePlanStart(defaultStartAt)));
             }
@@ -703,23 +703,47 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     }
 
     private List<PlanPreviewOrderDTO> buildOrderPreviewRows(List<DemandItem> demands) {
+        Map<String, List<DemandItem>> grouped = demands.stream()
+                .collect(Collectors.groupingBy(item -> String.join("||",
+                        Optional.ofNullable(item.customer).orElse(""),
+                        Optional.ofNullable(item.outerInnerRing).orElse(""),
+                        Optional.ofNullable(item.model).orElse(""))));
         List<PlanPreviewOrderDTO> rows = new ArrayList<>();
-        for (DemandItem item : demands) {
+        for (List<DemandItem> groupItems : grouped.values()) {
+            if (groupItems.isEmpty()) {
+                continue;
+            }
+            DemandItem item = groupItems.get(0);
             PlanPreviewOrderDTO row = new PlanPreviewOrderDTO();
             row.setCustomer(item.customer);
             row.setOuterInnerRing(item.outerInnerRing);
             row.setModel(item.model);
-            row.setPriority(item.priority);
-            LocalDate earliest = item.earliestDeliveryDate();
+            row.setPriority(groupItems.stream().map(DemandItem::priority).max(Integer::compareTo).orElse(item.priority));
+            LocalDate earliest = groupItems.stream()
+                    .map(DemandItem::earliestDeliveryDate)
+                    .filter(Objects::nonNull)
+                    .min(LocalDate::compareTo)
+                    .orElse(null);
             row.setEarliestDeliveryDate(earliest == null ? "" : earliest.toString());
             row.setCurrentInventory(item.currentInventory);
             row.setOrderCount(item.orderCount());
             row.setSafetyStockQuantity(item.safetyStockQuantity());
-            row.setRequiredQuantity(item.required);
-            row.setPlannedQuantity(item.plannedQuantity());
-            row.setPlannedDays(item.plannedDays.size());
+            row.setRequiredQuantity(groupItems.stream().mapToInt(d -> d.required).sum());
+            row.setPlannedQuantity(groupItems.stream().mapToInt(DemandItem::plannedQuantity).sum());
+            row.setPlannedDays(groupItems.stream()
+                    .flatMap(d -> d.plannedDays.stream())
+                    .collect(Collectors.toSet()).size());
+            row.setOrderIds(groupItems.stream()
+                    .map(DemandItem::orderId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .collect(Collectors.toList()));
             rows.add(row);
         }
+        rows.sort(Comparator.comparing((PlanPreviewOrderDTO row) -> Optional.ofNullable(row.getEarliestDeliveryDate()).orElse(""))
+                .thenComparing(row -> Optional.ofNullable(row.getCustomer()).orElse(""))
+                .thenComparing(row -> Optional.ofNullable(row.getOuterInnerRing()).orElse(""))
+                .thenComparing(row -> Optional.ofNullable(row.getModel()).orElse("")));
         return rows;
     }
 
@@ -1101,6 +1125,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     }
 
     private static class DemandItem implements PlannableDemand {
+        private final Long orderId;
         private final String customer;
         private final String outerInnerRing;
         private final String model;
@@ -1116,7 +1141,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final Set<LocalDate> plannedDays = new HashSet<>();
         private final LocalDateTime earliestStartAt;
 
-        private DemandItem(String customer,
+        private DemandItem(Long orderId,
+                           String customer,
                            String outerInnerRing,
                            String model,
                            int required,
@@ -1127,6 +1153,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                            int priority,
                            boolean lockedInsert,
                            LocalDateTime earliestStartAt) {
+            this.orderId = orderId;
             this.customer = customer;
             this.outerInnerRing = outerInnerRing;
             this.model = model;
@@ -1140,6 +1167,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             this.plannedQuantity = 0;
             this.earliestDelivery = earliestDelivery;
             this.earliestStartAt = earliestStartAt == null ? null : earliestStartAt.withNano(0);
+        }
+
+        private Long orderId() {
+            return orderId;
         }
 
         @Override
