@@ -64,6 +64,7 @@ public class ProductionOrderController {
     // 3. 修改订单
     @PutMapping("/update")
     public Result update(@RequestBody ProductionOrder order) {
+        productionOrderService.enrichCraft(order);
         boolean updated = productionOrderService.updateById(order);
         return updated ? Result.success() : Result.error("订单更新失败");
     }

@@ -73,4 +73,9 @@ public class BearingServiceImpl implements BearingService {
     public Integer getPackQuantity(String customer, String ring, String model) {
         return bearingMapper.findQuantityByCustomerRingAndModel(customer, ring, model);
     }
+
+    @Override
+    public String getMaterialSize(String customer, String ring, String model) {
+        return bearingMapper.findSizeByCustomerRingAndModel(customer, ring, model);
+    }
 }

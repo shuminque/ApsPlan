@@ -114,6 +114,17 @@
                 <input type="text" name="model" class="layui-input">
             </div>
         </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">工艺</label>
+            <div class="layui-input-block">
+                <select name="craft">
+                    <option value="">自动判定</option>
+                    <option value="棒材工艺">棒材工艺</option>
+                    <option value="管材工艺">管材工艺</option>
+                    <option value="锻造工艺">锻造工艺</option>
+                </select>
+            </div>
+        </div>
 
         <!-- 数量 -->
         <div class="layui-form-item">
@@ -231,6 +242,7 @@
                 {field: 'customer', title: '客户', },
                 {field: 'outerInnerRing', title: '内外轮', },
                 {field: 'model', title: '型号', },
+                {field: 'craft', title: '工艺', },
                 {field: 'quantity', title: '数量', },
                 {field: 'deliveryDate', title: '交货期', templet: function(d) {
                         return formatDate(d.deliveryDate);
@@ -291,6 +303,7 @@
                             outerInnerRing: data.outerInnerRing,
                             customer: data.customer,
                             model: data.model,
+                            craft: data.craft,
                             quantity: data.quantity,
                             deliveryDate: formatDateForInput(data.deliveryDate),
                             status: normalizeOrderStatus(data.status)
