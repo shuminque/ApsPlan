@@ -18,6 +18,7 @@ import com.depository_manage.service.aps.ProductionOrderService;
 import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.SafetyStockService;
 import com.depository_manage.service.aps.ShiftCalendarService;
+import com.depository_manage.utils.CraftMappingUtil;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -168,7 +169,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     continue;
                 }
                 List<LineCapacity> lines = findMatchingLines(demand.model, lineCapByModel).stream()
-                        .filter(line -> !line.isBarCraft())
+                        .filter(line -> line.matchesCraft(demand.requiredCraft()))
                         .collect(Collectors.toList());
                 List<LineCapacity> prioritizedLines = prioritizeCandidateLines(demand.activationKey(), lines, day, planningCapacityEndExclusive,
                         demand.remaining(), remainingCapacityByLineDay, activationPlanByKey);
@@ -285,7 +286,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 LocalDateTime orderStartAt = resolveDemandStartAt(order.getId(), orderStartTimes, defaultStartAt);
                 int priority = parseOrderPriority(order.getPriority());
                 boolean locked = insertMode && order.getId() != null && insertOrderIdSet.contains(order.getId());
-                result.add(new DemandItem(order.getId(), order.getCustomer(), order.getOuterInnerRing(), order.getModel(), required,
+                result.add(new DemandItem(order.getId(), order.getCustomer(), order.getOuterInnerRing(), order.getModel(), order.getCraft(), required,
                         currentInventory, orderCount, orderDemandQuantity, safetyTargetQty, order.getDeliveryDate(),
                         Math.max(priority, locked ? 2 : priority), locked, orderStartAt));
             }
@@ -301,7 +302,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                         .mapToInt(this::parseOrderPriority)
                         .max()
                         .orElse(0);
-                result.add(new DemandItem(null, any.getCustomer(), any.getOuterInnerRing(), any.getModel(), safetyRequired,
+                result.add(new DemandItem(null, any.getCustomer(), any.getOuterInnerRing(), any.getModel(), any.getCraft(), safetyRequired,
                         currentInventory, orderCount, orderDemandQuantity, safetyTargetQty, earliestDelivery, groupPriority, false,
                         normalizePlanStart(defaultStartAt)));
             }
@@ -925,6 +926,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         Map<DemandItem, DemandLineMatch> result = new HashMap<>();
         for (DemandItem demand : demands) {
             Map<String, List<LineCapacity>> barLinesBySeries = new HashMap<>();
+            if (!CraftMappingUtil.BAR_CRAFT.equals(demand.requiredCraft())) {
+                result.put(demand, new DemandLineMatch(barLinesBySeries));
+                continue;
+            }
             for (Map.Entry<String, List<LineCapacity>> entry : lineCapByModel.entrySet()) {
                 if (!isSeriesMatch(demand.model, entry.getKey())) {
                     continue;
@@ -1172,6 +1177,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final String customer;
         private final String outerInnerRing;
         private final String model;
+        private final String craft;
         private final int required;
         private final int currentInventory;
         private final int orderCount;
@@ -1189,6 +1195,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                            String customer,
                            String outerInnerRing,
                            String model,
+                           String craft,
                            int required,
                            int currentInventory,
                            int orderCount,
@@ -1202,6 +1209,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             this.customer = customer;
             this.outerInnerRing = outerInnerRing;
             this.model = model;
+            this.craft = normalizeCraft(craft);
             this.required = required;
             this.currentInventory = currentInventory;
             this.orderCount = orderCount;
@@ -1280,6 +1288,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
         private boolean isLaOrLb() {
             return "LA".equalsIgnoreCase(outerInnerRing) || "LB".equalsIgnoreCase(outerInnerRing);
+        }
+
+        private String requiredCraft() {
+            return craft;
         }
 
         private String normalizedCustomer() {
@@ -1472,7 +1484,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             this.model = model;
             this.capacityPerHour = capacityPerHour;
             this.priority = priority;
-            this.craft = craft;
+            this.craft = normalizeCraft(craft);
         }
 
         static LineCapacity of(Long lineId, String lineName, String model, BigDecimal capacityPerHour, Integer priority, String craft) {
@@ -1484,8 +1496,36 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
 
         boolean isBarCraft() {
-            return craft != null && craft.contains("棒材");
+            return CraftMappingUtil.BAR_CRAFT.equals(craft);
         }
+
+        boolean matchesCraft(String requiredCraft) {
+            if (requiredCraft == null) {
+                return true;
+            }
+            return requiredCraft.equals(craft);
+        }
+    }
+
+    private static String normalizeCraft(String craft) {
+        String normalized = CraftMappingUtil.normalizeCraft(craft);
+        if (normalized != null) {
+            return normalized;
+        }
+        if (craft == null || craft.trim().isEmpty()) {
+            return null;
+        }
+        String value = craft.trim();
+        if (value.contains("棒")) {
+            return CraftMappingUtil.BAR_CRAFT;
+        }
+        if (value.contains("管")) {
+            return CraftMappingUtil.PIPE_CRAFT;
+        }
+        if (value.contains("锻")) {
+            return CraftMappingUtil.FORGING_CRAFT;
+        }
+        return null;
     }
 
     private class LineActivationPlan {
