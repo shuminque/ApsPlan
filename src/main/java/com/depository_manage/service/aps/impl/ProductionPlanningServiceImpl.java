@@ -619,7 +619,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
         Map<Long, LineCapacity> uniqueLines = new HashMap<>();
         for (LineCapacity line : lines) {
-            uniqueLines.merge(line.lineId, line, (existing, candidate) -> compareLinePriority(existing, candidate) <= 0 ? existing : candidate);
+            uniqueLines.merge(line.lineId, line, ProductionPlanningServiceImpl.this::pickHigherCapacityLine);
         }
 
         List<LineCapacity> candidates = uniqueLines.values().stream()
@@ -649,6 +649,13 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                                   LocalDate startDay,
                                                   LocalDate endExclusive,
                                                   Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+        int dailyCapacityCompare = Integer.compare(
+                dayRemainingCapacity(right, startDay, remainingCapacityByLineDay),
+                dayRemainingCapacity(left, startDay, remainingCapacityByLineDay)
+        );
+        if (dailyCapacityCompare != 0) {
+            return dailyCapacityCompare;
+        }
         int capacityCompare = Integer.compare(
                 totalRemainingCapacity(right, startDay, endExclusive, remainingCapacityByLineDay),
                 totalRemainingCapacity(left, startDay, endExclusive, remainingCapacityByLineDay)
@@ -657,6 +664,12 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return capacityCompare;
         }
         return compareLinePriority(left, right);
+    }
+
+    private int dayRemainingCapacity(LineCapacity line,
+                                     LocalDate day,
+                                     Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+        return remainingCapacityByLineDay.getOrDefault(new LineDayKey(line.lineId, day), 0);
     }
 
     private int totalRemainingCapacity(LineCapacity line,
@@ -1106,12 +1119,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         // 而是按共享系列汇总 LA/LB 双方可用棒材线，后续按最少启线策略统一分配。
         Map<Long, LineCapacity> pairableByLineId = new HashMap<>();
         for (LineCapacity line : leftLines) {
-            pairableByLineId.merge(line.getLineId(), line,
-                    (existing, candidate) -> compareLinePriority(existing, candidate) <= 0 ? existing : candidate);
+            pairableByLineId.merge(line.getLineId(), line, ProductionPlanningServiceImpl.this::pickHigherCapacityLine);
         }
         for (LineCapacity line : rightLines) {
-            pairableByLineId.merge(line.getLineId(), line,
-                    (existing, candidate) -> compareLinePriority(existing, candidate) <= 0 ? existing : candidate);
+            pairableByLineId.merge(line.getLineId(), line, ProductionPlanningServiceImpl.this::pickHigherCapacityLine);
         }
         List<LineCapacity> pairableLines = new ArrayList<>(pairableByLineId.values());
         sortLineCapacities(pairableLines);
@@ -1544,8 +1555,12 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             if (sortedCandidates == null || sortedCandidates.isEmpty() || demandRemaining <= 0) {
                 return;
             }
-            int coveredCapacity = activatedCapacity(sortedCandidates, day, endExclusive, remainingCapacityByLineDay);
-            if (coveredCapacity >= demandRemaining) {
+            int targetCapacity = Math.min(demandRemaining, totalDayCapacity(sortedCandidates, day, remainingCapacityByLineDay));
+            if (targetCapacity <= 0) {
+                return;
+            }
+            int coveredCapacity = activatedDayCapacity(sortedCandidates, day, remainingCapacityByLineDay);
+            if (coveredCapacity >= targetCapacity) {
                 return;
             }
             for (LineCapacity candidate : sortedCandidates) {
@@ -1553,23 +1568,22 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                     continue;
                 }
                 activatedLineIds.add(candidate.lineId);
-                coveredCapacity += totalRemainingCapacity(candidate, day, endExclusive, remainingCapacityByLineDay);
-                if (coveredCapacity >= demandRemaining) {
+                coveredCapacity += dayRemainingCapacity(candidate, day, remainingCapacityByLineDay);
+                if (coveredCapacity >= targetCapacity) {
                     break;
                 }
             }
         }
 
-        private int activatedCapacity(List<LineCapacity> sortedCandidates,
-                                      LocalDate day,
-                                      LocalDate endExclusive,
-                                      Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+        private int activatedDayCapacity(List<LineCapacity> sortedCandidates,
+                                         LocalDate day,
+                                         Map<LineDayKey, Integer> remainingCapacityByLineDay) {
             int total = 0;
             for (LineCapacity line : sortedCandidates) {
                 if (!activatedLineIds.contains(line.lineId)) {
                     continue;
                 }
-                total += totalRemainingCapacity(line, day, endExclusive, remainingCapacityByLineDay);
+                total += dayRemainingCapacity(line, day, remainingCapacityByLineDay);
             }
             return total;
         }
@@ -1587,18 +1601,29 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             if (activatedToday.isEmpty() || demandRemaining <= 0) {
                 return activatedToday;
             }
+            int targetCapacity = Math.min(demandRemaining, totalDayCapacity(activatedToday, day, remainingCapacityByLineDay));
             List<LineCapacity> minimalLines = new ArrayList<>();
             int covered = 0;
             for (LineCapacity line : activatedToday) {
                 minimalLines.add(line);
-                covered += totalRemainingCapacity(line, day, endExclusive, remainingCapacityByLineDay);
-                if (covered >= demandRemaining) {
+                covered += dayRemainingCapacity(line, day, remainingCapacityByLineDay);
+                if (covered >= targetCapacity) {
                     break;
                 }
             }
             activatedLineIds.clear();
             minimalLines.stream().map(LineCapacity::getLineId).forEach(activatedLineIds::add);
             return minimalLines;
+        }
+
+        private int totalDayCapacity(List<LineCapacity> lines,
+                                     LocalDate day,
+                                     Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+            int total = 0;
+            for (LineCapacity line : lines) {
+                total += dayRemainingCapacity(line, day, remainingCapacityByLineDay);
+            }
+            return total;
         }
     }
 
