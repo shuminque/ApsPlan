@@ -49,7 +49,8 @@ public class ShiftCalendarController {
                 request.getLineScope(),
                 request.getLineIds(),
                 request.getFreezeHours(),
-                request.parseOrderStartTimes());
+                request.parseOrderStartTimes(),
+                request.getObjective());
         PREVIEW_CACHE.put(session.getId(), preview.getEvents());
         return preview;
     }
@@ -112,6 +113,7 @@ public class ShiftCalendarController {
         private List<Long> lineIds;
         private Integer freezeHours;
         private Map<String, String> orderStartTimes;
+        private String objective;
 
         public String getStart() {
             return start;
@@ -175,6 +177,14 @@ public class ShiftCalendarController {
 
         public void setOrderStartTimes(Map<String, String> orderStartTimes) {
             this.orderStartTimes = orderStartTimes;
+        }
+
+        public String getObjective() {
+            return objective;
+        }
+
+        public void setObjective(String objective) {
+            this.objective = objective;
         }
 
         public Map<Long, LocalDateTime> parseOrderStartTimes() {

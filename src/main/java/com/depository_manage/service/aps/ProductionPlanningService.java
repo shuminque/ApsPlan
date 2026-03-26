@@ -26,5 +26,6 @@ public interface ProductionPlanningService {
                                                String lineScope,
                                                List<Long> lineIds,
                                                Integer freezeHours,
-                                               Map<Long, LocalDateTime> orderStartTimes);
+                                               Map<Long, LocalDateTime> orderStartTimes,
+                                               String objective);
 }
