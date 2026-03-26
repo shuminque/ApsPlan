@@ -140,35 +140,7 @@ com.depository_manage.service.aps.planning
 - 增加关键指标埋点：
   - fulfillment rate、delay days、activated lines/day。
 
-## 6. 测试策略
-
-### 6.1 单元测试（核心）
-
-- `DemandBuilderTest`
-  - 安全库存覆盖、在库抵扣、插单锁定优先级。
-- `LineActivationPolicyTest`
-  - “最少启线”边界（1 条线够/不够/当天无产能回退）。
-- `CapacityAllocatorTest`
-  - 同线同天不超分配。
-- `RingPairMatcherTest`
-  - LA/LB 匹配优选与共享线集合。
-
-### 6.2 回归测试（契约）
-
-- 准备 5~10 组固定输入（JSON），校验输出哈希：
-  - events 数量/总产量/延期天数/插单达成率。
-- 对“旧实现 vs 新引擎”做并行比对（shadow mode）。
-
-## 7. 迁移与发布策略
-
-- 引入配置开关：
-  - `aps.planning.engine=v1|v2`
-- 发布顺序：
-  1. 先灰度 `v2` 只计算不落库（对比日志）；
-  2. 指标稳定后切主；
-  3. 保留 `v1` 回滚窗口 1~2 个版本。
-
-## 8. 对你当前问题的直接结论
+##  对你当前问题的直接结论
 
 1. **是否按最少产线启用法？**
    - 是，当前存在“最少启线”启发式，但属于局部策略，不保证全局最优。
