@@ -50,6 +50,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private static final BigDecimal DEFAULT_SHIFT_HOURS = new BigDecimal("8");
     private static final String PLAN_COLOR = "#FFB020";
     private static final long CAPACITY_BUFFER_DAYS = 180L;
+    private static final String OBJECTIVE_MIN_LINE = "min_line";
+    private static final String OBJECTIVE_LEGACY_CAPACITY = "legacy_capacity";
+    private static final BigDecimal DAILY_TARGET_BUFFER = new BigDecimal("1.05");
 
     @Resource
     private ProductionOrderService productionOrderService;
@@ -71,7 +74,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
     @Override
     public PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate) {
-        return generatePlanPreview(startDate, endDate, "AUTO", Collections.emptyList(), "ALL", Collections.emptyList(), null, Collections.emptyMap());
+        return generatePlanPreview(startDate, endDate, "AUTO", Collections.emptyList(), "ALL",
+                Collections.emptyList(), null, Collections.emptyMap(), OBJECTIVE_MIN_LINE);
     }
 
     @Override
@@ -82,7 +86,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                                       String lineScope,
                                                       List<Long> lineIds,
                                                       Integer freezeHours,
-                                                      Map<Long, LocalDateTime> orderStartTimes) {
+                                                      Map<Long, LocalDateTime> orderStartTimes,
+                                                      String objective) {
         LocalDateTime requestStartAt = toLocalDateTime(startDate);
         LocalDate requestStart = requestStartAt == null ? null : requestStartAt.toLocalDate();
         LocalDate endExclusive = toLocalDate(endDate);
@@ -100,6 +105,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             endExclusive = start.plusMonths(1);
         }
         String normalizedMode = normalizeMode(planMode);
+        String normalizedObjective = normalizeObjective(objective);
         Set<Long> insertOrderIdSet = normalizeLongSet(insertOrderIds);
         Set<Long> scopedLineIds = normalizeLineScope(lineScope, lineIds);
         int freezeWindowHours = freezeHours == null ? 0 : Math.max(0, freezeHours);
@@ -163,7 +169,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 break;
             }
             final LocalDate day = cursor;
-            schedulePairedBarDemands(day, planningCapacityEndExclusive, ringPairDemands, remainingCapacityByLineDay, plannedSlices, activationPlanByKey);
+            schedulePairedBarDemands(day, planningCapacityEndExclusive, ringPairDemands, remainingCapacityByLineDay,
+                    plannedSlices, activationPlanByKey, normalizedObjective);
             for (DemandItem demand : demands) {
                 if (demand.remaining() <= 0 || !demand.canScheduleOn(day)) {
                     continue;
@@ -172,7 +179,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                         .filter(line -> line.matchesCraft(demand.requiredCraft()))
                         .collect(Collectors.toList());
                 List<LineCapacity> prioritizedLines = prioritizeCandidateLines(demand.activationKey(), lines, day, planningCapacityEndExclusive,
-                        demand.remaining(), remainingCapacityByLineDay, activationPlanByKey);
+                        demand.remaining(), remainingCapacityByLineDay, activationPlanByKey, normalizedObjective);
                 assignDemandToLines(day, demand, prioritizedLines, remainingCapacityByLineDay,
                         (line, assignQty) -> plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName,
                                 demand.customer, demand.outerInnerRing, demand.model, assignQty, line.capacityPerHour)));
@@ -613,7 +620,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                                         LocalDate endExclusive,
                                                         int demandRemaining,
                                                         Map<LineDayKey, Integer> remainingCapacityByLineDay,
-                                                        Map<String, LineActivationPlan> activationPlanByKey) {
+                                                        Map<String, LineActivationPlan> activationPlanByKey,
+                                                        String objective) {
         if (lines == null || lines.isEmpty()) {
             return Collections.emptyList();
         }
@@ -627,9 +635,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 .collect(Collectors.toList());
 
         LineActivationPlan activationPlan = activationPlanByKey.computeIfAbsent(activationKey, key -> new LineActivationPlan());
-        activationPlan.ensureMinimumLines(candidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
+        activationPlan.ensureMinimumLines(candidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay, objective);
 
-        List<LineCapacity> availableLines = activationPlan.activatedLines(candidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
+        List<LineCapacity> availableLines = activationPlan.activatedLines(candidates, day, endExclusive, demandRemaining,
+                remainingCapacityByLineDay, objective);
         if (!availableLines.isEmpty()) {
             return availableLines;
         }
@@ -640,8 +649,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         if (fallbackLines.isEmpty()) {
             return Collections.emptyList();
         }
-        activationPlan.ensureMinimumLines(fallbackLines, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
-        return activationPlan.activatedLines(fallbackLines, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
+        activationPlan.ensureMinimumLines(fallbackLines, day, endExclusive, demandRemaining, remainingCapacityByLineDay, objective);
+        return activationPlan.activatedLines(fallbackLines, day, endExclusive, demandRemaining, remainingCapacityByLineDay, objective);
     }
 
     private int compareByRemainingHorizonCapacity(LineCapacity left,
@@ -1022,6 +1031,17 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return "INSERT".equals(normalized) ? "INSERT" : "AUTO";
     }
 
+    private String normalizeObjective(String objective) {
+        if (objective == null || objective.trim().isEmpty()) {
+            return OBJECTIVE_MIN_LINE;
+        }
+        String normalized = objective.trim().toLowerCase(Locale.ROOT);
+        if (OBJECTIVE_LEGACY_CAPACITY.equals(normalized)) {
+            return OBJECTIVE_LEGACY_CAPACITY;
+        }
+        return OBJECTIVE_MIN_LINE;
+    }
+
     private Set<Long> normalizeLongSet(List<Long> values) {
         if (values == null || values.isEmpty()) {
             return Collections.emptySet();
@@ -1134,13 +1154,14 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                           List<RingPairDemand> pairDemands,
                                           Map<LineDayKey, Integer> remainingCapacityByLineDay,
                                           List<PlanSlice> plannedSlices,
-                                          Map<String, LineActivationPlan> activationPlanByKey) {
+                                          Map<String, LineActivationPlan> activationPlanByKey,
+                                          String objective) {
         for (RingPairDemand pairDemand : pairDemands) {
             if (pairDemand.remaining() <= 0 || !pairDemand.canScheduleOn(day)) {
                 continue;
             }
             List<LineCapacity> prioritizedLines = prioritizeCandidateLines(pairDemand.activationKey(), pairDemand.sharedBarLines(), day,
-                    endExclusive, pairDemand.remaining(), remainingCapacityByLineDay, activationPlanByKey);
+                    endExclusive, pairDemand.remaining(), remainingCapacityByLineDay, activationPlanByKey, objective);
             assignDemandToLines(day, pairDemand, prioritizedLines, remainingCapacityByLineDay,
                     (line, assignQty) -> {
                         plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LA", pairDemand.laModel(), assignQty, line.capacityPerHour));
@@ -1551,11 +1572,12 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                         LocalDate day,
                                         LocalDate endExclusive,
                                         int demandRemaining,
-                                        Map<LineDayKey, Integer> remainingCapacityByLineDay) {
+                                        Map<LineDayKey, Integer> remainingCapacityByLineDay,
+                                        String objective) {
             if (sortedCandidates == null || sortedCandidates.isEmpty() || demandRemaining <= 0) {
                 return;
             }
-            int targetCapacity = Math.min(demandRemaining, totalDayCapacity(sortedCandidates, day, remainingCapacityByLineDay));
+            int targetCapacity = targetCapacity(sortedCandidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay, objective);
             if (targetCapacity <= 0) {
                 return;
             }
@@ -1592,8 +1614,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                                   LocalDate day,
                                                   LocalDate endExclusive,
                                                   int demandRemaining,
-                                                  Map<LineDayKey, Integer> remainingCapacityByLineDay) {
-            ensureMinimumLines(sortedCandidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay);
+                                                  Map<LineDayKey, Integer> remainingCapacityByLineDay,
+                                                  String objective) {
+            ensureMinimumLines(sortedCandidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay, objective);
             List<LineCapacity> activatedToday = sortedCandidates.stream()
                     .filter(line -> activatedLineIds.contains(line.lineId))
                     .filter(line -> remainingCapacityByLineDay.getOrDefault(new LineDayKey(line.lineId, day), 0) > 0)
@@ -1601,7 +1624,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             if (activatedToday.isEmpty() || demandRemaining <= 0) {
                 return activatedToday;
             }
-            int targetCapacity = Math.min(demandRemaining, totalDayCapacity(activatedToday, day, remainingCapacityByLineDay));
+            int targetCapacity = targetCapacity(sortedCandidates, day, endExclusive, demandRemaining, remainingCapacityByLineDay, objective);
             List<LineCapacity> minimalLines = new ArrayList<>();
             int covered = 0;
             for (LineCapacity line : activatedToday) {
@@ -1614,6 +1637,25 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             activatedLineIds.clear();
             minimalLines.stream().map(LineCapacity::getLineId).forEach(activatedLineIds::add);
             return minimalLines;
+        }
+
+        private int targetCapacity(List<LineCapacity> sortedCandidates,
+                                   LocalDate day,
+                                   LocalDate endExclusive,
+                                   int demandRemaining,
+                                   Map<LineDayKey, Integer> remainingCapacityByLineDay,
+                                   String objective) {
+            if (!OBJECTIVE_MIN_LINE.equals(objective)) {
+                return Math.min(demandRemaining, totalDayCapacity(sortedCandidates, day, remainingCapacityByLineDay));
+            }
+            long daysLeftLong = Math.max(1L, ChronoUnit.DAYS.between(day, endExclusive));
+            int daysLeft = (int) Math.min(Integer.MAX_VALUE, daysLeftLong);
+            int dailyTarget = BigDecimal.valueOf(demandRemaining)
+                    .divide(BigDecimal.valueOf(daysLeft), 0, RoundingMode.CEILING)
+                    .multiply(DAILY_TARGET_BUFFER)
+                    .setScale(0, RoundingMode.CEILING)
+                    .intValue();
+            return Math.min(demandRemaining, dailyTarget);
         }
 
         private int totalDayCapacity(List<LineCapacity> lines,
