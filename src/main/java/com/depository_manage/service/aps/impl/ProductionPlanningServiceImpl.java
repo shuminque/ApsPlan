@@ -1101,16 +1101,21 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         if (leftLines.isEmpty() || rightLines.isEmpty()) {
             return Collections.emptyList();
         }
-        Map<Long, LineCapacity> rightByLineId = rightLines.stream()
-                .collect(Collectors.toMap(LineCapacity::getLineId, line -> line, (existing, candidate) -> compareLinePriority(existing, candidate) <= 0 ? existing : candidate));
-        List<LineCapacity> sharedLines = new ArrayList<>();
-        for (LineCapacity leftLine : leftLines) {
-            if (rightByLineId.containsKey(leftLine.getLineId())) {
-                sharedLines.add(leftLine);
-            }
+        // 棒材工艺下，LA/LB 视为成对同步生产，产能口径为“每小时可同时产 LA+LB”。
+        // 因此这里不再强依赖“同一 lineId 必须同时命中 LA/LB 型号配置”，
+        // 而是按共享系列汇总 LA/LB 双方可用棒材线，后续按最少启线策略统一分配。
+        Map<Long, LineCapacity> pairableByLineId = new HashMap<>();
+        for (LineCapacity line : leftLines) {
+            pairableByLineId.merge(line.getLineId(), line,
+                    (existing, candidate) -> compareLinePriority(existing, candidate) <= 0 ? existing : candidate);
         }
-        sortLineCapacities(sharedLines);
-        return sharedLines;
+        for (LineCapacity line : rightLines) {
+            pairableByLineId.merge(line.getLineId(), line,
+                    (existing, candidate) -> compareLinePriority(existing, candidate) <= 0 ? existing : candidate);
+        }
+        List<LineCapacity> pairableLines = new ArrayList<>(pairableByLineId.values());
+        sortLineCapacities(pairableLines);
+        return pairableLines;
     }
 
     private void schedulePairedBarDemands(LocalDate day,
