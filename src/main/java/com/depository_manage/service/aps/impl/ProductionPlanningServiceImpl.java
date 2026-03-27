@@ -1,12 +1,9 @@
 package com.depository_manage.service.aps.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.depository_manage.entity.aps.ProductionLine;
 import com.depository_manage.entity.aps.ProductionLineModelConfig;
 import com.depository_manage.entity.aps.ProductionOrder;
-import com.depository_manage.entity.aps.ProductionOrderStatus;
 import com.depository_manage.entity.aps.SafetyStock;
-import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
@@ -52,9 +49,7 @@ import java.util.stream.Collectors;
 public class ProductionPlanningServiceImpl implements ProductionPlanningService {
 
     private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-    private static final BigDecimal DEFAULT_SHIFT_HOURS = new BigDecimal("8");
     private static final String PLAN_COLOR = "#FFB020";
-    private static final long CAPACITY_BUFFER_DAYS = 180L;
     private static final String OBJECTIVE_MIN_LINE = "min_line";
     private static final BigDecimal DAILY_TARGET_BUFFER = new BigDecimal("1.05");
     private Clock clock = Clock.systemDefaultZone();
@@ -120,39 +115,45 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     }
 
     private PlanPreviewResponseDTO generatePlanPreview(NormalizedPlanningRequest normalizedRequest) {
-        LocalDateTime requestStartAt = normalizedRequest.getRequestStartAt();
+        PlanningContext context = createPlanningContext(normalizedRequest);
+        return generatePlanPreviewWithContext(context);
+    }
+
+    private PlanningContext createPlanningContext(NormalizedPlanningRequest normalizedRequest) {
+        PlanningInputAssembler inputAssembler = new PlanningInputAssembler(
+                productionOrderService,
+                safetyStockService,
+                shiftCalendarService,
+                modelConfigMapper,
+                productionLineMapper,
+                bearingRecordService,
+                zoneId
+        );
+        PlanningSnapshot snapshot = inputAssembler.assemble(normalizedRequest);
+        return new PlanningContext(normalizedRequest, snapshot, clock, zoneId);
+    }
+
+    private PlanPreviewResponseDTO generatePlanPreviewWithContext(PlanningContext context) {
+        NormalizedPlanningRequest normalizedRequest = context.getNormalizedRequest();
         LocalDate requestStart = normalizedRequest.getRequestStart();
         LocalDate start = normalizedRequest.getStart();
         LocalDate endExclusive = normalizedRequest.getEndExclusive();
         if (requestStart == null || endExclusive == null) {
             return new PlanPreviewResponseDTO();
         }
-        LocalDateTime effectiveStartAt = normalizedRequest.getEffectiveStartAt();
         String normalizedMode = normalizedRequest.getMode();
         String normalizedObjective = normalizedRequest.getObjective();
         Set<Long> insertOrderIdSet = normalizedRequest.getInsertOrderIds();
-        Set<Long> scopedLineIds = normalizedRequest.getScopedLineIds();
         Map<Long, LocalDateTime> orderStartTimes = normalizedRequest.getOrderStartTimes();
+        PlanningSnapshot snapshot = context.getSnapshot();
 
-        List<ProductionOrder> openOrders = productionOrderService.list(new LambdaQueryWrapper<ProductionOrder>()
-                .in(ProductionOrder::getStatus, ProductionOrderStatus.openStatusFilterValues())
-                .gt(ProductionOrder::getQuantity, 0));
-        if (openOrders.isEmpty()) {
+        if (snapshot.getOpenOrders().isEmpty()) {
             return new PlanPreviewResponseDTO();
         }
 
-        List<SafetyStock> safetyStocks = safetyStockService.list();
-        Map<String, SafetyStock> safetyStockByKey = safetyStocks.stream()
-                .filter(s -> s.getCustomer() != null && s.getModel() != null && s.getOuterInnerRing() != null)
-                .collect(Collectors.toMap(this::toKey, s -> s, (a, b) -> b));
-
-        Map<String, List<ProductionOrder>> orderByKey = openOrders.stream()
-                .filter(o -> o.getCustomer() != null && o.getModel() != null && o.getOuterInnerRing() != null)
-                .collect(Collectors.groupingBy(this::toKey));
-
-        Map<String, Integer> currentInventoryByKey = queryCurrentInventoryByKey(start, orderByKey);
-
-        List<DemandItem> demands = buildDemands(orderByKey, safetyStockByKey, currentInventoryByKey, normalizedMode, insertOrderIdSet,
+        LocalDateTime effectiveStartAt = normalizedRequest.getEffectiveStartAt();
+        List<DemandItem> demands = buildDemands(snapshot.getOrderByKey(), snapshot.getSafetyStockByKey(),
+                snapshot.getCurrentInventoryByKey(), normalizedMode, insertOrderIdSet,
                 normalizeOrderStartTimes(orderStartTimes), effectiveStartAt);
         if (demands.isEmpty()) {
             return new PlanPreviewResponseDTO();
@@ -168,10 +169,13 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             endExclusive = latestDeliveryExclusive;
         }
 
-        LocalDate planningCapacityEndExclusive = endExclusive.plusDays(CAPACITY_BUFFER_DAYS);
-        Map<LocalDate, BigDecimal> shiftHoursByDay = buildShiftHours(start, planningCapacityEndExclusive, effectiveStartAt);
-        Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities(scopedLineIds);
-        Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(start, planningCapacityEndExclusive, shiftHoursByDay, lineCapByModel);
+        Map<LocalDate, BigDecimal> shiftHoursByDay = snapshot.getShiftHoursByDay();
+        Map<String, List<LineCapacity>> lineCapByModel = snapshot.getLineCapByModel();
+        Map<LineDayKey, Integer> remainingCapacityByLineDay = snapshot.getRemainingCapacityByLineDay();
+        LocalDate planningCapacityEndExclusive = shiftHoursByDay.keySet().stream()
+                .max(LocalDate::compareTo)
+                .map(day -> day.plusDays(1))
+                .orElse(endExclusive);
         Map<DemandItem, DemandLineMatch> barLineMatchesByDemand = buildBarLineMatchesByDemand(demands, lineCapByModel);
         List<RingPairDemand> ringPairDemands = buildRingPairDemands(demands, barLineMatchesByDemand);
         Map<String, LineActivationPlan> activationPlanByKey = new HashMap<>();
@@ -396,201 +400,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         int qty = Optional.ofNullable(order.getQuantity()).orElse(0);
         int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
         return Math.max(0, qty - assigned);
-    }
-
-    private Map<LocalDate, BigDecimal> buildShiftHours(LocalDate start, LocalDate endExclusive, LocalDateTime planStartAt) {
-        Map<LocalDate, BigDecimal> result = new HashMap<>();
-        BigDecimal fallbackShiftHours = resolveFallbackShiftHours(start, endExclusive, planStartAt);
-        LocalDate cursor = start;
-        while (cursor.isBefore(endExclusive)) {
-            List<ShiftSchedule> schedules = getSchedulesImpactingDay(cursor);
-            BigDecimal hours = calcDailyShiftHours(cursor, schedules, planStartAt);
-            boolean isCustomStartDay = planStartAt != null
-                    && cursor.equals(planStartAt.toLocalDate())
-                    && !planStartAt.toLocalTime().equals(java.time.LocalTime.MIDNIGHT);
-            if (hours.compareTo(BigDecimal.ZERO) <= 0 && !isCustomStartDay) {
-                hours = fallbackShiftHours;
-            }
-            result.put(cursor, hours);
-            cursor = cursor.plusDays(1);
-        }
-        return result;
-    }
-
-    private BigDecimal resolveFallbackShiftHours(LocalDate start, LocalDate endExclusive, LocalDateTime planStartAt) {
-        BigDecimal inferred = inferShiftHoursWithinRange(start, endExclusive, planStartAt);
-        if (inferred.compareTo(BigDecimal.ZERO) > 0) {
-            return inferred;
-        }
-        BigDecimal lookbackInferred = inferShiftHoursByLookback(start, 31, planStartAt);
-        if (lookbackInferred.compareTo(BigDecimal.ZERO) > 0) {
-            return lookbackInferred;
-        }
-        return DEFAULT_SHIFT_HOURS;
-    }
-
-    private BigDecimal inferShiftHoursWithinRange(LocalDate start, LocalDate endExclusive, LocalDateTime planStartAt) {
-        BigDecimal maxShiftHours = BigDecimal.ZERO;
-        LocalDate cursor = start;
-        while (cursor.isBefore(endExclusive)) {
-            List<ShiftSchedule> schedules = getSchedulesImpactingDay(cursor);
-            BigDecimal dayHours = calcDailyShiftHours(cursor, schedules, planStartAt);
-            if (dayHours.compareTo(maxShiftHours) > 0) {
-                maxShiftHours = dayHours;
-            }
-            cursor = cursor.plusDays(1);
-        }
-        return maxShiftHours;
-    }
-
-    private BigDecimal inferShiftHoursByLookback(LocalDate start, int days, LocalDateTime planStartAt) {
-        BigDecimal maxShiftHours = BigDecimal.ZERO;
-        for (int i = 1; i <= days; i++) {
-            LocalDate day = start.minusDays(i);
-            List<ShiftSchedule> schedules = getSchedulesImpactingDay(day);
-            BigDecimal dayHours = calcDailyShiftHours(day, schedules, planStartAt);
-            if (dayHours.compareTo(maxShiftHours) > 0) {
-                maxShiftHours = dayHours;
-            }
-        }
-        return maxShiftHours;
-    }
-
-    /**
-     * 获取会影响指定自然日工时的班次：
-     * - 当天排班；
-     * - 前一天排班中跨入当天的班次（如 17:00~次日02:00）。
-     */
-    private List<ShiftSchedule> getSchedulesImpactingDay(LocalDate day) {
-        List<ShiftSchedule> merged = new ArrayList<>();
-        merged.addAll(shiftCalendarService.getSchedulesByDate(day.toString()));
-        merged.addAll(shiftCalendarService.getSchedulesByDate(day.minusDays(1).toString()));
-        return merged;
-    }
-
-    private BigDecimal calcDailyShiftHours(LocalDate day, List<ShiftSchedule> schedules, LocalDateTime planStartAt) {
-        if (schedules == null || schedules.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        LocalDateTime dayStart = day.atStartOfDay();
-        LocalDateTime dayEnd = day.plusDays(1).atStartOfDay();
-        List<TimeRange> ranges = new ArrayList<>();
-        for (ShiftSchedule schedule : schedules) {
-            TimeRange range = toEffectiveRange(schedule, dayStart, dayEnd, planStartAt);
-            if (range != null) {
-                ranges.add(range);
-            }
-        }
-        if (ranges.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        ranges.sort(Comparator.comparing(TimeRange::start));
-        long mergedMinutes = 0;
-        LocalDateTime mergedStart = ranges.get(0).start;
-        LocalDateTime mergedEnd = ranges.get(0).end;
-        for (int i = 1; i < ranges.size(); i++) {
-            TimeRange current = ranges.get(i);
-            if (!current.start.isAfter(mergedEnd)) {
-                if (current.end.isAfter(mergedEnd)) {
-                    mergedEnd = current.end;
-                }
-                continue;
-            }
-            mergedMinutes += ChronoUnit.MINUTES.between(mergedStart, mergedEnd);
-            mergedStart = current.start;
-            mergedEnd = current.end;
-        }
-        mergedMinutes += ChronoUnit.MINUTES.between(mergedStart, mergedEnd);
-        if (mergedMinutes <= 0) {
-            return BigDecimal.ZERO;
-        }
-        return BigDecimal.valueOf(mergedMinutes).divide(new BigDecimal("60"), 2, RoundingMode.HALF_UP);
-    }
-
-    private TimeRange toEffectiveRange(ShiftSchedule schedule,
-                                       LocalDateTime dayStart,
-                                       LocalDateTime dayEnd,
-                                       LocalDateTime planStartAt) {
-        if (schedule.getStartDateTime() == null || schedule.getEndDateTime() == null) {
-            return null;
-        }
-        LocalDateTime scheduleStart = toLocalDateTime(schedule.getStartDateTime());
-        LocalDateTime scheduleEnd = toLocalDateTime(schedule.getEndDateTime());
-        if (planStartAt != null && scheduleStart.toLocalDate().equals(planStartAt.toLocalDate()) && scheduleEnd.isAfter(planStartAt)) {
-            scheduleStart = scheduleStart.isBefore(planStartAt) ? planStartAt : scheduleStart;
-        }
-        LocalDate startDate = scheduleStart.toLocalDate();
-        LocalDate endDate = scheduleEnd.toLocalDate();
-        if (!scheduleEnd.isAfter(scheduleStart) && endDate.isAfter(startDate)) {
-            scheduleEnd = scheduleStart.plusHours(24);
-        }
-        LocalDateTime effectiveStart = scheduleStart.isBefore(dayStart) ? dayStart : scheduleStart;
-        LocalDateTime effectiveEnd = scheduleEnd.isAfter(dayEnd) ? dayEnd : scheduleEnd;
-        if (!effectiveEnd.isAfter(effectiveStart)) {
-            return null;
-        }
-        return new TimeRange(effectiveStart, effectiveEnd);
-    }
-
-    private Map<String, List<LineCapacity>> buildModelCapacities(Set<Long> scopedLineIds) {
-        List<ProductionLineModelConfig> configs = modelConfigMapper.selectPageList(null, null, 0L, 2000L);
-        List<ProductionLine> lines = productionLineMapper.selectPageList(null, 0L, 1000L);
-        Map<Long, ProductionLine> lineById = lines.stream()
-                .filter(line -> line.getId() != null)
-                .collect(Collectors.toMap(ProductionLine::getId, line -> line, (a, b) -> a));
-
-        Map<String, List<LineCapacity>> map = new HashMap<>();
-        for (ProductionLineModelConfig cfg : configs) {
-            if (cfg.getStatus() != null && cfg.getStatus() == 0) {
-                continue;
-            }
-            if (cfg.getModel() == null || cfg.getCapacityPerHour() == null || cfg.getLineId() == null) {
-                continue;
-            }
-            String configModel = cfg.getModel().trim();
-            if (configModel.isEmpty()) {
-                continue;
-            }
-            ProductionLine productionLine = lineById.get(cfg.getLineId());
-            if (productionLine != null && productionLine.getStatus() != null && productionLine.getStatus() == 0) {
-                continue;
-            }
-            if (!scopedLineIds.isEmpty() && !scopedLineIds.contains(cfg.getLineId())) {
-                continue;
-            }
-            String lineName = productionLine == null ? "产线" + cfg.getLineId() : productionLine.getLineName();
-            String craft = productionLine == null ? null : productionLine.getCraft();
-            map.computeIfAbsent(configModel, k -> new ArrayList<>())
-                    .add(LineCapacity.of(cfg.getLineId(), lineName, configModel, cfg.getCapacityPerHour(), cfg.getPriority(), craft));
-        }
-        map.values().forEach(this::sortLineCapacities);
-        return map;
-    }
-
-    private Map<LineDayKey, Integer> buildRemainingCapacityByLineDay(LocalDate start,
-                                                                     LocalDate endExclusive,
-                                                                     Map<LocalDate, BigDecimal> shiftHoursByDay,
-                                                                     Map<String, List<LineCapacity>> lineCapByModel) {
-        Map<Long, LineCapacity> lineCapacityById = new HashMap<>();
-        for (List<LineCapacity> capacities : lineCapByModel.values()) {
-            for (LineCapacity capacity : capacities) {
-                lineCapacityById.merge(capacity.lineId, capacity, this::pickHigherCapacityLine);
-            }
-        }
-
-        Map<LineDayKey, Integer> remainingCapacityByLineDay = new HashMap<>();
-        LocalDate cursor = start;
-        while (cursor.isBefore(endExclusive)) {
-            BigDecimal shiftHours = shiftHoursByDay.getOrDefault(cursor, DEFAULT_SHIFT_HOURS);
-            for (LineCapacity lineCapacity : lineCapacityById.values()) {
-                int dayCapacity = lineCapacity.capacityPerHour.multiply(shiftHours)
-                        .setScale(0, RoundingMode.FLOOR)
-                        .intValue();
-                remainingCapacityByLineDay.put(new LineDayKey(lineCapacity.lineId, cursor), Math.max(dayCapacity, 0));
-            }
-            cursor = cursor.plusDays(1);
-        }
-        return remainingCapacityByLineDay;
     }
 
     private LineCapacity pickHigherCapacityLine(LineCapacity left, LineCapacity right) {
@@ -930,38 +739,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return null;
         }
         return LocalDate.parse(dateTime.substring(0, 10));
-    }
-
-    private String toKey(ProductionOrder o) {
-        return ProductionPlanServiceImpl.buildNormalizedOrderKey(o.getCustomer(), o.getOuterInnerRing(), o.getModel());
-    }
-
-    /**
-     * 口径说明：排产预览中的在库数量统一按“排产开始日(start)截止（含当日）累计净在库”计算。
-     * 该口径同时用于需求净额(required)和前端“在库数量”展示，避免前后端口径不一致。
-     */
-    private Map<String, Integer> queryCurrentInventoryByKey(LocalDate inventoryCutoffDate,
-                                                            Map<String, List<ProductionOrder>> orderByKey) {
-        if (inventoryCutoffDate == null || orderByKey.isEmpty()) {
-            return new HashMap<>();
-        }
-        Map<String, Object> params = new HashMap<>();
-        params.put("cutoffDate", java.sql.Date.valueOf(inventoryCutoffDate));
-        List<com.depository_manage.entity.BearingRecord> inventoryRecords = bearingRecordService.selectInventoryByCutoffDate(params);
-        if (inventoryRecords == null || inventoryRecords.isEmpty()) {
-            return new HashMap<>();
-        }
-        return inventoryRecords.stream()
-                .filter(r -> r.getCustomer() != null && r.getOuterInnerRing() != null && r.getModel() != null)
-                .collect(Collectors.groupingBy(this::toKey, Collectors.summingInt(r -> Math.max(0, Optional.ofNullable(r.getQuantity()).orElse(0)))));
-    }
-
-    private String toKey(SafetyStock s) {
-        return ProductionPlanServiceImpl.buildNormalizedOrderKey(s.getCustomer(), s.getOuterInnerRing(), s.getModel());
-    }
-
-    private String toKey(com.depository_manage.entity.BearingRecord record) {
-        return ProductionPlanServiceImpl.buildNormalizedOrderKey(record.getCustomer(), record.getOuterInnerRing(), record.getModel());
     }
 
     private Map<DemandItem, DemandLineMatch> buildBarLineMatchesByDemand(List<DemandItem> demands,
@@ -1461,20 +1238,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
     }
 
-    private static class TimeRange {
-        private final LocalDateTime start;
-        private final LocalDateTime end;
-
-        private TimeRange(LocalDateTime start, LocalDateTime end) {
-            this.start = start;
-            this.end = end;
-        }
-
-        private LocalDateTime start() {
-            return start;
-        }
-    }
-
     private static class PlanSlice {
         private final LocalDate day;
         private final Long lineId;
@@ -1502,12 +1265,12 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     }
 
     static class LineCapacity {
-        private final Long lineId;
-        private final String lineName;
-        private final String model;
-        private final BigDecimal capacityPerHour;
-        private final Integer priority;
-        private final String craft;
+        final Long lineId;
+        final String lineName;
+        final String model;
+        final BigDecimal capacityPerHour;
+        final Integer priority;
+        final String craft;
 
         private LineCapacity(Long lineId, String lineName, String model, BigDecimal capacityPerHour, Integer priority, String craft) {
             this.lineId = lineId;
@@ -1663,11 +1426,11 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
     }
 
-    private static class LineDayKey {
+    static class LineDayKey {
         private final Long lineId;
         private final LocalDate day;
 
-        private LineDayKey(Long lineId, LocalDate day) {
+        LineDayKey(Long lineId, LocalDate day) {
             this.lineId = lineId;
             this.day = day;
         }
