@@ -1,14 +1,10 @@
 package com.depository_manage.service.aps.impl;
 
-import com.depository_manage.entity.aps.ProductionLine;
-import com.depository_manage.entity.aps.ProductionLineModelConfig;
 import com.depository_manage.entity.aps.ProductionOrder;
 import com.depository_manage.entity.aps.SafetyStock;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
-import com.depository_manage.pojo.shift.PlanPreviewDailyDTO;
-import com.depository_manage.pojo.shift.PlanPreviewOrderDTO;
 import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 import com.depository_manage.service.BearingRecordService;
 import com.depository_manage.service.aps.ProductionOrderService;
@@ -55,6 +51,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private Clock clock = Clock.systemDefaultZone();
     private ZoneId zoneId = ZoneId.systemDefault();
     private final PlanningRequestNormalizer planningRequestNormalizer = new PlanningRequestNormalizer();
+    private final PlanningResultMapper planningResultMapper = new PlanningResultMapper(DATE_TIME_FMT, PLAN_COLOR);
 
     @Resource
     private ProductionOrderService productionOrderService;
@@ -193,32 +190,25 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 if (demand.remaining() <= 0 || !demand.canScheduleOn(day)) {
                     continue;
                 }
-                List<LineCapacity> lines = findMatchingLines(demand.model, lineCapByModel).stream()
+                List<LineCapacity> lines = findMatchingLines(demand.model(), lineCapByModel).stream()
                         .filter(line -> line.matchesCraft(demand.requiredCraft()))
                         .collect(Collectors.toList());
                 List<LineCapacity> prioritizedLines = prioritizeCandidateLines(demand.activationKey(), lines, day, planningCapacityEndExclusive,
                         demand.remaining(), remainingCapacityByLineDay, activationPlanByKey, normalizedObjective);
                 assignDemandToLines(day, demand, prioritizedLines, remainingCapacityByLineDay,
                         (line, assignQty) -> plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName,
-                                demand.customer, demand.outerInnerRing, demand.model, assignQty, line.capacityPerHour)));
+                                demand.customer(), demand.outerInnerRing(), demand.model(), assignQty, line.capacityPerHour)));
             }
             if (allDemandsCompleted(demands)) {
                 break;
             }
             cursor = cursor.plusDays(1);
         }
-        PlanPreviewResponseDTO response = new PlanPreviewResponseDTO();
-        response.setEvents(mergeSlicesToEvents(plannedSlices, effectiveStartAt, shiftHoursByDay));
         LocalDateTime actualStart = resolveActualPlanStart(plannedSlices, effectiveStartAt, start);
         LocalDateTime actualEnd = resolveActualPlanEnd(plannedSlices, actualStart);
-        response.setPlanStart(actualStart == null ? null : actualStart.format(DATE_TIME_FMT));
-        response.setPlanEnd(actualEnd == null ? null : actualEnd.format(DATE_TIME_FMT));
-        response.setOrders(buildOrderPreviewRows(demands));
-        response.setDailyOutputs(buildDailyPreviewRows(plannedSlices));
-        response.setSqueezedOrderCount(calculateSqueezedOrderCount(demands));
-        response.setDelayedDays(calculateDelayedDays(demands, endExclusive));
-        response.setInsertFulfillmentRate(calculateInsertFulfillmentRate(demands));
-        return response;
+        PlanningResult.Metrics metrics = planningResultMapper.calculateMetrics(demands, endExclusive);
+        PlanningResult result = new PlanningResult(plannedSlices, demands, actualStart, actualEnd, metrics, null);
+        return planningResultMapper.toPlanPreviewResponse(result, effectiveStartAt, shiftHoursByDay);
     }
 
     private LocalDateTime resolveActualPlanStart(List<PlanSlice> slices, LocalDateTime effectiveStartAt, LocalDate fallbackStart) {
@@ -226,7 +216,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return fallbackStart == null ? null : fallbackStart.atStartOfDay();
         }
         LocalDate earliestSliceDay = slices.stream()
-                .map(slice -> slice.day)
+                .map(PlanSlice::day)
                 .min(LocalDate::compareTo)
                 .orElse(fallbackStart);
         if (earliestSliceDay == null) {
@@ -243,7 +233,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return actualStart;
         }
         LocalDate latestSliceDay = slices.stream()
-                .map(slice -> slice.day)
+                .map(PlanSlice::day)
                 .max(LocalDate::compareTo)
                 .orElse(null);
         if (latestSliceDay == null) {
@@ -545,170 +535,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 .compare(left, right);
     }
 
-    private List<CalendarEventDTO> mergeSlicesToEvents(List<PlanSlice> slices,
-                                                       LocalDateTime planStartAt,
-                                                       Map<LocalDate, BigDecimal> shiftHoursByDay) {
-        List<CalendarEventDTO> result = new ArrayList<>();
-        if (slices.isEmpty()) {
-            return result;
-        }
-
-        slices.sort(Comparator
-                .comparing(PlanSlice::mergeKey)
-                .thenComparing(s -> s.day));
-
-        PlanSlice current = slices.get(0);
-        LocalDate blockStart = current.day;
-        LocalDate blockEnd = current.day;
-        int blockQty = current.quantity;
-
-        for (int i = 1; i < slices.size(); i++) {
-            PlanSlice next = slices.get(i);
-            boolean sameBlock = current.mergeKey().equals(next.mergeKey())
-                    && blockEnd.plusDays(1).equals(next.day);
-            if (sameBlock) {
-                blockEnd = next.day;
-                blockQty += next.quantity;
-                continue;
-            }
-            result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty, planStartAt, shiftHoursByDay));
-            current = next;
-            blockStart = next.day;
-            blockEnd = next.day;
-            blockQty = next.quantity;
-        }
-        result.add(buildEvent(blockStart, blockEnd.plusDays(1), current, blockQty, planStartAt, shiftHoursByDay));
-        return result;
-    }
-
-    private List<PlanPreviewOrderDTO> buildOrderPreviewRows(List<DemandItem> demands) {
-        Map<String, List<DemandItem>> grouped = demands.stream()
-                .collect(Collectors.groupingBy(item -> String.join("||",
-                        Optional.ofNullable(item.customer).orElse(""),
-                        Optional.ofNullable(item.outerInnerRing).orElse(""),
-                        Optional.ofNullable(item.model).orElse(""))));
-        List<PlanPreviewOrderDTO> rows = new ArrayList<>();
-        for (List<DemandItem> groupItems : grouped.values()) {
-            if (groupItems.isEmpty()) {
-                continue;
-            }
-            DemandItem item = groupItems.get(0);
-            PlanPreviewOrderDTO row = new PlanPreviewOrderDTO();
-            row.setCustomer(item.customer);
-            row.setOuterInnerRing(item.outerInnerRing);
-            row.setModel(item.model);
-            row.setPriority(groupItems.stream().map(DemandItem::priority).max(Integer::compareTo).orElse(item.priority));
-            LocalDate earliest = groupItems.stream()
-                    .map(DemandItem::earliestDeliveryDate)
-                    .filter(Objects::nonNull)
-                    .min(LocalDate::compareTo)
-                    .orElse(null);
-            row.setEarliestDeliveryDate(earliest == null ? "" : earliest.toString());
-            row.setCurrentInventory(item.currentInventory);
-            row.setOrderCount(groupItems.stream().mapToInt(DemandItem::orderDemandQuantity).max().orElse(0));
-            row.setSafetyStockQuantity(item.safetyStockQuantity());
-            int plannedBaseQuantity = Math.max(0, row.getOrderCount()
-                    + Optional.ofNullable(row.getSafetyStockQuantity()).orElse(0)
-                    - Optional.ofNullable(row.getCurrentInventory()).orElse(0));
-            row.setRequiredQuantity(plannedBaseQuantity);
-            row.setPlannedQuantity(plannedBaseQuantity);
-            row.setPlannedDays(groupItems.stream()
-                    .flatMap(d -> d.plannedDays.stream())
-                    .collect(Collectors.toSet()).size());
-            row.setOrderIds(groupItems.stream()
-                    .map(DemandItem::orderId)
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .collect(Collectors.toList()));
-            rows.add(row);
-        }
-        rows.sort(Comparator.comparing((PlanPreviewOrderDTO row) -> Optional.ofNullable(row.getEarliestDeliveryDate()).orElse(""))
-                .thenComparing(row -> Optional.ofNullable(row.getCustomer()).orElse(""))
-                .thenComparing(row -> Optional.ofNullable(row.getOuterInnerRing()).orElse(""))
-                .thenComparing(row -> Optional.ofNullable(row.getModel()).orElse("")));
-        return rows;
-    }
-
-    private List<PlanPreviewDailyDTO> buildDailyPreviewRows(List<PlanSlice> slices) {
-        List<PlanPreviewDailyDTO> rows = new ArrayList<>();
-        slices.sort(Comparator.comparing((PlanSlice s) -> s.day)
-                .thenComparing(s -> s.customer)
-                .thenComparing(s -> s.outerInnerRing)
-                .thenComparing(s -> s.model)
-                .thenComparing(s -> s.lineName));
-        for (PlanSlice slice : slices) {
-            PlanPreviewDailyDTO row = new PlanPreviewDailyDTO();
-            row.setDay(slice.day.toString());
-            row.setLineName(slice.lineName);
-            row.setCustomer(slice.customer);
-            row.setOuterInnerRing(slice.outerInnerRing);
-            row.setModel(slice.model);
-            row.setQuantity(slice.quantity);
-            rows.add(row);
-        }
-        return rows;
-    }
-
-    private CalendarEventDTO buildEvent(LocalDate startInclusive,
-                                        LocalDate endExclusive,
-                                        PlanSlice slice,
-                                        int quantity,
-                                        LocalDateTime planStartAt,
-                                        Map<LocalDate, BigDecimal> shiftHoursByDay) {
-        CalendarEventDTO dto = new CalendarEventDTO();
-        dto.setTitle(String.format("[排产] %s %s/%s %s x %,d", slice.lineName, slice.customer, slice.outerInnerRing, slice.model, quantity));
-        LocalDateTime eventStart = startInclusive.atStartOfDay();
-        if (planStartAt != null && startInclusive.equals(planStartAt.toLocalDate())) {
-            eventStart = planStartAt;
-        }
-        dto.setStart(eventStart.format(DATE_TIME_FMT));
-        dto.setEnd(endExclusive.atStartOfDay().format(DATE_TIME_FMT));
-        dto.setColor(PLAN_COLOR);
-        dto.setEventType("PLAN");
-        dto.setLineId(slice.lineId);
-        dto.setSource("RULE_PRIORITY");
-        dto.setLineName(slice.lineName);
-        dto.setCustomer(slice.customer);
-        dto.setOuterInnerRing(slice.outerInnerRing);
-        dto.setModel(slice.model);
-        dto.setQuantity(quantity);
-        applyEventMetrics(dto, startInclusive, endExclusive, quantity, slice.capacityPerHour, shiftHoursByDay);
-        return dto;
-    }
-
-    /**
-     * 指标口径（统一按“排产天数=事件区间自然日数，含首尾天”）：
-     * - 排产天数 = DAYS(startInclusive, endExclusive)
-     * - 日产量 = 总产量 / 排产天数
-     * - 日均工时 = 日产量 / 产能(件/小时)
-     */
-    private void applyEventMetrics(CalendarEventDTO dto,
-                                   LocalDate startInclusive,
-                                   LocalDate endExclusive,
-                                   int quantity,
-                                   BigDecimal capacityPerHour,
-                                   Map<LocalDate, BigDecimal> shiftHoursByDay) {
-        long plannedDays = Math.max(1L, ChronoUnit.DAYS.between(startInclusive, endExclusive));
-        dto.setPlannedDays(plannedDays);
-        BigDecimal dailyOutput = BigDecimal.valueOf(quantity)
-                .divide(BigDecimal.valueOf(plannedDays), 2, RoundingMode.HALF_UP);
-        dto.setDailyOutput(dailyOutput);
-        dto.setCapacityPerHour(capacityPerHour);
-        if (capacityPerHour == null) {
-            dto.setDailyOutput(null);
-            dto.setAvgDailyWorkHours(null);
-            dto.setMetricDiagnosticTag("MISSING_CAPACITY_CONFIG");
-            return;
-        }
-        if (capacityPerHour.compareTo(BigDecimal.ZERO) <= 0) {
-            dto.setDailyOutput(null);
-            dto.setAvgDailyWorkHours(null);
-            dto.setMetricDiagnosticTag("INVALID_CAPACITY_CONFIG");
-            return;
-        }
-        dto.setAvgDailyWorkHours(dailyOutput.divide(capacityPerHour, 2, RoundingMode.HALF_UP));
-        dto.setMetricDiagnosticTag("OK");
-    }
 
     private LocalDateTime toLocalDateTime(String dateTime) {
         if (dateTime == null || dateTime.trim().isEmpty()) {
@@ -751,7 +577,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 continue;
             }
             for (Map.Entry<String, List<LineCapacity>> entry : lineCapByModel.entrySet()) {
-                if (!isSeriesMatch(demand.model, entry.getKey())) {
+                if (!isSeriesMatch(demand.model(), entry.getKey())) {
                     continue;
                 }
                 List<LineCapacity> barLines = entry.getValue().stream()
@@ -771,10 +597,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private List<RingPairDemand> buildRingPairDemands(List<DemandItem> demands,
                                                       Map<DemandItem, DemandLineMatch> barLineMatchesByDemand) {
         Map<String, List<DemandItem>> laDemandByCustomer = demands.stream()
-                .filter(demand -> "LA".equalsIgnoreCase(demand.outerInnerRing))
+                .filter(demand -> "LA".equalsIgnoreCase(demand.outerInnerRing()))
                 .collect(Collectors.groupingBy(DemandItem::normalizedCustomer));
         Map<String, List<DemandItem>> lbDemandByCustomer = demands.stream()
-                .filter(demand -> "LB".equalsIgnoreCase(demand.outerInnerRing))
+                .filter(demand -> "LB".equalsIgnoreCase(demand.outerInnerRing()))
                 .collect(Collectors.groupingBy(DemandItem::normalizedCustomer));
         List<RingPairDemand> pairDemands = new ArrayList<>();
         for (Map.Entry<String, List<DemandItem>> entry : laDemandByCustomer.entrySet()) {
@@ -821,43 +647,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return pairDemands;
     }
 
-    private int calculateSqueezedOrderCount(List<DemandItem> demands) {
-        return (int) demands.stream()
-                .filter(demand -> !demand.lockedInsert())
-                .filter(demand -> demand.plannedQuantity() < demand.required)
-                .count();
-    }
-
-    private int calculateDelayedDays(List<DemandItem> demands, LocalDate endExclusive) {
-        int delayedDays = 0;
-        for (DemandItem demand : demands) {
-            LocalDate dueDate = demand.earliestDeliveryDate();
-            if (dueDate == null) {
-                continue;
-            }
-            LocalDate completionDate = demand.lastPlannedDate().orElse(endExclusive.minusDays(1));
-            if (completionDate.isAfter(dueDate)) {
-                delayedDays += (int) ChronoUnit.DAYS.between(dueDate, completionDate);
-            }
-        }
-        return Math.max(delayedDays, 0);
-    }
-
-    private BigDecimal calculateInsertFulfillmentRate(List<DemandItem> demands) {
-        int required = demands.stream()
-                .filter(DemandItem::lockedInsert)
-                .mapToInt(demand -> demand.required)
-                .sum();
-        if (required <= 0) {
-            return BigDecimal.ONE;
-        }
-        int planned = demands.stream()
-                .filter(DemandItem::lockedInsert)
-                .mapToInt(DemandItem::plannedQuantity)
-                .sum();
-        return BigDecimal.valueOf(planned)
-                .divide(BigDecimal.valueOf(required), 4, RoundingMode.HALF_UP);
-    }
 
     private int comparePairCandidate(PairCandidate left, PairCandidate right) {
         int sharedSeriesCompare = Integer.compare(right.sharedSeries.length(), left.sharedSeries.length());
@@ -872,7 +661,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         if (deliveryCompare != 0) {
             return deliveryCompare;
         }
-        int requiredCompare = Integer.compare(right.lbDemand.required, left.lbDemand.required);
+        int requiredCompare = Integer.compare(right.lbDemand.required(), left.lbDemand.required());
         if (requiredCompare != 0) {
             return requiredCompare;
         }
@@ -961,7 +750,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         void append(LineCapacity line, int assignQty);
     }
 
-    private interface PlannableDemand {
+    interface PlannableDemand {
         int remaining();
 
         void applyPlan(int assigned, LocalDate planDay);
@@ -971,248 +760,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         default boolean canScheduleOn(LocalDate day) {
             LocalDate earliest = earliestStartDate();
             return earliest == null || !day.isBefore(earliest);
-        }
-    }
-
-    private static class DemandItem implements PlannableDemand {
-        private final Long orderId;
-        private final String customer;
-        private final String outerInnerRing;
-        private final String model;
-        private final String craft;
-        private final int required;
-        private final int currentInventory;
-        private final int orderCount;
-        private final int orderDemandQuantity;
-        private final int safetyStockQuantity;
-        private final int priority;
-        private final boolean lockedInsert;
-        private int coveredQuantity;
-        private int plannedQuantity;
-        private final Date earliestDelivery;
-        private final Set<LocalDate> plannedDays = new HashSet<>();
-        private final LocalDateTime earliestStartAt;
-        private final LocalDate currentDate;
-        private final ZoneId zoneId;
-
-        private DemandItem(Long orderId,
-                           String customer,
-                           String outerInnerRing,
-                           String model,
-                           String craft,
-                           int required,
-                           int currentInventory,
-                           int orderCount,
-                           int orderDemandQuantity,
-                           int safetyStockQuantity,
-                           Date earliestDelivery,
-                           int priority,
-                           boolean lockedInsert,
-                           LocalDateTime earliestStartAt,
-                           LocalDate currentDate,
-                           ZoneId zoneId) {
-            this.orderId = orderId;
-            this.customer = customer;
-            this.outerInnerRing = outerInnerRing;
-            this.model = model;
-            this.craft = normalizeCraft(craft);
-            this.required = required;
-            this.currentInventory = currentInventory;
-            this.orderCount = orderCount;
-            this.orderDemandQuantity = orderDemandQuantity;
-            this.safetyStockQuantity = safetyStockQuantity;
-            this.priority = priority;
-            this.lockedInsert = lockedInsert;
-            this.coveredQuantity = 0;
-            this.plannedQuantity = 0;
-            this.earliestDelivery = earliestDelivery;
-            this.earliestStartAt = earliestStartAt == null ? null : earliestStartAt.withNano(0);
-            this.currentDate = currentDate;
-            this.zoneId = zoneId == null ? ZoneId.systemDefault() : zoneId;
-        }
-
-        private Long orderId() {
-            return orderId;
-        }
-
-        @Override
-        public int remaining() {
-            return Math.max(0, required - coveredQuantity);
-        }
-
-        private int plannedQuantity() {
-            return plannedQuantity;
-        }
-
-        private int orderCount() {
-            return orderCount;
-        }
-
-        private int orderDemandQuantity() {
-            return orderDemandQuantity;
-        }
-
-        private int safetyStockQuantity() {
-            return safetyStockQuantity;
-        }
-
-        private boolean lockedInsert() {
-            return lockedInsert;
-        }
-
-        private int priority() {
-            return priority;
-        }
-
-        private int deliveryUrgencyDays() {
-            if (earliestDelivery == null) {
-                return Integer.MAX_VALUE;
-            }
-            LocalDate d = earliestDeliveryDate();
-            return (int) ChronoUnit.DAYS.between(currentDate, d);
-        }
-
-        private LocalDate earliestDeliveryDate() {
-            if (earliestDelivery == null) {
-                return null;
-            }
-            return earliestDelivery.toInstant().atZone(zoneId).toLocalDate();
-        }
-
-        @Override
-        public LocalDate earliestStartDate() {
-            return earliestStartAt == null ? null : earliestStartAt.toLocalDate();
-        }
-
-        @Override
-        public void applyPlan(int quantity, LocalDate day) {
-            if (quantity <= 0) {
-                return;
-            }
-            plannedQuantity += quantity;
-            coveredQuantity = Math.min(required, coveredQuantity + quantity);
-            plannedDays.add(day);
-        }
-
-        private boolean isLaOrLb() {
-            return "LA".equalsIgnoreCase(outerInnerRing) || "LB".equalsIgnoreCase(outerInnerRing);
-        }
-
-        private String requiredCraft() {
-            return craft;
-        }
-
-        private String normalizedCustomer() {
-            return normalize(customer);
-        }
-
-        private String activationKey() {
-            return (lockedInsert ? "INSERT|" : "AUTO|") + normalizedCustomer() + "|" + normalize(outerInnerRing) + "|" + normalize(model);
-        }
-
-        private Optional<LocalDate> lastPlannedDate() {
-            if (plannedDays.isEmpty()) {
-                return Optional.empty();
-            }
-            return plannedDays.stream().max(LocalDate::compareTo);
-        }
-
-        private String normalize(String value) {
-            return value == null ? "" : value.trim().toUpperCase();
-        }
-    }
-
-    private static class RingPairDemand implements PlannableDemand {
-        private final DemandItem laDemand;
-        private final DemandItem lbDemand;
-        private final String sharedSeries;
-        private final List<LineCapacity> sharedBarLines;
-
-        private RingPairDemand(DemandItem laDemand, DemandItem lbDemand, String sharedSeries, List<LineCapacity> sharedBarLines) {
-            this.laDemand = laDemand;
-            this.lbDemand = lbDemand;
-            this.sharedSeries = sharedSeries;
-            this.sharedBarLines = sharedBarLines;
-        }
-
-        @Override
-        public int remaining() {
-            return Math.max(laDemand.remaining(), lbDemand.remaining());
-        }
-
-        private Integer maxRequired() {
-            return Math.max(laDemand.required, lbDemand.required);
-        }
-
-        private int priority() {
-            return Math.max(laDemand.priority(), lbDemand.priority());
-        }
-
-        private boolean lockedInsert() {
-            return laDemand.lockedInsert() || lbDemand.lockedInsert();
-        }
-
-        private int deliveryUrgencyDays() {
-            return Math.min(laDemand.deliveryUrgencyDays(), lbDemand.deliveryUrgencyDays());
-        }
-
-        private String customer() {
-            return laDemand.customer;
-        }
-
-        private String laModel() {
-            return laDemand.model;
-        }
-
-        private String lbModel() {
-            return lbDemand.model;
-        }
-
-        private List<LineCapacity> sharedBarLines() {
-            return sharedBarLines;
-        }
-
-        private String activationKey() {
-            return laDemand.normalizedCustomer() + "|PAIR|" + normalize(sharedSeries) + "|" + normalize(laDemand.model) + "|" + normalize(lbDemand.model);
-        }
-
-        @Override
-        public LocalDate earliestStartDate() {
-            LocalDate laStart = laDemand.earliestStartDate();
-            LocalDate lbStart = lbDemand.earliestStartDate();
-            if (laStart == null) {
-                return lbStart;
-            }
-            if (lbStart == null) {
-                return laStart;
-            }
-            return laStart.isAfter(lbStart) ? laStart : lbStart;
-        }
-
-        @Override
-        public void applyPlan(int quantity, LocalDate day) {
-            laDemand.applyPlan(quantity, day);
-            lbDemand.applyPlan(quantity, day);
-        }
-
-        private String normalize(String value) {
-            return value == null ? "" : value.trim().toUpperCase();
-        }
-    }
-
-    private static class DemandLineMatch {
-        private final Map<String, List<LineCapacity>> barLinesBySeries;
-
-        private DemandLineMatch(Map<String, List<LineCapacity>> barLinesBySeries) {
-            this.barLinesBySeries = barLinesBySeries;
-        }
-
-        private Set<String> seriesKeys() {
-            return barLinesBySeries.keySet();
-        }
-
-        private List<LineCapacity> barLinesBySeries(String series) {
-            return barLinesBySeries.getOrDefault(series, Collections.emptyList());
         }
     }
 
@@ -1238,70 +785,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
     }
 
-    private static class PlanSlice {
-        private final LocalDate day;
-        private final Long lineId;
-        private final String lineName;
-        private final String customer;
-        private final String outerInnerRing;
-        private final String model;
-        private final int quantity;
-        private final BigDecimal capacityPerHour;
-
-        private PlanSlice(LocalDate day, Long lineId, String lineName, String customer, String outerInnerRing, String model, int quantity, BigDecimal capacityPerHour) {
-            this.day = day;
-            this.lineId = lineId;
-            this.lineName = lineName;
-            this.customer = customer;
-            this.outerInnerRing = outerInnerRing;
-            this.model = model;
-            this.quantity = quantity;
-            this.capacityPerHour = capacityPerHour;
-        }
-
-        private String mergeKey() {
-            return lineName + "|" + customer + "|" + outerInnerRing + "|" + model;
-        }
-    }
-
-    static class LineCapacity {
-        final Long lineId;
-        final String lineName;
-        final String model;
-        final BigDecimal capacityPerHour;
-        final Integer priority;
-        final String craft;
-
-        private LineCapacity(Long lineId, String lineName, String model, BigDecimal capacityPerHour, Integer priority, String craft) {
-            this.lineId = lineId;
-            this.lineName = lineName;
-            this.model = model;
-            this.capacityPerHour = capacityPerHour;
-            this.priority = priority;
-            this.craft = normalizeCraft(craft);
-        }
-
-        static LineCapacity of(Long lineId, String lineName, String model, BigDecimal capacityPerHour, Integer priority, String craft) {
-            return new LineCapacity(lineId, lineName, model, capacityPerHour, priority, craft);
-        }
-
-        Long getLineId() {
-            return lineId;
-        }
-
-        boolean isBarCraft() {
-            return CraftMappingUtil.BAR_CRAFT.equals(craft);
-        }
-
-        boolean matchesCraft(String requiredCraft) {
-            if (requiredCraft == null) {
-                return true;
-            }
-            return requiredCraft.equals(craft);
-        }
-    }
-
-    private static String normalizeCraft(String craft) {
+    static String normalizeCraft(String craft) {
         String normalized = CraftMappingUtil.normalizeCraft(craft);
         if (normalized != null) {
             return normalized;
@@ -1426,30 +910,4 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         }
     }
 
-    static class LineDayKey {
-        private final Long lineId;
-        private final LocalDate day;
-
-        LineDayKey(Long lineId, LocalDate day) {
-            this.lineId = lineId;
-            this.day = day;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof LineDayKey)) {
-                return false;
-            }
-            LineDayKey that = (LineDayKey) o;
-            return Objects.equals(lineId, that.lineId) && Objects.equals(day, that.day);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(lineId, day);
-        }
-    }
 }

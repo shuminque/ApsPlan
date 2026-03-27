@@ -91,9 +91,9 @@ class PlanningInputAssembler {
 
         List<ProductionLineModelConfig> lineModelConfigs = modelConfigMapper.selectPageList(null, null, 0L, 2000L);
         List<ProductionLine> productionLines = productionLineMapper.selectPageList(null, 0L, 1000L);
-        Map<String, List<ProductionPlanningServiceImpl.LineCapacity>> lineCapByModel = buildModelCapacities(
+        Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities(
                 normalizedRequest.getScopedLineIds(), lineModelConfigs, productionLines);
-        Map<ProductionPlanningServiceImpl.LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(
+        Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(
                 start, planningCapacityEndExclusive, shiftHoursByDay, lineCapByModel);
 
         return new PlanningSnapshot(openOrders, safetyStocks, orderByKey, safetyStockByKey, currentInventoryByKey,
@@ -229,14 +229,14 @@ class PlanningInputAssembler {
         return new TimeRange(effectiveStart, effectiveEnd);
     }
 
-    private Map<String, List<ProductionPlanningServiceImpl.LineCapacity>> buildModelCapacities(Set<Long> scopedLineIds,
+    private Map<String, List<LineCapacity>> buildModelCapacities(Set<Long> scopedLineIds,
                                                                                                  List<ProductionLineModelConfig> configs,
                                                                                                  List<ProductionLine> lines) {
         Map<Long, ProductionLine> lineById = lines.stream()
                 .filter(line -> line.getId() != null)
                 .collect(Collectors.toMap(ProductionLine::getId, line -> line, (a, b) -> a));
 
-        Map<String, List<ProductionPlanningServiceImpl.LineCapacity>> map = new HashMap<>();
+        Map<String, List<LineCapacity>> map = new HashMap<>();
         for (ProductionLineModelConfig cfg : configs) {
             if (cfg.getStatus() != null && cfg.getStatus() == 0) {
                 continue;
@@ -258,41 +258,41 @@ class PlanningInputAssembler {
             String lineName = productionLine == null ? "产线" + cfg.getLineId() : productionLine.getLineName();
             String craft = productionLine == null ? null : productionLine.getCraft();
             map.computeIfAbsent(configModel, k -> new ArrayList<>())
-                    .add(ProductionPlanningServiceImpl.LineCapacity.of(cfg.getLineId(), lineName, configModel,
+                    .add(LineCapacity.of(cfg.getLineId(), lineName, configModel,
                             cfg.getCapacityPerHour(), cfg.getPriority(), craft));
         }
         map.values().forEach(this::sortLineCapacities);
         return map;
     }
 
-    private Map<ProductionPlanningServiceImpl.LineDayKey, Integer> buildRemainingCapacityByLineDay(LocalDate start,
+    private Map<LineDayKey, Integer> buildRemainingCapacityByLineDay(LocalDate start,
                                                                                                      LocalDate endExclusive,
                                                                                                      Map<LocalDate, BigDecimal> shiftHoursByDay,
-                                                                                                     Map<String, List<ProductionPlanningServiceImpl.LineCapacity>> lineCapByModel) {
-        Map<Long, ProductionPlanningServiceImpl.LineCapacity> lineCapacityById = new HashMap<>();
-        for (List<ProductionPlanningServiceImpl.LineCapacity> capacities : lineCapByModel.values()) {
-            for (ProductionPlanningServiceImpl.LineCapacity capacity : capacities) {
+                                                                                                     Map<String, List<LineCapacity>> lineCapByModel) {
+        Map<Long, LineCapacity> lineCapacityById = new HashMap<>();
+        for (List<LineCapacity> capacities : lineCapByModel.values()) {
+            for (LineCapacity capacity : capacities) {
                 lineCapacityById.merge(capacity.lineId, capacity, this::pickHigherCapacityLine);
             }
         }
 
-        Map<ProductionPlanningServiceImpl.LineDayKey, Integer> remainingCapacityByLineDay = new HashMap<>();
+        Map<LineDayKey, Integer> remainingCapacityByLineDay = new HashMap<>();
         LocalDate cursor = start;
         while (cursor.isBefore(endExclusive)) {
             BigDecimal shiftHours = shiftHoursByDay.getOrDefault(cursor, DEFAULT_SHIFT_HOURS);
-            for (ProductionPlanningServiceImpl.LineCapacity lineCapacity : lineCapacityById.values()) {
+            for (LineCapacity lineCapacity : lineCapacityById.values()) {
                 int dayCapacity = lineCapacity.capacityPerHour.multiply(shiftHours)
                         .setScale(0, RoundingMode.FLOOR)
                         .intValue();
-                remainingCapacityByLineDay.put(new ProductionPlanningServiceImpl.LineDayKey(lineCapacity.lineId, cursor), Math.max(dayCapacity, 0));
+                remainingCapacityByLineDay.put(new LineDayKey(lineCapacity.lineId, cursor), Math.max(dayCapacity, 0));
             }
             cursor = cursor.plusDays(1);
         }
         return remainingCapacityByLineDay;
     }
 
-    private ProductionPlanningServiceImpl.LineCapacity pickHigherCapacityLine(ProductionPlanningServiceImpl.LineCapacity left,
-                                                                              ProductionPlanningServiceImpl.LineCapacity right) {
+    private LineCapacity pickHigherCapacityLine(LineCapacity left,
+                                                                              LineCapacity right) {
         int compare = left.capacityPerHour.compareTo(right.capacityPerHour);
         if (compare > 0) {
             return left;
@@ -303,13 +303,13 @@ class PlanningInputAssembler {
         return compareLinePriority(left, right) <= 0 ? left : right;
     }
 
-    private int compareLinePriority(ProductionPlanningServiceImpl.LineCapacity left,
-                                    ProductionPlanningServiceImpl.LineCapacity right) {
+    private int compareLinePriority(LineCapacity left,
+                                    LineCapacity right) {
         return Integer.compare(Objects.requireNonNullElse(left.priority, Integer.MAX_VALUE),
                 Objects.requireNonNullElse(right.priority, Integer.MAX_VALUE));
     }
 
-    private void sortLineCapacities(List<ProductionPlanningServiceImpl.LineCapacity> lineCapacities) {
+    private void sortLineCapacities(List<LineCapacity> lineCapacities) {
         lineCapacities.sort((left, right) -> {
             int priorityCompare = compareLinePriority(left, right);
             if (priorityCompare != 0) {

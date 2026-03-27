@@ -20,8 +20,8 @@ public class PlanningSnapshot {
     private final Map<LocalDate, BigDecimal> shiftHoursByDay;
     private final List<ProductionLineModelConfig> lineModelConfigs;
     private final List<ProductionLine> productionLines;
-    private final Map<String, List<ProductionPlanningServiceImpl.LineCapacity>> lineCapByModel;
-    private final Map<ProductionPlanningServiceImpl.LineDayKey, Integer> remainingCapacityByLineDay;
+    private final Map<String, List<LineCapacity>> lineCapByModel;
+    private final Map<LineDayKey, Integer> remainingCapacityByLineDay;
 
     public PlanningSnapshot(List<ProductionOrder> openOrders,
                             List<SafetyStock> safetyStocks,
@@ -31,8 +31,8 @@ public class PlanningSnapshot {
                             Map<LocalDate, BigDecimal> shiftHoursByDay,
                             List<ProductionLineModelConfig> lineModelConfigs,
                             List<ProductionLine> productionLines,
-                            Map<String, List<ProductionPlanningServiceImpl.LineCapacity>> lineCapByModel,
-                            Map<ProductionPlanningServiceImpl.LineDayKey, Integer> remainingCapacityByLineDay) {
+                            Map<String, List<LineCapacity>> lineCapByModel,
+                            Map<LineDayKey, Integer> remainingCapacityByLineDay) {
         this.openOrders = openOrders;
         this.safetyStocks = safetyStocks;
         this.orderByKey = orderByKey;
@@ -77,11 +77,11 @@ public class PlanningSnapshot {
         return productionLines;
     }
 
-    public Map<String, List<ProductionPlanningServiceImpl.LineCapacity>> getLineCapByModel() {
+    public Map<String, List<LineCapacity>> getLineCapByModel() {
         return lineCapByModel;
     }
 
-    public Map<ProductionPlanningServiceImpl.LineDayKey, Integer> getRemainingCapacityByLineDay() {
+    public Map<LineDayKey, Integer> getRemainingCapacityByLineDay() {
         return remainingCapacityByLineDay;
     }
 }
