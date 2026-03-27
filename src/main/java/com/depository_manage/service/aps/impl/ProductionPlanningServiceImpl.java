@@ -18,6 +18,9 @@ import com.depository_manage.service.aps.ProductionOrderService;
 import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.SafetyStockService;
 import com.depository_manage.service.aps.ShiftCalendarService;
+import com.depository_manage.service.aps.planning.NormalizedPlanningRequest;
+import com.depository_manage.service.aps.planning.PlanningRequest;
+import com.depository_manage.service.aps.planning.PlanningRequestNormalizer;
 import com.depository_manage.utils.CraftMappingUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -53,10 +56,10 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private static final String PLAN_COLOR = "#FFB020";
     private static final long CAPACITY_BUFFER_DAYS = 180L;
     private static final String OBJECTIVE_MIN_LINE = "min_line";
-    private static final String OBJECTIVE_LEGACY_CAPACITY = "legacy_capacity";
     private static final BigDecimal DAILY_TARGET_BUFFER = new BigDecimal("1.05");
     private Clock clock = Clock.systemDefaultZone();
     private ZoneId zoneId = ZoneId.systemDefault();
+    private final PlanningRequestNormalizer planningRequestNormalizer = new PlanningRequestNormalizer();
 
     @Resource
     private ProductionOrderService productionOrderService;
@@ -92,8 +95,14 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
     @Override
     public PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate) {
-        return generatePlanPreview(startDate, endDate, "AUTO", Collections.emptyList(), "ALL",
-                Collections.emptyList(), null, Collections.emptyMap(), OBJECTIVE_MIN_LINE);
+        return generatePlanPreview(new PlanningRequest(startDate, endDate, "AUTO", Collections.emptyList(), "ALL",
+                Collections.emptyList(), null, Collections.emptyMap(), OBJECTIVE_MIN_LINE));
+    }
+
+    @Override
+    public PlanPreviewResponseDTO generatePlanPreview(PlanningRequest request) {
+        NormalizedPlanningRequest normalizedRequest = planningRequestNormalizer.normalize(request, clock);
+        return generatePlanPreview(normalizedRequest);
     }
 
     @Override
@@ -106,37 +115,24 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                                                       Integer freezeHours,
                                                       Map<Long, LocalDateTime> orderStartTimes,
                                                       String objective) {
-        LocalDateTime requestStartAt = toLocalDateTime(startDate);
-        LocalDate requestStart = requestStartAt == null ? null : requestStartAt.toLocalDate();
-        LocalDate endExclusive = toLocalDate(endDate);
+        return generatePlanPreview(PlanningRequest.fromLegacyParameters(startDate, endDate, planMode, insertOrderIds,
+                lineScope, lineIds, freezeHours, orderStartTimes, objective));
+    }
+
+    private PlanPreviewResponseDTO generatePlanPreview(NormalizedPlanningRequest normalizedRequest) {
+        LocalDateTime requestStartAt = normalizedRequest.getRequestStartAt();
+        LocalDate requestStart = normalizedRequest.getRequestStart();
+        LocalDate start = normalizedRequest.getStart();
+        LocalDate endExclusive = normalizedRequest.getEndExclusive();
         if (requestStart == null || endExclusive == null) {
             return new PlanPreviewResponseDTO();
         }
-
-        LocalDate today = LocalDate.now(clock);
-        LocalDate start = requestStart.isBefore(today) ? today : requestStart;
-        LocalDateTime effectiveStartAt = requestStartAt == null ? null : requestStartAt.withSecond(0).withNano(0);
-        if (effectiveStartAt != null && effectiveStartAt.toLocalDate().isBefore(start)) {
-            effectiveStartAt = start.atStartOfDay();
-        }
-        if (!start.isBefore(endExclusive)) {
-            endExclusive = start.plusMonths(1);
-        }
-        String normalizedMode = normalizeMode(planMode);
-        String normalizedObjective = normalizeObjective(objective);
-        Set<Long> insertOrderIdSet = normalizeLongSet(insertOrderIds);
-        Set<Long> scopedLineIds = normalizeLineScope(lineScope, lineIds);
-        int freezeWindowHours = freezeHours == null ? 0 : Math.max(0, freezeHours);
-        if (freezeWindowHours > 0 && requestStartAt != null) {
-            LocalDateTime freezeEnd = requestStartAt.plusHours(freezeWindowHours);
-            if (freezeEnd.isAfter(effectiveStartAt)) {
-                effectiveStartAt = freezeEnd;
-                start = effectiveStartAt.toLocalDate();
-                if (!start.isBefore(endExclusive)) {
-                    endExclusive = start.plusMonths(1);
-                }
-            }
-        }
+        LocalDateTime effectiveStartAt = normalizedRequest.getEffectiveStartAt();
+        String normalizedMode = normalizedRequest.getMode();
+        String normalizedObjective = normalizedRequest.getObjective();
+        Set<Long> insertOrderIdSet = normalizedRequest.getInsertOrderIds();
+        Set<Long> scopedLineIds = normalizedRequest.getScopedLineIds();
+        Map<Long, LocalDateTime> orderStartTimes = normalizedRequest.getOrderStartTimes();
 
         List<ProductionOrder> openOrders = productionOrderService.list(new LambdaQueryWrapper<ProductionOrder>()
                 .in(ProductionOrder::getStatus, ProductionOrderStatus.openStatusFilterValues())
@@ -1046,39 +1042,6 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 .thenComparingInt(RingPairDemand::deliveryUrgencyDays)
                 .thenComparing(RingPairDemand::maxRequired, Comparator.reverseOrder()));
         return pairDemands;
-    }
-
-    private String normalizeMode(String planMode) {
-        if (planMode == null || planMode.trim().isEmpty()) {
-            return "AUTO";
-        }
-        String normalized = planMode.trim().toUpperCase();
-        return "INSERT".equals(normalized) ? "INSERT" : "AUTO";
-    }
-
-    private String normalizeObjective(String objective) {
-        if (objective == null || objective.trim().isEmpty()) {
-            return OBJECTIVE_MIN_LINE;
-        }
-        String normalized = objective.trim().toLowerCase(Locale.ROOT);
-        if (OBJECTIVE_LEGACY_CAPACITY.equals(normalized)) {
-            return OBJECTIVE_LEGACY_CAPACITY;
-        }
-        return OBJECTIVE_MIN_LINE;
-    }
-
-    private Set<Long> normalizeLongSet(List<Long> values) {
-        if (values == null || values.isEmpty()) {
-            return Collections.emptySet();
-        }
-        return values.stream().filter(Objects::nonNull).collect(Collectors.toSet());
-    }
-
-    private Set<Long> normalizeLineScope(String lineScope, List<Long> lineIds) {
-        if (!"PARTIAL".equalsIgnoreCase(lineScope)) {
-            return Collections.emptySet();
-        }
-        return normalizeLongSet(lineIds);
     }
 
     private int calculateSqueezedOrderCount(List<DemandItem> demands) {
