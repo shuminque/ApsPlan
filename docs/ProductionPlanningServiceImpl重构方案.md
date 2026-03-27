@@ -1,38 +1,37 @@
-# ProductionPlanningServiceImpl 重构方案（基于当前代码现状，2026-03）
+# ProductionPlanningServiceImpl 重构方案（当前完成态 + 待办态，2026-03）
 
-> 目标：**不改变当前接口与业务口径**的前提下，将 `ProductionPlanningServiceImpl` 从“巨型流程类”演进为“可测试、可扩展、可灰度切换”的排产引擎架构。
+> 目标：**不改变当前接口与业务口径**的前提下，持续推进 `ProductionPlanningServiceImpl` 从“巨型流程类”演进为“可测试、可扩展、可灰度切换”的排产引擎架构。
 
 ---
 
-## 1. 当前代码现状（按最新实现复盘）
+## 0. 当前完成项（as-is）
 
-`ProductionPlanningServiceImpl` 当前约 1500+ 行，集中承担了以下职责：
+> 生效基线：截至 **2026-03-27**，Iteration 1/2 已落地，以下结构为当前有效实现。
 
-1. **接口编排与参数归一**
-   - `generatePlanPreview(...)` 同时处理：日期纠偏、`planMode` 标准化、`freezeHours` 冻结窗口、`lineScope` 与 `orderStartTimes` 等。
+- `PlanningInputAssembler`
+  - 路径：`src/main/java/com/depository_manage/service/aps/planning/infra/PlanningInputAssembler.java`
+  - 状态：已承接输入归一、库存/班次/产能准备等输入装配职责。
+- `PlanningEngineV1`
+  - 路径：`src/main/java/com/depository_manage/service/aps/planning/domain/engine/PlanningEngineV1.java`
+  - 状态：作为 v1 基线引擎保留，用于稳定回滚与结果对照。
+- `PlanningEngineV2`
+  - 路径：`src/main/java/com/depository_manage/service/aps/planning/domain/engine/PlanningEngineV2.java`
+  - 状态：承接已拆出的核心求解流程（行为冻结基线下持续收敛）。
+- `PlanningResultMapper`
+  - 路径：`src/main/java/com/depository_manage/service/aps/planning/api/PlanningResultMapper.java`
+  - 状态：统一负责输出 DTO 组装与指标映射。
+- `ProductionPlanningServiceImpl`（orchestrator）
+  - 路径：`src/main/java/com/depository_manage/service/impl/ProductionPlanningServiceImpl.java`
+  - 状态：作为编排层，负责参数标准化、路由与调用串联。
 
-2. **数据准备**
-   - 订单 / 安全库存 / 在库查询（`queryCurrentInventoryByKey`）
-   - 班次工时推断（`buildShiftHours` + fallback 逻辑）
-   - 产线产能模型（`buildModelCapacities`）
+---
 
-3. **规则计算主循环**
-   - 需求构建（`buildDemands`）
-   - LA/LB 配对（`buildRingPairDemands` + `schedulePairedBarDemands`）
-   - 候选线排序与最少启线（`prioritizeCandidateLines` + `LineActivationPlan`）
-   - 逐天扣减产能（`assignDemandToLines`）
+## 1. 历史现状（已过期，仅供追溯）
 
-4. **结果组装与指标计算**
-   - `mergeSlicesToEvents` / `buildOrderPreviewRows` / `buildDailyPreviewRows`
-   - `squeezedOrderCount` / `delayedDays` / `insertFulfillmentRate`
+> **生效日期：2026-03-01（历史快照）**  
+> **状态：已过期（自 2026-03-27 起不再代表当前实现）**
 
-5. **领域模型内嵌在实现类中**
-   - `DemandItem` / `RingPairDemand` / `PlanSlice` / `LineDayKey` / `LineCapacity` 等内部类，复用和测试成本高。
-
-### 现状结论
-
-- 当前实现已具备较完整排产能力，但**可维护性与可验证性不足**。
-- 若继续叠加新规则（换型成本、交期罚分、设备约束），单类继续膨胀风险很高。
+历史上，`ProductionPlanningServiceImpl` 曾约 1500+ 行并集中承担：接口编排、数据准备、规则计算主循环、结果组装与领域模型内嵌等职责。该描述用于解释重构背景，不再作为当前代码事实依据。
 
 ---
 
@@ -86,69 +85,18 @@ com.depository_manage.service.aps.planning
 
 ### 角色说明
 
-- **ApplicationService**：只做参数归一、调用编排、异常控制、开关路由（v1/v2）
+- **ApplicationService**：只做参数归一、调用编排、异常控制、开关路由（v1/v2/shadow）
 - **InputAssembler**：统一准备 `PlanningContext`
 - **PlanningEngine**：纯算法入口（可独立单测）
 - **ResultMapper**：保持当前响应 DTO 口径不变
 
 ---
 
-## 4. 分阶段落地（建议 5 个迭代）
+## 4. 后续重点（to-be）
 
-## Iteration 0：先补回归护栏（必做）
+> 当前阶段不再讨论“大拆分是否要做”，而是围绕已落地 v1/v2 架构做收敛与增强。
 
-### 工作项
-
-- 建 8~12 组固定样例（AUTO / INSERT / 冻结窗口 / 部分产线 / 无班次fallback / LA-LB 配对）
-- 固化关键断言：
-  - `events` 数量、总产量
-  - `orders` 的 required/planned/plannedDays
-  - `dailyOutputs` 日分布
-  - `squeezedOrderCount` / `delayedDays` / `insertFulfillmentRate`
-- 引入固定时钟（替代散落的 `LocalDate.now()` 直接调用）保证对比稳定
-
-### 验收标准
-
-- 同一输入重复运行结果稳定
-- 可自动比较旧实现与新实现输出差异
-
----
-
-## Iteration 1：拆输入与输出（低风险）
-
-### 工作项
-
-- 抽 `PlanningInputAssembler`
-  - 迁移：`queryCurrentInventoryByKey` / `buildShiftHours` / `buildModelCapacities` / 各类 normalize
-- 抽 `PlanningResultMapper`
-  - 迁移：`mergeSlicesToEvents` / `buildOrderPreviewRows` / `buildDailyPreviewRows` / 指标计算
-- `ProductionPlanningServiceImpl` 暂做 orchestrator（串联调用）
-
-### 验收标准
-
-- Controller 与前端零改动
-- 现有输出字段与口径保持一致
-
----
-
-## Iteration 2：抽离求解引擎（中风险）
-
-### 工作项
-
-- 引入 `PlanningEngine#plan(PlanningContext)`
-- 迁移核心算法：
-  - `buildDemands`
-  - LA/LB 配对与棒材分配
-  - 候选线排序、最少启线、逐日分配、capacity 扣减
-- 内部类迁移到 `domain.model`（字段保持一致，先“行为冻结”）
-
-### 验收标准
-
-- 旧实现 vs 新引擎，在 golden case 下 `slices` 逐条一致（允许排序后比对）
-
----
-
-## Iteration 3：v2 稳定性收敛（中高风险）
+## 4.1 v2 稳定性收敛（最高优先级）
 
 ### 工作项
 
@@ -161,9 +109,9 @@ com.depository_manage.service.aps.planning
 
 ### 验收标准
 
-- v2 满足稳定门槛后，才允许进入后续能力增强迭代
+- v2 满足稳定门槛后，才允许进入策略增强
 
-## Iteration 4：策略接口化（中高风险）
+## 4.2 策略接口化（保持 behavior freeze）
 
 ### 工作项
 
@@ -178,12 +126,12 @@ com.depository_manage.service.aps.planning
 - 默认策略结果与稳定版 v2 一致
 - 可通过配置切换策略，但默认不切
 
-## Iteration 5：可解释性 + 观测（增值）
+## 4.3 diagnostics 增强（保持 behavior freeze）
 
 ### 工作项
 
-- **在策略接口化完成后**，`PlanningResult` 增加 `diagnostics`
-  - 未满足原因：NO_MATCHING_LINE / CAPACITY_EXHAUSTED / FROZEN_WINDOW
+- 在不改变既有排产语义前提下，`PlanningResult` 增加 `diagnostics`
+  - 未满足原因：`NO_MATCHING_LINE` / `CAPACITY_EXHAUSTED` / `FROZEN_WINDOW`
   - 分配轨迹：候选线排序、激活线、最终分配量
 - 增加关键指标埋点
   - fulfillment rate
@@ -193,15 +141,20 @@ com.depository_manage.service.aps.planning
 ### 验收标准
 
 - 生产问题可追溯到“需求-候选线-分配”链路
+- 对既有行为口径无破坏（behavior freeze）
 
 ---
 
 ## 5. 发布与回滚策略
 
-- 配置开关：`aps.planning.engine=v1|v2`
+- 配置开关：`aps.planning.engine=v1|v2|shadow`
+- 当前可用模式与用途：
+  - `v1`：稳定基线路径；问题场景快速回滚。
+  - `v2`：新引擎正式执行路径；在门槛满足后逐步放量。
+  - `shadow`：双跑比对模式（以 v1 为主输出，v2 旁路计算并记录差异）。
 - 灰度流程：
-  1. `v2` shadow run（只算不落）
-  2. 日志比对稳定后小流量切换
+  1. `shadow` 先行（只算不落）
+  2. 日志比对稳定后小流量切 `v2`
   3. 全量切换后保留 `v1` 至少 1~2 个版本
 
 ---
@@ -226,19 +179,17 @@ com.depository_manage.service.aps.planning
 
 ---
 
-## 7. 建议的执行顺序（务实版）
+## 7. 建议执行顺序（务实版）
 
-1. 先完成 Iteration 0（黄金样例 + 固定时钟）
-2. 再做 Iteration 1（输入/输出拆分）
-3. 通过后推进 Iteration 2（抽引擎）
-4. v2 稳定后再做 Iteration 4（策略化）
-5. 最后做 Iteration 5（可解释性与观测）
+1. 优先完成 v2 稳定性收敛（含 shadow 比对与回归补齐）
+2. 稳定后推进策略接口化（默认策略与 v2 行为冻结一致）
+3. 最后做 diagnostics 与观测增强（不改变业务语义）
 
-> 关键原则：**先可对比，再可重构；先保行为，再谈优化**。
+> 关键原则：**先稳定、再抽象、后增强；先保行为，再谈优化**。
 
 ---
 
-## 8. 任务拆分与验收红线（新增）
+## 8. 任务拆分与验收红线
 
 为保障回归效率与回滚可控，后续任务必须按类型分轨执行：
 
@@ -251,6 +202,14 @@ com.depository_manage.service.aps.planning
 
 1. 单个 PR 只能属于一种任务类型，不得混合提交；
 2. `LineActivationPolicy/MinimalLineActivationPolicy` 属于功能增强任务，且前置条件为“v2 已稳定”；
-3. diagnostics（NO_MATCHING_LINE/CAPACITY_EXHAUSTED/FROZEN_WINDOW + 分配轨迹）属于独立功能增强任务；
+3. diagnostics（`NO_MATCHING_LINE/CAPACITY_EXHAUSTED/FROZEN_WINDOW` + 分配轨迹）属于独立功能增强任务；
 4. `plannedQuantity` 语义修复单独立项，不并入重构任务；
 5. 验收时按“重构链路”和“增强链路”分别回归，分别给出回滚方案。
+
+---
+
+## 9. 文档维护约定
+
+- 每次涉及排产重构的 PR，**必须同步更新本文件中的“当前完成项（as-is）”与阶段状态**。
+- 若某节内容仅为历史描述，需显式标注“已过期”与对应生效日期。
+- 若新增运行模式、策略开关或 diagnostics 字段，需在本文件“发布与回滚策略”与“后续重点”中同步登记。
