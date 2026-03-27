@@ -148,11 +148,26 @@ com.depository_manage.service.aps.planning
 
 ---
 
-## Iteration 3：策略接口化（中高风险）
+## Iteration 3：v2 稳定性收敛（中高风险）
 
 ### 工作项
 
-- 提炼 `LineActivationPolicy`
+- 持续执行 v1/v2 输出比对，收敛差异并补齐回归用例
+- 完成灰度阶段稳定性观察（shadow run + 小流量）
+- 固化 v2 稳定门槛：
+  - 关键指标波动在可接受范围
+  - 回归样例全量通过
+  - 线上问题可定位可回滚
+
+### 验收标准
+
+- v2 满足稳定门槛后，才允许进入后续能力增强迭代
+
+## Iteration 4：策略接口化（中高风险）
+
+### 工作项
+
+- **仅在 v2 稳定后**提炼 `LineActivationPolicy`
 - 将当前 `LineActivationPlan` 行为落到 `MinimalLineActivationPolicy`（默认）
 - 预留策略扩展：
   - `DueDateFirstPolicy`
@@ -160,16 +175,14 @@ com.depository_manage.service.aps.planning
 
 ### 验收标准
 
-- 默认策略结果与 v1 一致
+- 默认策略结果与稳定版 v2 一致
 - 可通过配置切换策略，但默认不切
 
----
-
-## Iteration 4：可解释性 + 观测（增值）
+## Iteration 5：可解释性 + 观测（增值）
 
 ### 工作项
 
-- `PlanningResult` 增加 `diagnostics`
+- **在策略接口化完成后**，`PlanningResult` 增加 `diagnostics`
   - 未满足原因：NO_MATCHING_LINE / CAPACITY_EXHAUSTED / FROZEN_WINDOW
   - 分配轨迹：候选线排序、激活线、最终分配量
 - 增加关键指标埋点
@@ -218,6 +231,26 @@ com.depository_manage.service.aps.planning
 1. 先完成 Iteration 0（黄金样例 + 固定时钟）
 2. 再做 Iteration 1（输入/输出拆分）
 3. 通过后推进 Iteration 2（抽引擎）
-4. 最后做 Iteration 3/4（策略化与可解释性）
+4. v2 稳定后再做 Iteration 4（策略化）
+5. 最后做 Iteration 5（可解释性与观测）
 
 > 关键原则：**先可对比，再可重构；先保行为，再谈优化**。
+
+---
+
+## 8. 任务拆分与验收红线（新增）
+
+为保障回归效率与回滚可控，后续任务必须按类型分轨执行：
+
+### 8.1 任务类型
+
+- **重构任务**：仅允许结构调整、职责拆分、可测试性提升；不改变业务语义。
+- **功能增强任务**：新增策略、diagnostics、可观测性字段或行为语义修复。
+
+### 8.2 强制规则
+
+1. 单个 PR 只能属于一种任务类型，不得混合提交；
+2. `LineActivationPolicy/MinimalLineActivationPolicy` 属于功能增强任务，且前置条件为“v2 已稳定”；
+3. diagnostics（NO_MATCHING_LINE/CAPACITY_EXHAUSTED/FROZEN_WINDOW + 分配轨迹）属于独立功能增强任务；
+4. `plannedQuantity` 语义修复单独立项，不并入重构任务；
+5. 验收时按“重构链路”和“增强链路”分别回归，分别给出回滚方案。
