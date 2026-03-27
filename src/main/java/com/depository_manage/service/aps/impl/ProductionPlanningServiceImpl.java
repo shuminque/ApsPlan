@@ -19,11 +19,13 @@ import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.SafetyStockService;
 import com.depository_manage.service.aps.ShiftCalendarService;
 import com.depository_manage.utils.CraftMappingUtil;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -53,6 +55,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private static final String OBJECTIVE_MIN_LINE = "min_line";
     private static final String OBJECTIVE_LEGACY_CAPACITY = "legacy_capacity";
     private static final BigDecimal DAILY_TARGET_BUFFER = new BigDecimal("1.05");
+    private Clock clock = Clock.systemDefaultZone();
+    private ZoneId zoneId = ZoneId.systemDefault();
 
     @Resource
     private ProductionOrderService productionOrderService;
@@ -66,6 +70,20 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private ProductionLineMapper productionLineMapper;
     @Resource
     private BearingRecordService bearingRecordService;
+
+    @Autowired(required = false)
+    public void setClock(Clock clock) {
+        if (clock != null) {
+            this.clock = clock;
+        }
+    }
+
+    @Autowired(required = false)
+    public void setZoneId(ZoneId zoneId) {
+        if (zoneId != null) {
+            this.zoneId = zoneId;
+        }
+    }
 
     @Override
     public List<CalendarEventDTO> generatePlanCalendarEvents(String startDate, String endDate) {
@@ -95,7 +113,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             return new PlanPreviewResponseDTO();
         }
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         LocalDate start = requestStart.isBefore(today) ? today : requestStart;
         LocalDateTime effectiveStartAt = requestStartAt == null ? null : requestStartAt.withSecond(0).withNano(0);
         if (effectiveStartAt != null && effectiveStartAt.toLocalDate().isBefore(start)) {
@@ -295,7 +313,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 boolean locked = insertMode && order.getId() != null && insertOrderIdSet.contains(order.getId());
                 result.add(new DemandItem(order.getId(), order.getCustomer(), order.getOuterInnerRing(), order.getModel(), order.getCraft(), required,
                         currentInventory, orderCount, orderDemandQuantity, safetyTargetQty, order.getDeliveryDate(),
-                        Math.max(priority, locked ? 2 : priority), locked, orderStartAt));
+                        Math.max(priority, locked ? 2 : priority), locked, orderStartAt, LocalDate.now(clock), zoneId));
             }
 
             if (safetyRequired > 0) {
@@ -311,7 +329,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                         .orElse(0);
                 result.add(new DemandItem(null, any.getCustomer(), any.getOuterInnerRing(), any.getModel(), any.getCraft(), safetyRequired,
                         currentInventory, orderCount, orderDemandQuantity, safetyTargetQty, earliestDelivery, groupPriority, false,
-                        normalizePlanStart(defaultStartAt)));
+                        normalizePlanStart(defaultStartAt), LocalDate.now(clock), zoneId));
             }
         }
 
@@ -500,8 +518,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         if (schedule.getStartDateTime() == null || schedule.getEndDateTime() == null) {
             return null;
         }
-        LocalDateTime scheduleStart = schedule.getStartDateTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
-        LocalDateTime scheduleEnd = schedule.getEndDateTime().toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+        LocalDateTime scheduleStart = toLocalDateTime(schedule.getStartDateTime());
+        LocalDateTime scheduleEnd = toLocalDateTime(schedule.getEndDateTime());
         if (planStartAt != null && scheduleStart.toLocalDate().equals(planStartAt.toLocalDate()) && scheduleEnd.isAfter(planStartAt)) {
             scheduleStart = scheduleStart.isBefore(planStartAt) ? planStartAt : scheduleStart;
         }
@@ -904,6 +922,13 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         return LocalDate.parse(normalized.substring(0, 10)).atStartOfDay();
     }
 
+    private LocalDateTime toLocalDateTime(Date dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return dateTime.toInstant().atZone(zoneId).toLocalDateTime();
+    }
+
     private LocalDate toLocalDate(String dateTime) {
         if (dateTime == null || dateTime.length() < 10) {
             return null;
@@ -1227,6 +1252,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         private final Date earliestDelivery;
         private final Set<LocalDate> plannedDays = new HashSet<>();
         private final LocalDateTime earliestStartAt;
+        private final LocalDate currentDate;
+        private final ZoneId zoneId;
 
         private DemandItem(Long orderId,
                            String customer,
@@ -1241,7 +1268,9 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                            Date earliestDelivery,
                            int priority,
                            boolean lockedInsert,
-                           LocalDateTime earliestStartAt) {
+                           LocalDateTime earliestStartAt,
+                           LocalDate currentDate,
+                           ZoneId zoneId) {
             this.orderId = orderId;
             this.customer = customer;
             this.outerInnerRing = outerInnerRing;
@@ -1258,6 +1287,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             this.plannedQuantity = 0;
             this.earliestDelivery = earliestDelivery;
             this.earliestStartAt = earliestStartAt == null ? null : earliestStartAt.withNano(0);
+            this.currentDate = currentDate;
+            this.zoneId = zoneId == null ? ZoneId.systemDefault() : zoneId;
         }
 
         private Long orderId() {
@@ -1298,14 +1329,14 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 return Integer.MAX_VALUE;
             }
             LocalDate d = earliestDeliveryDate();
-            return (int) ChronoUnit.DAYS.between(LocalDate.now(), d);
+            return (int) ChronoUnit.DAYS.between(currentDate, d);
         }
 
         private LocalDate earliestDeliveryDate() {
             if (earliestDelivery == null) {
                 return null;
             }
-            return earliestDelivery.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+            return earliestDelivery.toInstant().atZone(zoneId).toLocalDate();
         }
 
         @Override
