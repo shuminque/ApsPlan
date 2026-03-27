@@ -27,6 +27,8 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -46,6 +48,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ProductionPlanningPlanPreviewSnapshotTest {
+    private static final ZoneId TEST_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-01-15T00:00:00Z"), TEST_ZONE);
 
     @Mock
     private ProductionOrderService productionOrderService;
@@ -65,6 +69,8 @@ class ProductionPlanningPlanPreviewSnapshotTest {
     @BeforeEach
     void setUp() {
         service = new ProductionPlanningServiceImpl();
+        service.setClock(FIXED_CLOCK);
+        service.setZoneId(TEST_ZONE);
         ReflectionTestUtils.setField(service, "productionOrderService", productionOrderService);
         ReflectionTestUtils.setField(service, "safetyStockService", safetyStockService);
         ReflectionTestUtils.setField(service, "shiftCalendarService", shiftCalendarService);
@@ -72,7 +78,7 @@ class ProductionPlanningPlanPreviewSnapshotTest {
         ReflectionTestUtils.setField(service, "productionLineMapper", productionLineMapper);
         ReflectionTestUtils.setField(service, "bearingRecordService", bearingRecordService);
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(FIXED_CLOCK);
         when(productionOrderService.list(any())).thenReturn(Arrays.asList(
                 newOrder(1001L, "S1", "LA", "6205", 80, today.plusDays(2), CraftMappingUtil.PIPE_CRAFT),
                 newOrder(1002L, "S1", "LB", "6205", 50, today.plusDays(3), CraftMappingUtil.PIPE_CRAFT)
@@ -92,7 +98,7 @@ class ProductionPlanningPlanPreviewSnapshotTest {
 
     @Test
     void shouldMatchPlanPreviewSnapshot() throws Exception {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(FIXED_CLOCK);
         PlanPreviewResponseDTO response = service.generatePlanPreview(today.toString(), today.plusDays(4).toString());
 
         ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
@@ -160,7 +166,7 @@ class ProductionPlanningPlanPreviewSnapshotTest {
         if (value == null) {
             return null;
         }
-        LocalDate base = LocalDate.now();
+        LocalDate base = LocalDate.now(FIXED_CLOCK);
         for (int i = 0; i <= 15; i++) {
             String day = base.plusDays(i).toString();
             value = value.replace(day, "D" + i);
@@ -179,7 +185,7 @@ class ProductionPlanningPlanPreviewSnapshotTest {
         order.setAssignedQuantity(0);
         order.setStatus("0");
         order.setPriority("普通");
-        order.setDeliveryDate(Date.from(due.atStartOfDay(ZoneId.systemDefault()).toInstant()));
+        order.setDeliveryDate(Date.from(due.atStartOfDay(TEST_ZONE).toInstant()));
         return order;
     }
 
