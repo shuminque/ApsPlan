@@ -53,8 +53,8 @@ class ProductionPlanningCoreAlgorithmTest {
         Object lb = newDemand(12L, "C1", "LB", "LB6205", 60, CraftMappingUtil.BAR_CRAFT);
         List<Object> demands = Arrays.asList(la, lb);
 
-        Map<String, List<ProductionPlanningServiceImpl.LineCapacity>> caps = new HashMap<String, List<ProductionPlanningServiceImpl.LineCapacity>>();
-        caps.put("6205", Collections.singletonList(ProductionPlanningServiceImpl.LineCapacity.of(3L, "L3", "6205", new BigDecimal("10"), 1, CraftMappingUtil.BAR_CRAFT)));
+        Map<String, List<LineCapacity>> caps = new HashMap<String, List<LineCapacity>>();
+        caps.put("6205", Collections.singletonList(LineCapacity.of(3L, "L3", "6205", new BigDecimal("10"), 1, CraftMappingUtil.BAR_CRAFT)));
 
         @SuppressWarnings("unchecked")
         Map<Object, Object> matches = (Map<Object, Object>) ReflectionTestUtils.invokeMethod(service, "buildBarLineMatchesByDemand", demands, caps);
@@ -66,12 +66,12 @@ class ProductionPlanningCoreAlgorithmTest {
 
     @Test
     void shouldActivateMinimalLinesForMinLineObjective() throws Exception {
-        List<ProductionPlanningServiceImpl.LineCapacity> lines = Arrays.asList(
-                ProductionPlanningServiceImpl.LineCapacity.of(1L, "L1", "6205", new BigDecimal("10"), 1, CraftMappingUtil.PIPE_CRAFT),
-                ProductionPlanningServiceImpl.LineCapacity.of(2L, "L2", "6205", new BigDecimal("10"), 2, CraftMappingUtil.PIPE_CRAFT)
+        List<LineCapacity> lines = Arrays.asList(
+                LineCapacity.of(1L, "L1", "6205", new BigDecimal("10"), 1, CraftMappingUtil.PIPE_CRAFT),
+                LineCapacity.of(2L, "L2", "6205", new BigDecimal("10"), 2, CraftMappingUtil.PIPE_CRAFT)
         );
 
-        Class<?> lineDayKeyClass = Class.forName("com.depository_manage.service.aps.impl.ProductionPlanningServiceImpl$LineDayKey");
+        Class<?> lineDayKeyClass = Class.forName("com.depository_manage.service.aps.impl.LineDayKey");
         java.lang.reflect.Constructor<?> ctor = lineDayKeyClass.getDeclaredConstructor(Long.class, LocalDate.class);
         ctor.setAccessible(true);
         LocalDate day = LocalDate.now();
@@ -80,7 +80,7 @@ class ProductionPlanningCoreAlgorithmTest {
         remaining.put(ctor.newInstance(2L, day), 120);
 
         @SuppressWarnings("unchecked")
-        List<ProductionPlanningServiceImpl.LineCapacity> picked = (List<ProductionPlanningServiceImpl.LineCapacity>) ReflectionTestUtils.invokeMethod(service,
+        List<LineCapacity> picked = (List<LineCapacity>) ReflectionTestUtils.invokeMethod(service,
                 "prioritizeCandidateLines",
                 "AUTO|C1|LA|6205",
                 lines,
@@ -100,12 +100,12 @@ class ProductionPlanningCoreAlgorithmTest {
             java.lang.reflect.Constructor<?> ctor = ReflectionUtilsHolder.demandItemClass().getDeclaredConstructor(
                     Long.class, String.class, String.class, String.class, String.class,
                     int.class, int.class, int.class, int.class, int.class, Date.class,
-                    int.class, boolean.class, LocalDateTime.class);
+                    int.class, boolean.class, LocalDateTime.class, LocalDate.class, ZoneId.class);
             ctor.setAccessible(true);
             return ctor.newInstance(
                     id, customer, ring, model, craft, required, 0, 1, required, 0,
                     Date.from(LocalDate.now().plusDays(3).atStartOfDay(ZoneId.systemDefault()).toInstant()),
-                    0, false, LocalDateTime.now());
+                    0, false, LocalDateTime.now(), LocalDate.now(), ZoneId.systemDefault());
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
@@ -131,7 +131,11 @@ class ProductionPlanningCoreAlgorithmTest {
             try {
                 return Class.forName("com.depository_manage.service.aps.impl.ProductionPlanningServiceImpl$DemandItem");
             } catch (ClassNotFoundException e) {
-                throw new IllegalStateException(e);
+                try {
+                    return Class.forName("com.depository_manage.service.aps.impl.DemandItem");
+                } catch (ClassNotFoundException ex) {
+                    throw new IllegalStateException(ex);
+                }
             }
         }
     }
