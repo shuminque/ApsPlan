@@ -341,7 +341,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 .thenComparing(Comparator.comparingInt((DemandItem d) -> d.priority()).reversed())
                 .thenComparing(DemandItem::earliestStartDate, Comparator.nullsLast(LocalDate::compareTo))
                 .thenComparingInt(DemandItem::deliveryUrgencyDays)
-                .thenComparing((DemandItem d) -> d.required, Comparator.reverseOrder()));
+                .thenComparing((DemandItem d) -> d.required(), Comparator.reverseOrder()));
         return result;
     }
 
@@ -729,7 +729,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
             }
             List<LineCapacity> prioritizedLines = prioritizeCandidateLines(pairDemand.activationKey(), pairDemand.sharedBarLines(), day,
                     endExclusive, pairDemand.remaining(), remainingCapacityByLineDay, activationPlanByKey, objective);
-            assignDemandToLines(day, pairDemand, prioritizedLines, remainingCapacityByLineDay,
+            assignDemandToLines(day, (PlannableDemand) pairDemand, prioritizedLines, remainingCapacityByLineDay,
                     (line, assignQty) -> {
                         plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LA", pairDemand.laModel(), assignQty, line.capacityPerHour));
                         plannedSlices.add(new PlanSlice(day, line.lineId, line.lineName, pairDemand.customer(), "LB", pairDemand.lbModel(), assignQty, line.capacityPerHour));

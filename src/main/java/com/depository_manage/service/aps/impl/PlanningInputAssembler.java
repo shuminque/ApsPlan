@@ -303,10 +303,10 @@ class PlanningInputAssembler {
         return compareLinePriority(left, right) <= 0 ? left : right;
     }
 
-    private int compareLinePriority(LineCapacity left,
-                                    LineCapacity right) {
-        return Integer.compare(Objects.requireNonNullElse(left.priority, Integer.MAX_VALUE),
-                Objects.requireNonNullElse(right.priority, Integer.MAX_VALUE));
+    private int compareLinePriority(LineCapacity left, LineCapacity right) {
+        int leftPriority = left.priority != null ? left.priority : Integer.MAX_VALUE;
+        int rightPriority = right.priority != null ? right.priority : Integer.MAX_VALUE;
+        return Integer.compare(leftPriority, rightPriority);
     }
 
     private void sortLineCapacities(List<LineCapacity> lineCapacities) {

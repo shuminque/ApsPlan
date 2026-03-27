@@ -201,7 +201,7 @@ public class PlanningEngineV1 implements PlanningEngine {
 
         result.sort(Comparator
                 .comparing((DemandItem d) -> d.lockedInsert()).reversed()
-                .thenComparing(Comparator.comparingInt((DemandItem d) -> d.priority).reversed())
+                .thenComparing(Comparator.comparingInt((DemandItem d) -> d.priority()).reversed())
                 .thenComparing(DemandItem::earliestStartDate, Comparator.nullsLast(LocalDate::compareTo))
                 .thenComparingInt(DemandItem::deliveryUrgencyDays)
                 .thenComparing((DemandItem d) -> d.required(), Comparator.reverseOrder()));
@@ -282,7 +282,7 @@ public class PlanningEngineV1 implements PlanningEngine {
 
         pairDemands.sort(Comparator
                 .comparing((RingPairDemand d) -> d.lockedInsert()).reversed()
-                .thenComparing(Comparator.comparingInt((RingPairDemand d) -> d.priority).reversed())
+                .thenComparing(Comparator.comparingInt((RingPairDemand d) -> d.priority()).reversed())
                 .thenComparingInt(RingPairDemand::deliveryUrgencyDays)
                 .thenComparing(RingPairDemand::maxRequired, Comparator.reverseOrder()));
         return pairDemands;
