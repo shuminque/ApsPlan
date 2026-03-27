@@ -2,6 +2,7 @@ package com.depository_manage.service.aps;
 
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
+import com.depository_manage.service.aps.planning.PlanningRequest;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,6 +19,8 @@ public interface ProductionPlanningService {
     List<CalendarEventDTO> generatePlanCalendarEvents(String startDate, String endDate);
 
     PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate);
+
+    PlanPreviewResponseDTO generatePlanPreview(PlanningRequest request);
 
     PlanPreviewResponseDTO generatePlanPreview(String startDate,
                                                String endDate,

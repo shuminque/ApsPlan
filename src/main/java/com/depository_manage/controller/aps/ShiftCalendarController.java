@@ -1,20 +1,16 @@
 package com.depository_manage.controller.aps;
 
 import com.depository_manage.entity.aps.ShiftSchedule;
-import com.depository_manage.exception.MyException;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.ProductionPlanService;
 import com.depository_manage.service.aps.ShiftCalendarService;
+import com.depository_manage.service.aps.planning.PlanningRequest;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +37,7 @@ public class ShiftCalendarController {
 
     @PostMapping("/plan/preview")
     public PlanPreviewResponseDTO previewPlan(@RequestBody PlanRangeRequest request, HttpSession session) {
-        PlanPreviewResponseDTO preview = productionPlanningService.generatePlanPreview(
+        PlanPreviewResponseDTO preview = productionPlanningService.generatePlanPreview(new PlanningRequest(
                 request.getStart(),
                 request.getEnd(),
                 request.getPlanMode(),
@@ -49,8 +45,8 @@ public class ShiftCalendarController {
                 request.getLineScope(),
                 request.getLineIds(),
                 request.getFreezeHours(),
-                request.parseOrderStartTimes(),
-                request.getObjective());
+                request.getOrderStartTimes(),
+                request.getObjective()));
         PREVIEW_CACHE.put(session.getId(), preview.getEvents());
         return preview;
     }
@@ -187,51 +183,5 @@ public class ShiftCalendarController {
             this.objective = objective;
         }
 
-        public Map<Long, LocalDateTime> parseOrderStartTimes() {
-            if (orderStartTimes == null || orderStartTimes.isEmpty()) {
-                return new ConcurrentHashMap<>();
-            }
-            Map<Long, LocalDateTime> parsed = new ConcurrentHashMap<>();
-            for (Map.Entry<String, String> entry : orderStartTimes.entrySet()) {
-                String orderIdRaw = entry.getKey();
-                String startRaw = entry.getValue();
-                if (orderIdRaw == null || orderIdRaw.trim().isEmpty()) {
-                    throw new MyException(400, "orderStartTimes 包含空的订单ID");
-                }
-                if (startRaw == null || startRaw.trim().isEmpty()) {
-                    throw new MyException(400, "订单 " + orderIdRaw + " 的开始时间不能为空");
-                }
-                Long orderId;
-                try {
-                    orderId = Long.parseLong(orderIdRaw.trim());
-                } catch (NumberFormatException ex) {
-                    throw new MyException(400, "orderStartTimes 的订单ID必须是数字，错误值: " + orderIdRaw);
-                }
-                parsed.put(orderId, parseDateTime(startRaw.trim(), orderIdRaw));
-            }
-            return parsed;
-        }
-
-        private LocalDateTime parseDateTime(String value, String orderId) {
-            DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-            DateTimeFormatter minuteFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm");
-            DateTimeFormatter secondFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-            try {
-                if (value.length() == 10) {
-                    return LocalDate.parse(value, dateFormatter).atStartOfDay();
-                }
-                if (value.length() == 16) {
-                    return LocalDateTime.parse(value, minuteFormatter);
-                }
-                if (value.length() == 19) {
-                    return LocalDateTime.parse(value, secondFormatter);
-                }
-            } catch (DateTimeParseException ex) {
-                throw new MyException(400, "订单 " + orderId + " 的开始时间格式错误: " + value
-                        + "，仅支持 yyyy-MM-dd / yyyy-MM-ddTHH:mm / yyyy-MM-ddTHH:mm:ss");
-            }
-            throw new MyException(400, "订单 " + orderId + " 的开始时间格式错误: " + value
-                    + "，仅支持 yyyy-MM-dd / yyyy-MM-ddTHH:mm / yyyy-MM-ddTHH:mm:ss");
-        }
     }
 }
