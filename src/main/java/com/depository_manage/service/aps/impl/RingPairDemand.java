@@ -3,7 +3,7 @@ package com.depository_manage.service.aps.impl;
 import java.time.LocalDate;
 import java.util.List;
 
-public class RingPairDemand implements ProductionPlanningServiceImpl.PlannableDemand {
+public class RingPairDemand implements PlannableDemand {
     private final DemandItem laDemand;
     private final DemandItem lbDemand;
     private final String sharedSeries;

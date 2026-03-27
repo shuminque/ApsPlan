@@ -11,7 +11,7 @@ import java.util.Set;
 
 import static com.depository_manage.service.aps.impl.ProductionPlanningServiceImpl.normalizeCraft;
 
-public class DemandItem implements ProductionPlanningServiceImpl.PlannableDemand {
+public class DemandItem implements PlannableDemand {
     private final Long orderId;
     private final String customer;
     private final String outerInnerRing;
