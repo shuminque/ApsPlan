@@ -5,10 +5,12 @@ import com.depository_manage.entity.aps.ProductionLine;
 import com.depository_manage.entity.aps.ProductionLineModelConfig;
 import com.depository_manage.entity.aps.ProductionOrder;
 import com.depository_manage.entity.aps.ProductionOrderStatus;
+import com.depository_manage.entity.aps.ProductionLineRuntime;
 import com.depository_manage.entity.aps.SafetyStock;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
+import com.depository_manage.service.aps.ProductionLineRuntimeService;
 import com.depository_manage.service.BearingRecordService;
 import com.depository_manage.service.aps.ProductionOrderService;
 import com.depository_manage.service.aps.SafetyStockService;
@@ -43,6 +45,7 @@ class PlanningInputAssembler {
     private final ShiftCalendarService shiftCalendarService;
     private final ProductionLineModelConfigMapper modelConfigMapper;
     private final ProductionLineMapper productionLineMapper;
+    private final ProductionLineRuntimeService productionLineRuntimeService;
     private final BearingRecordService bearingRecordService;
     private final ZoneId zoneId;
 
@@ -51,6 +54,7 @@ class PlanningInputAssembler {
                            ShiftCalendarService shiftCalendarService,
                            ProductionLineModelConfigMapper modelConfigMapper,
                            ProductionLineMapper productionLineMapper,
+                           ProductionLineRuntimeService productionLineRuntimeService,
                            BearingRecordService bearingRecordService,
                            ZoneId zoneId) {
         this.productionOrderService = productionOrderService;
@@ -58,6 +62,7 @@ class PlanningInputAssembler {
         this.shiftCalendarService = shiftCalendarService;
         this.modelConfigMapper = modelConfigMapper;
         this.productionLineMapper = productionLineMapper;
+        this.productionLineRuntimeService = productionLineRuntimeService;
         this.bearingRecordService = bearingRecordService;
         this.zoneId = zoneId;
     }
@@ -69,7 +74,8 @@ class PlanningInputAssembler {
         if (openOrders.isEmpty()) {
             return new PlanningSnapshot(Collections.emptyList(), Collections.emptyList(), Collections.emptyMap(),
                     Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(),
-                    Collections.emptyList(), Collections.emptyList(), Collections.emptyMap(), Collections.emptyMap());
+                    Collections.emptyList(), Collections.emptyList(), Collections.emptyMap(), Collections.emptyMap(),
+                    Collections.emptyMap());
         }
 
         List<SafetyStock> safetyStocks = safetyStockService.list();
@@ -93,11 +99,14 @@ class PlanningInputAssembler {
         List<ProductionLine> productionLines = productionLineMapper.selectPageList(null, 0L, 1000L);
         Map<String, List<LineCapacity>> lineCapByModel = buildModelCapacities(
                 normalizedRequest.getScopedLineIds(), lineModelConfigs, productionLines);
+        Map<Long, PlanningSnapshot.LineRuntimeView> runtimeViewByLineId = buildRuntimeViewByLineId(
+                normalizedRequest.getScopedLineIds());
         Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(
-                start, planningCapacityEndExclusive, shiftHoursByDay, lineCapByModel);
+                start, planningCapacityEndExclusive, shiftHoursByDay, lineCapByModel, runtimeViewByLineId);
 
         return new PlanningSnapshot(openOrders, safetyStocks, orderByKey, safetyStockByKey, currentInventoryByKey,
-                shiftHoursByDay, lineModelConfigs, productionLines, lineCapByModel, remainingCapacityByLineDay);
+                shiftHoursByDay, lineModelConfigs, productionLines, lineCapByModel, remainingCapacityByLineDay,
+                runtimeViewByLineId);
     }
 
     private Map<LocalDate, BigDecimal> buildShiftHours(LocalDate start, LocalDate endExclusive, LocalDateTime planStartAt) {
@@ -266,9 +275,10 @@ class PlanningInputAssembler {
     }
 
     private Map<LineDayKey, Integer> buildRemainingCapacityByLineDay(LocalDate start,
-                                                                                                     LocalDate endExclusive,
-                                                                                                     Map<LocalDate, BigDecimal> shiftHoursByDay,
-                                                                                                     Map<String, List<LineCapacity>> lineCapByModel) {
+                                                                      LocalDate endExclusive,
+                                                                      Map<LocalDate, BigDecimal> shiftHoursByDay,
+                                                                      Map<String, List<LineCapacity>> lineCapByModel,
+                                                                      Map<Long, PlanningSnapshot.LineRuntimeView> runtimeViewByLineId) {
         Map<Long, LineCapacity> lineCapacityById = new HashMap<>();
         for (List<LineCapacity> capacities : lineCapByModel.values()) {
             for (LineCapacity capacity : capacities) {
@@ -281,14 +291,87 @@ class PlanningInputAssembler {
         while (cursor.isBefore(endExclusive)) {
             BigDecimal shiftHours = shiftHoursByDay.getOrDefault(cursor, DEFAULT_SHIFT_HOURS);
             for (LineCapacity lineCapacity : lineCapacityById.values()) {
-                int dayCapacity = lineCapacity.capacityPerHour.multiply(shiftHours)
+                BigDecimal effectiveCapacityPerHour = resolveEffectiveCapacityPerHour(lineCapacity, runtimeViewByLineId.get(lineCapacity.lineId));
+                int dayCapacity = effectiveCapacityPerHour.multiply(nonNegative(shiftHours))
                         .setScale(0, RoundingMode.FLOOR)
                         .intValue();
+                if (isLineStopped(runtimeViewByLineId.get(lineCapacity.lineId))
+                        || isInChangeoverWindow(runtimeViewByLineId.get(lineCapacity.lineId), cursor)) {
+                    dayCapacity = 0;
+                }
                 remainingCapacityByLineDay.put(new LineDayKey(lineCapacity.lineId, cursor), Math.max(dayCapacity, 0));
             }
             cursor = cursor.plusDays(1);
         }
         return remainingCapacityByLineDay;
+    }
+
+    private Map<Long, PlanningSnapshot.LineRuntimeView> buildRuntimeViewByLineId(Set<Long> scopedLineIds) {
+        if (productionLineRuntimeService == null) {
+            return Collections.emptyMap();
+        }
+        List<ProductionLineRuntime> runtimeList = productionLineRuntimeService.list(null);
+        if (runtimeList == null || runtimeList.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Long, PlanningSnapshot.LineRuntimeView> runtimeViewByLineId = new HashMap<>();
+        for (ProductionLineRuntime runtime : runtimeList) {
+            if (runtime == null || runtime.getLineId() == null) {
+                continue;
+            }
+            if (!scopedLineIds.isEmpty() && !scopedLineIds.contains(runtime.getLineId())) {
+                continue;
+            }
+            if (runtimeViewByLineId.containsKey(runtime.getLineId())) {
+                continue;
+            }
+            LocalDateTime changeoverStartTime = toLocalDateTime(runtime.getChangeoverStartTime());
+            LocalDateTime changeoverEndTime = toLocalDateTime(runtime.getChangeoverEndTime());
+            if (changeoverStartTime != null && changeoverEndTime != null && changeoverEndTime.isBefore(changeoverStartTime)) {
+                changeoverStartTime = null;
+                changeoverEndTime = null;
+            }
+            runtimeViewByLineId.put(runtime.getLineId(),
+                    PlanningSnapshot.LineRuntimeView.fromRuntime(runtime, changeoverStartTime, changeoverEndTime));
+        }
+        return runtimeViewByLineId;
+    }
+
+    private BigDecimal resolveEffectiveCapacityPerHour(LineCapacity lineCapacity, PlanningSnapshot.LineRuntimeView runtimeView) {
+        BigDecimal fallbackCapacity = nonNegative(lineCapacity.capacityPerHour);
+        if (runtimeView == null || runtimeView.getStatus() == null || runtimeView.getStatus() != 1) {
+            return fallbackCapacity;
+        }
+        BigDecimal runtimeCapacity = nonNegative(runtimeView.getCurrentCapacity());
+        if (runtimeCapacity.compareTo(BigDecimal.ZERO) > 0) {
+            return runtimeCapacity;
+        }
+        return fallbackCapacity;
+    }
+
+    private boolean isLineStopped(PlanningSnapshot.LineRuntimeView runtimeView) {
+        return runtimeView != null && runtimeView.getStatus() != null && runtimeView.getStatus() == 0;
+    }
+
+    private boolean isInChangeoverWindow(PlanningSnapshot.LineRuntimeView runtimeView, LocalDate day) {
+        if (runtimeView == null || runtimeView.getStatus() == null || runtimeView.getStatus() != 2) {
+            return false;
+        }
+        LocalDateTime start = runtimeView.getChangeoverStartTime();
+        LocalDateTime end = runtimeView.getChangeoverEndTime();
+        if (start == null || end == null || end.isBefore(start)) {
+            return true;
+        }
+        LocalDateTime dayStart = day.atStartOfDay();
+        LocalDateTime dayEnd = day.plusDays(1).atStartOfDay();
+        return start.isBefore(dayEnd) && end.isAfter(dayStart);
+    }
+
+    private BigDecimal nonNegative(BigDecimal value) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO;
+        }
+        return value;
     }
 
     private LineCapacity pickHigherCapacityLine(LineCapacity left,
