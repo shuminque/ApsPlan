@@ -1,26 +1,38 @@
 package com.depository_manage.controller.aps;
 
 import com.depository_manage.entity.aps.ShiftSchedule;
+import com.depository_manage.exception.MyException;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.ProductionPlanService;
 import com.depository_manage.service.aps.ShiftCalendarService;
 import com.depository_manage.service.aps.planning.PlanningRequest;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/shift")
 public class ShiftCalendarController {
 
-    private static final Map<String, List<CalendarEventDTO>> PREVIEW_CACHE = new ConcurrentHashMap<>();
+    private static final Logger log = LoggerFactory.getLogger(ShiftCalendarController.class);
+    private static final Map<String, PreviewSessionState> PREVIEW_CACHE = new ConcurrentHashMap<>();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Resource
     private ShiftCalendarService shiftCalendarService;
@@ -47,15 +59,41 @@ public class ShiftCalendarController {
                 request.getFreezeHours(),
                 request.getOrderStartTimes(),
                 request.getObjective()));
-        PREVIEW_CACHE.put(session.getId(), preview.getEvents());
+        PREVIEW_CACHE.put(session.getId(), new PreviewSessionState(
+                preview.getEvents(),
+                preview.getInsertSuggestion(),
+                LocalDateTime.now(),
+                resolveOperator(session)));
         return preview;
     }
 
+    @GetMapping("/plan/preview/insert-suggestion")
+    public PlanPreviewResponseDTO.InsertSuggestionDTO getInsertSuggestion(HttpSession session) {
+        PreviewSessionState previewState = PREVIEW_CACHE.get(session.getId());
+        if (previewState == null) {
+            throw new MyException("请先执行预览后再查询插队候选线");
+        }
+        return previewState.insertSuggestion == null
+                ? new PlanPreviewResponseDTO.InsertSuggestionDTO()
+                : previewState.insertSuggestion;
+    }
+
     @PostMapping("/plan/commit")
-    public int commitPlan(@RequestBody(required = false) List<CalendarEventDTO> selectedEvents, HttpSession session) {
-        List<CalendarEventDTO> toCommit = selectedEvents;
+    public int commitPlan(@RequestBody(required = false) Object requestBody, HttpSession session) {
+        CommitPlanRequest request = toCommitPlanRequest(requestBody);
+        List<CalendarEventDTO> toCommit = request.getSelectedEvents();
+        PreviewSessionState previewState = PREVIEW_CACHE.get(session.getId());
         if (toCommit == null || toCommit.isEmpty()) {
-            toCommit = PREVIEW_CACHE.getOrDefault(session.getId(), new ArrayList<>());
+            toCommit = previewState == null ? new ArrayList<>() : previewState.events;
+        }
+        validateSelectedInsertLines(request.getSelectedInsertLineIds(), previewState);
+        if (previewState != null && request.getSelectedInsertLineIds() != null && !request.getSelectedInsertLineIds().isEmpty()) {
+            log.info("insert-line-selection audit operator={}, selectedInsertLineIds={}, selectedAt={}, previewGeneratedAt={}, previewGeneratedBy={}",
+                    resolveOperator(session),
+                    request.getSelectedInsertLineIds(),
+                    LocalDateTime.now(),
+                    previewState.generatedAt,
+                    previewState.generatedBy);
         }
         int committed = productionPlanService.commitPlan(toCommit);
         PREVIEW_CACHE.remove(session.getId());
@@ -65,6 +103,53 @@ public class ShiftCalendarController {
     @DeleteMapping("/plan/preview")
     public void clearPreview(HttpSession session) {
         PREVIEW_CACHE.remove(session.getId());
+    }
+
+    private void validateSelectedInsertLines(List<Long> selectedInsertLineIds, PreviewSessionState previewState) {
+        if (previewState == null) {
+            return;
+        }
+        PlanPreviewResponseDTO.InsertSuggestionDTO suggestion = previewState.insertSuggestion;
+        if (suggestion == null || suggestion.getCandidateLines() == null || suggestion.getCandidateLines().isEmpty()) {
+            return;
+        }
+        Set<Long> candidateIds = suggestion.getCandidateLines().stream()
+                .map(PlanPreviewResponseDTO.CandidateLineDTO::getLineId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        List<Long> selectedIds = selectedInsertLineIds == null ? Collections.emptyList() : selectedInsertLineIds;
+        if (!candidateIds.containsAll(selectedIds)) {
+            throw new MyException("selectedInsertLineIds 存在非候选产线，请刷新预览后重试");
+        }
+        int requiredCount = suggestion.getRequiredInsertLineCount() == null ? 0 : suggestion.getRequiredInsertLineCount();
+        if (requiredCount <= 0 || selectedIds.isEmpty()) {
+            return;
+        }
+        Set<Long> uniqueSelected = new HashSet<>(selectedIds);
+        if (uniqueSelected.size() < requiredCount) {
+            throw new MyException("已选插队线数量不足，系统建议最少选择 " + requiredCount + " 条产线");
+        }
+    }
+
+    private CommitPlanRequest toCommitPlanRequest(Object requestBody) {
+        if (requestBody == null) {
+            return new CommitPlanRequest();
+        }
+        if (requestBody instanceof List) {
+            List<CalendarEventDTO> events = OBJECT_MAPPER.convertValue(requestBody, new TypeReference<List<CalendarEventDTO>>() {});
+            CommitPlanRequest request = new CommitPlanRequest();
+            request.setSelectedEvents(events);
+            return request;
+        }
+        return OBJECT_MAPPER.convertValue(requestBody, CommitPlanRequest.class);
+    }
+
+    private String resolveOperator(HttpSession session) {
+        Object user = session == null ? null : session.getAttribute("user");
+        if (user == null && session != null) {
+            user = session.getAttribute("username");
+        }
+        return user == null ? "session:" + (session == null ? "unknown" : session.getId()) : user.toString();
     }
 
     // 添加排班
@@ -183,5 +268,43 @@ public class ShiftCalendarController {
             this.objective = objective;
         }
 
+    }
+
+    public static class CommitPlanRequest {
+        private List<CalendarEventDTO> selectedEvents;
+        private List<Long> selectedInsertLineIds;
+
+        public List<CalendarEventDTO> getSelectedEvents() {
+            return selectedEvents;
+        }
+
+        public void setSelectedEvents(List<CalendarEventDTO> selectedEvents) {
+            this.selectedEvents = selectedEvents;
+        }
+
+        public List<Long> getSelectedInsertLineIds() {
+            return selectedInsertLineIds;
+        }
+
+        public void setSelectedInsertLineIds(List<Long> selectedInsertLineIds) {
+            this.selectedInsertLineIds = selectedInsertLineIds;
+        }
+    }
+
+    private static class PreviewSessionState {
+        private final List<CalendarEventDTO> events;
+        private final PlanPreviewResponseDTO.InsertSuggestionDTO insertSuggestion;
+        private final LocalDateTime generatedAt;
+        private final String generatedBy;
+
+        private PreviewSessionState(List<CalendarEventDTO> events,
+                                    PlanPreviewResponseDTO.InsertSuggestionDTO insertSuggestion,
+                                    LocalDateTime generatedAt,
+                                    String generatedBy) {
+            this.events = events;
+            this.insertSuggestion = insertSuggestion;
+            this.generatedAt = generatedAt;
+            this.generatedBy = generatedBy;
+        }
     }
 }
