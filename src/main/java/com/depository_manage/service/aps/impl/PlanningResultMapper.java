@@ -12,11 +12,14 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 class PlanningResultMapper {
@@ -32,6 +35,14 @@ class PlanningResultMapper {
     PlanPreviewResponseDTO toPlanPreviewResponse(PlanningResult result,
                                                  LocalDateTime planStartAt,
                                                  Map<LocalDate, BigDecimal> shiftHoursByDay) {
+        return toPlanPreviewResponse(result, planStartAt, shiftHoursByDay, null, null);
+    }
+
+    PlanPreviewResponseDTO toPlanPreviewResponse(PlanningResult result,
+                                                 LocalDateTime planStartAt,
+                                                 Map<LocalDate, BigDecimal> shiftHoursByDay,
+                                                 PlanningSnapshot snapshot,
+                                                 LocalDate endExclusive) {
         PlanPreviewResponseDTO response = new PlanPreviewResponseDTO();
         response.setEvents(mergeSlicesToEvents(result.getSlices(), planStartAt, shiftHoursByDay));
         response.setPlanStart(result.getActualStart() == null ? null : result.getActualStart().format(dateTimeFormatter));
@@ -41,7 +52,97 @@ class PlanningResultMapper {
         response.setSqueezedOrderCount(result.getMetrics().getSqueezedOrderCount());
         response.setDelayedDays(result.getMetrics().getDelayedDays());
         response.setInsertFulfillmentRate(result.getMetrics().getInsertFulfillmentRate());
+        response.setInsertSuggestion(buildInsertSuggestion(result, snapshot, endExclusive));
         return response;
+    }
+
+    private PlanPreviewResponseDTO.InsertSuggestionDTO buildInsertSuggestion(PlanningResult result,
+                                                                             PlanningSnapshot snapshot,
+                                                                             LocalDate endExclusive) {
+        PlanPreviewResponseDTO.InsertSuggestionDTO suggestion = new PlanPreviewResponseDTO.InsertSuggestionDTO();
+        if (snapshot == null || endExclusive == null) {
+            return suggestion;
+        }
+        int insertGap = result.getDemands().stream()
+                .filter(DemandItem::lockedInsert)
+                .mapToInt(d -> Math.max(0, d.required() - d.plannedQuantity()))
+                .sum();
+
+        if (insertGap <= 0) {
+            suggestion.setRequiredInsertLineCount(0);
+            return suggestion;
+        }
+
+        Map<Long, String> lineNameById = snapshot.getProductionLines().stream()
+                .filter(line -> line.getId() != null)
+                .collect(Collectors.toMap(line -> line.getId(), line -> Optional.ofNullable(line.getLineName()).orElse(""), (a, b) -> a));
+        Map<Long, Integer> releasableByLine = new HashMap<>();
+        for (Map.Entry<LineDayKey, Integer> entry : snapshot.getRemainingCapacityByLineDay().entrySet()) {
+            LineDayKey key = entry.getKey();
+            if (key == null || key.getLineId() == null || key.getDay() == null || !key.getDay().isBefore(endExclusive)) {
+                continue;
+            }
+            int dayCapacity = Math.max(0, Optional.ofNullable(entry.getValue()).orElse(0));
+            releasableByLine.merge(key.getLineId(), dayCapacity, Integer::sum);
+        }
+
+        List<PlanPreviewResponseDTO.CandidateLineDTO> candidates = new ArrayList<>();
+        for (Map.Entry<Long, Integer> entry : releasableByLine.entrySet()) {
+            if (entry.getValue() <= 0) {
+                continue;
+            }
+            PlanPreviewResponseDTO.CandidateLineDTO candidate = new PlanPreviewResponseDTO.CandidateLineDTO();
+            candidate.setLineId(entry.getKey());
+            candidate.setLineName(lineNameById.getOrDefault(entry.getKey(), "产线-" + entry.getKey()));
+            candidate.setReleasableCapacity(entry.getValue());
+            PlanningSnapshot.LineRuntimeView runtimeView = snapshot.getRuntimeViewByLineId().get(entry.getKey());
+            candidate.setCurrentModel(runtimeView == null ? null : runtimeView.getCurrentModel());
+            candidate.setRiskTag(resolveRiskTag(runtimeView, entry.getValue()));
+            candidates.add(candidate);
+        }
+        candidates.sort(Comparator.comparing(PlanPreviewResponseDTO.CandidateLineDTO::getReleasableCapacity,
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(c -> Optional.ofNullable(c.getLineName()).orElse("")));
+        suggestion.setCandidateLines(candidates);
+        suggestion.setRequiredInsertLineCount(calculateRequiredLineCount(insertGap, candidates));
+        return suggestion;
+    }
+
+    private int calculateRequiredLineCount(int insertGap, List<PlanPreviewResponseDTO.CandidateLineDTO> candidates) {
+        if (insertGap <= 0 || candidates == null || candidates.isEmpty()) {
+            return 0;
+        }
+        int cumulative = 0;
+        int count = 0;
+        for (PlanPreviewResponseDTO.CandidateLineDTO candidate : candidates) {
+            int capacity = Math.max(0, Optional.ofNullable(candidate.getReleasableCapacity()).orElse(0));
+            if (capacity <= 0) {
+                continue;
+            }
+            cumulative += capacity;
+            count++;
+            if (cumulative >= insertGap) {
+                return count;
+            }
+        }
+        return candidates.size();
+    }
+
+    private String resolveRiskTag(PlanningSnapshot.LineRuntimeView runtimeView, int releasableCapacity) {
+        if (releasableCapacity <= 0) {
+            return "NO_CAPACITY";
+        }
+        if (runtimeView == null) {
+            return "RUNTIME_UNKNOWN";
+        }
+        if (runtimeView.getStatus() != null && runtimeView.getStatus() == 0) {
+            return "LINE_STOPPED";
+        }
+        String currentModel = runtimeView.getCurrentModel();
+        if (currentModel == null || currentModel.trim().isEmpty()) {
+            return "MODEL_UNKNOWN";
+        }
+        return "LOW";
     }
 
     PlanningResult.Metrics calculateMetrics(List<DemandItem> demands, LocalDate endExclusive) {

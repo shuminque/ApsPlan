@@ -12,6 +12,14 @@ public class LineDayKey {
         this.day = day;
     }
 
+    public Long getLineId() {
+        return lineId;
+    }
+
+    public LocalDate getDay() {
+        return day;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

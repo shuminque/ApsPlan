@@ -150,7 +150,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         PlanningResult resultWithMetrics = new PlanningResult(primaryResult.getSlices(), primaryResult.getDemands(),
                 primaryResult.getActualStart(), primaryResult.getActualEnd(), metrics, primaryResult.getDiagnostics());
         return planningResultMapper.toPlanPreviewResponse(resultWithMetrics,
-                normalizedRequest.getEffectiveStartAt(), context.getSnapshot().getShiftHoursByDay());
+                normalizedRequest.getEffectiveStartAt(), context.getSnapshot().getShiftHoursByDay(),
+                context.getSnapshot(), normalizedRequest.getEndExclusive());
     }
 
     private PlanningResult runPrimaryEngine(PlanningContext context) {
