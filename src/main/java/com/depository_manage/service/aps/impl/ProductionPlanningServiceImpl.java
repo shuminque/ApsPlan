@@ -7,6 +7,7 @@ import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 import com.depository_manage.service.BearingRecordService;
 import com.depository_manage.service.aps.ProductionOrderService;
 import com.depository_manage.service.aps.ProductionPlanningService;
+import com.depository_manage.service.aps.ProductionLineRuntimeService;
 import com.depository_manage.service.aps.SafetyStockService;
 import com.depository_manage.service.aps.ShiftCalendarService;
 import com.depository_manage.service.aps.planning.NormalizedPlanningRequest;
@@ -61,6 +62,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private ProductionLineModelConfigMapper modelConfigMapper;
     @Resource
     private ProductionLineMapper productionLineMapper;
+    @Resource
+    private ProductionLineRuntimeService productionLineRuntimeService;
     @Resource
     private BearingRecordService bearingRecordService;
 
@@ -121,6 +124,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 shiftCalendarService,
                 modelConfigMapper,
                 productionLineMapper,
+                productionLineRuntimeService,
                 bearingRecordService,
                 zoneId
         );
