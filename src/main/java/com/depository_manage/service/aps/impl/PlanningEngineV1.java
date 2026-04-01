@@ -30,6 +30,7 @@ public class PlanningEngineV1 implements PlanningEngine {
 
     private static final String OBJECTIVE_MIN_LINE = "min_line";
     private static final BigDecimal DAILY_TARGET_BUFFER = new BigDecimal("1.05");
+    private final FulfillabilityEvaluator fulfillabilityEvaluator = new FulfillabilityEvaluator();
 
     @Override
     public PlanningResult plan(PlanningContext context) {
@@ -112,7 +113,15 @@ public class PlanningEngineV1 implements PlanningEngine {
         LocalDateTime actualStart = resolveActualPlanStart(plannedSlices, effectiveStartAt, start);
         LocalDateTime actualEnd = resolveActualPlanEnd(plannedSlices, actualStart);
         PlanningResult.Metrics metrics = PlanningEngineSupport.calculateMetrics(demands, endExclusive);
-        return new PlanningResult(plannedSlices, demands, actualStart, actualEnd, metrics, null);
+        FulfillabilityAssessment assessment = fulfillabilityEvaluator.evaluate(
+                demands,
+                start,
+                endExclusive.minusDays(1),
+                shiftHoursByDay,
+                lineCapByModel,
+                snapshot.getRuntimeViewByLineId()
+        );
+        return new PlanningResult(plannedSlices, demands, actualStart, actualEnd, metrics, assessment);
     }
 
     @Override
