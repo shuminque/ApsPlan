@@ -194,6 +194,14 @@ public class PageController {
         mv.addObject("customers", customerService.findAll());
         return mv;
     }
+
+    @GetMapping("/autoPlanBrowse")
+    public ModelAndView autoPlanBrowse() {
+        ModelAndView mv = new ModelAndView();
+        mv.setViewName("014/autoPlanBrowse");
+        return mv;
+    }
+
     @GetMapping("/productionOrder")
     public ModelAndView productionOrder() {
         ModelAndView mv = new ModelAndView();
