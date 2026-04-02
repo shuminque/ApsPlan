@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>自动排产</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+</head>
+<body>
+<div class="layui-fluid" style="padding:16px;">
+    <div class="layui-card">
+        <div class="layui-card-header" style="font-weight:700;">自动排产</div>
+        <div class="layui-card-body">
+            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                <div>
+                    <label>排产结束日期</label>
+                    <input id="planEnd" type="date" class="layui-input" style="width:200px;">
+                </div>
+                <button class="layui-btn" onclick="previewAutoPlan()">开始浏览并排产</button>
+                <button class="layui-btn layui-btn-primary" onclick="window.location.href='/calendar'">返回生产日历</button>
+            </div>
+            <div style="margin-top:8px;color:#666;">开始日期将按“今天”和“当前月份首日”取较晚值自动计算。</div>
+        </div>
+    </div>
+</div>
+<script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
+<script>
+    let previewPlanData = null;
+    let planBrowseData = null;
+    let planOrderStartMap = {};
+
+    function toDateValue(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function getDefaultPlanStart() {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        return now > monthStart ? now : monthStart;
+    }
+
+    function buildPlanOrderKey(order) {
+        if (!order) return '';
+        return [order.customer || '', order.outerInnerRing || '', order.model || ''].join('||');
+    }
+
+    function escapeHtml(raw) {
+        if (raw === null || raw === undefined) return '';
+        return String(raw)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function getPlanEnd() {
+        const endInput = document.getElementById('planEnd');
+        const endValue = endInput && endInput.value;
+        if (endValue) return endValue;
+        const fallback = new Date();
+        fallback.setMonth(fallback.getMonth() + 1);
+        return toDateValue(fallback);
+    }
+
+    function requestAutoPlanBrowseData() {
+        const defaultStart = toDateValue(getDefaultPlanStart());
+        const end = getPlanEnd();
+        return fetch('/api/shift/plan/preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({start: defaultStart, end: end})
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('预览失败');
+                return res.json();
+            })
+            .then(data => {
+                planBrowseData = data || {events: [], orders: [], dailyOutputs: []};
+                const orders = planBrowseData.orders || [];
+                const nextMap = {};
+                orders.forEach(item => {
+                    const key = buildPlanOrderKey(item);
+                    if (!nextMap[key]) {
+                        nextMap[key] = planOrderStartMap[key] || defaultStart;
+                    }
+                });
+                planOrderStartMap = nextMap;
+                return planBrowseData;
+            });
+    }
+
+    function openPlanBrowseDialog(data) {
+        const orders = data.orders || [];
+        const orderRows = orders.map(item => {
+            const key = buildPlanOrderKey(item);
+            const startValue = planOrderStartMap[key] || '';
+            const orderIds = Array.isArray(item.orderIds) ? item.orderIds.filter(id => id !== null && id !== undefined && id !== '') : [];
+            return `
+            <tr data-order-key="${escapeHtml(key)}" data-order-ids="${escapeHtml(JSON.stringify(orderIds))}">
+                <td>${item.customer || ''}</td>
+                <td>${item.outerInnerRing || ''}</td>
+                <td>${item.model || ''}</td>
+                <td>${item.earliestDeliveryDate || ''}</td>
+                <td>${item.currentInventory || 0}</td>
+                <td>${item.orderCount || 0}</td>
+                <td>${item.safetyStockQuantity || 0}</td>
+                <td>${item.plannedQuantity || item.requiredQuantity || 0}</td>
+                <td><input type="date" class="layui-input plan-order-start-input" value="${escapeHtml(startValue)}"></td>
+            </tr>
+            `;
+        }).join('');
+
+        layer.open({
+            type: 1,
+            title: '自动排产 - 浏览分解',
+            area: ['100%', '82%'],
+            maxmin: true,
+            btn: ['排产', '关闭'],
+            content: `
+                <div style="padding: 12px; max-height: 650px; overflow: auto;">
+                    <div style="margin-bottom: 8px; color: #666;">请为每组订单设置开始时间，再点击“排产”。</div>
+                    <table class="layui-table">
+                        <thead>
+                            <tr>
+                                <th>客户</th><th>内外圈</th><th>型号</th><th>最早交期</th><th>在库数量</th><th>订单需求数</th><th>安全库存数</th><th>计划排产数</th><th>开始时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>${orderRows || '<tr><td colspan="9" style="text-align:center;color:#999;">无可排产需求</td></tr>'}</tbody>
+                    </table>
+                </div>
+            `,
+            yes: function(index) {
+                const startRows = document.querySelectorAll('tr[data-order-key]');
+                const orderStartTimes = {};
+                let invalid = false;
+                startRows.forEach(row => {
+                    const key = row.getAttribute('data-order-key') || '';
+                    const rawOrderIds = row.getAttribute('data-order-ids') || '[]';
+                    const start = (row.querySelector('.plan-order-start-input') || {}).value || '';
+                    if (!start) {
+                        invalid = true;
+                        return;
+                    }
+                    planOrderStartMap[key] = start;
+                    try {
+                        const orderIds = JSON.parse(rawOrderIds);
+                        if (Array.isArray(orderIds)) {
+                            orderIds.forEach(orderId => {
+                                if (orderId !== null && orderId !== undefined && orderId !== '') {
+                                    orderStartTimes[String(orderId)] = start;
+                                }
+                            });
+                        }
+                    } catch (e) {}
+                });
+                if (invalid) {
+                    layer.msg('请为每条订单汇总填写开始时间');
+                    return;
+                }
+                layer.close(index);
+                requestAutoPlanPreviewByOrderStart(orderStartTimes);
+            }
+        });
+    }
+
+    function previewAutoPlan() {
+        requestAutoPlanBrowseData()
+            .then(data => openPlanBrowseDialog(data))
+            .catch(() => layer.msg('自动排产浏览数据加载失败'));
+    }
+
+    function requestAutoPlanPreviewByOrderStart(orderStartTimes) {
+        const startList = Object.values(orderStartTimes || {}).filter(Boolean).sort();
+        const fallbackStart = startList.length ? startList[0] : toDateValue(getDefaultPlanStart());
+        fetch('/api/shift/plan/preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                start: fallbackStart,
+                end: getPlanEnd(),
+                orderStartTimes: orderStartTimes
+            })
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('预览失败');
+                return res.json();
+            })
+            .then(data => {
+                previewPlanData = data || {events: [], orders: [], dailyOutputs: []};
+                openPlanPreviewDialog(previewPlanData);
+            })
+            .catch(() => layer.msg('自动排产预览失败'));
+    }
+
+    function formatMetricValue(value) {
+        if (value === null || value === undefined || value === '') return '-';
+        const num = Number(value);
+        if (!Number.isFinite(num)) return '-';
+        return num.toFixed(2);
+    }
+
+    function formatRangeDate(dateTime) {
+        if (!dateTime) return '';
+        return dateTime.slice(0, 10);
+    }
+
+    function resolvePlanRangeText(data, events) {
+        const planStart = data && data.planStart ? String(data.planStart) : '';
+        const planEnd = data && data.planEnd ? String(data.planEnd) : '';
+        if (planStart && planEnd) return `${planStart} ~ ${planEnd}`;
+        if (planStart) return planStart;
+        if (planEnd) return planEnd;
+        if (!events || !events.length) return '';
+        const starts = events.map(item => item && item.start).filter(Boolean).sort();
+        const ends = events.map(item => item && item.end).filter(Boolean).sort();
+        const fallbackStart = starts.length ? starts[0] : '';
+        const fallbackEnd = ends.length ? ends[ends.length - 1] : '';
+        if (fallbackStart && fallbackEnd) return `${fallbackStart} ~ ${fallbackEnd}`;
+        return fallbackStart || fallbackEnd;
+    }
+
+    function openPlanPreviewDialog(data) {
+        const orders = data.orders || [];
+        const events = data.events || [];
+        const planRangeText = resolvePlanRangeText(data, events);
+
+        const orderRows = orders.map(item => `
+            <tr>
+                <td>${item.customer || ''}</td>
+                <td>${item.outerInnerRing || ''}</td>
+                <td>${item.model || ''}</td>
+                <td>${item.earliestDeliveryDate || ''}</td>
+                <td>${item.currentInventory || 0}</td>
+                <td>${item.orderCount || 0}</td>
+                <td>${item.safetyStockQuantity || 0}</td>
+                <td>${item.plannedQuantity || item.requiredQuantity || 0}</td>
+            </tr>
+        `).join('');
+
+        const resultRows = events.map(event => {
+            const diagnosticTag = event.metricDiagnosticTag || '';
+            const diagnosticNote = diagnosticTag && diagnosticTag !== 'OK' ? `（${diagnosticTag}）` : '';
+            const plannedDays = Number(event.plannedDays || 0);
+            return `
+                <tr>
+                    <td>${event.lineName || ''}</td>
+                    <td>${event.customer || ''}</td>
+                    <td>${event.outerInnerRing || ''}</td>
+                    <td>${event.model || ''}</td>
+                    <td>${formatRangeDate(event.start)} ~ ${formatRangeDate(event.end)}</td>
+                    <td>${plannedDays > 0 ? plannedDays : '-'}</td>
+                    <td>${formatMetricValue(event.dailyOutput)}${diagnosticNote}</td>
+                    <td>${formatMetricValue(event.avgDailyWorkHours)}</td>
+                    <td>${formatMetricValue(event.capacityPerHour)}</td>
+                    <td>${event.quantity || 0}</td>
+                </tr>
+            `;
+        }).join('');
+
+        layer.open({
+            type: 1,
+            title: '自动排产结果预览',
+            area: ['100%', '82%'],
+            maxmin: true,
+            btn: ['写入排产', '关闭'],
+            content: `
+                <div style="padding: 12px; max-height: 650px; overflow: auto;">
+                    <div style="margin-bottom: 8px; color: #666;">计划起止：${planRangeText || '-'}</div>
+                    <div style="margin-bottom: 8px; font-weight: 700;">待排产订单汇总</div>
+                    <table class="layui-table">
+                        <thead>
+                            <tr>
+                                <th>客户</th><th>内外圈</th><th>型号</th><th>最早交期</th><th>在库数量</th><th>订单需求数</th><th>安全库存数</th><th>计划排产数</th>
+                            </tr>
+                        </thead>
+                        <tbody>${orderRows || '<tr><td colspan="8" style="text-align:center;color:#999;">无可排产需求</td></tr>'}</tbody>
+                    </table>
+
+                    <div style="margin: 14px 0 8px; font-weight: 700;">排产结果</div>
+                    <table class="layui-table">
+                        <thead>
+                            <tr>
+                                <th>产线</th><th>客户</th><th>内外圈</th><th>型号</th><th>排产时间范围</th><th>天数</th><th>日产量</th><th>日均工时</th><th>产能(件/小时)</th><th>总产量</th>
+                            </tr>
+                        </thead>
+                        <tbody>${resultRows || '<tr><td colspan="10" style="text-align:center;color:#999;">暂无排产结果</td></tr>'}</tbody>
+                    </table>
+                </div>
+            `,
+            yes: function(index) {
+                layer.confirm('确认将当前排产结果写入班次排班吗？', {icon: 3, title: '确认写入'}, function(confirmIndex){
+                    commitAutoPlan();
+                    layer.close(confirmIndex);
+                    layer.close(index);
+                });
+            }
+        });
+    }
+
+    function commitAutoPlan() {
+        const events = (previewPlanData && previewPlanData.events) || [];
+        if (!events.length) {
+            layer.msg('当前没有可写入的预览数据');
+            return;
+        }
+        fetch('/api/shift/plan/commit', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(events)
+        })
+            .then(async res => {
+                const responseText = await res.text();
+                if (!res.ok) throw new Error(responseText || '写入失败');
+                return Number(responseText);
+            })
+            .then(inserted => {
+                if (inserted > 0) {
+                    previewPlanData = null;
+                    layer.msg('自动排产已写入班次排班');
+                    return;
+                }
+                layer.msg('未写入任何排产明细，请检查订单匹配条件或预览数据');
+            })
+            .catch(err => {
+                let message = '写入排产失败';
+                if (err && err.message) {
+                    try {
+                        const parsed = JSON.parse(err.message);
+                        if (parsed && parsed.message) message = parsed.message;
+                    } catch (e) {
+                        message = err.message;
+                    }
+                }
+                layer.msg(message);
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const endInput = document.getElementById('planEnd');
+        const defaultEnd = new Date();
+        defaultEnd.setMonth(defaultEnd.getMonth() + 1);
+        endInput.value = toDateValue(defaultEnd);
+    });
+</script>
+</body>
+</html>

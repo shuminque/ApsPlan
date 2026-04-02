@@ -37,6 +37,15 @@
                     ]
                 },
                 {
+                    "title": "自动排产",
+                    "href": "/autoPlanBrowse",
+                    "icon": "fa fa-home",
+                    "target": "_self",
+                    "roles": [
+                        "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+                    ]
+                },
+                {
                     "title": "提交生产订单",
                     "href": "/productionOrder",
                     "icon": "fa fa-home",
