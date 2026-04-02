@@ -7,18 +7,26 @@
     <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
 </head>
 <body>
-<div class="layui-fluid" style="padding:16px;">
+<div class="layui-fluid" style="padding: 14px;">
     <div class="layui-card">
-        <div class="layui-card-header" style="font-weight:700;">自动排产</div>
         <div class="layui-card-body">
             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
-                <button class="layui-btn" onclick="previewAutoPlan()">开始浏览并排产</button>
-                <button class="layui-btn layui-btn-primary" onclick="window.location.href='/calendar'">返回生产日历</button>
+                <div style="display: none">
+                    <label>浏览开始日期</label>
+                    <input id="planStart" type="date" class="layui-input" style="width:180px;">
+                </div>
+                <div style="display: none">
+                    <label>浏览结束日期</label>
+                    <input id="planEnd" type="date" class="layui-input" style="width:180px;">
+                </div>
+                <button class="layui-btn" onclick="previewAutoPlan()">自动排产</button>
+                <!--                <button class="layui-btn layui-btn-primary" onclick="window.location.href='/calendar'">返回生产日历</button>-->
             </div>
-            <div style="margin-top:8px;color:#666;">开始日期将按“今天”和“当前月份首日”取较晚值自动计算。</div>
+            <!--            <div style="margin-top:8px;color:#666;">先浏览待排订单并设置每组订单开始时间，再点击“排产”。</div>-->
         </div>
     </div>
 </div>
+
 <script src="/static/lib/layui-v2.8.17/layui.js" charset="utf-8"></script>
 <script>
     let previewPlanData = null;
@@ -32,12 +40,6 @@
         return `${year}-${month}-${day}`;
     }
 
-    function getDefaultPlanStart() {
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        return now > monthStart ? now : monthStart;
-    }
-
     function buildPlanOrderKey(order) {
         if (!order) return '';
         return [order.customer || '', order.outerInnerRing || '', order.model || ''].join('||');
@@ -49,16 +51,30 @@
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/\"/g, '&quot;')
+            .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
     }
 
+    function getCurrentRange() {
+        const start = (document.getElementById('planStart') || {}).value || '';
+        const end = (document.getElementById('planEnd') || {}).value || '';
+        return {start, end};
+    }
+
     function requestAutoPlanBrowseData() {
-        const defaultStart = toDateValue(getDefaultPlanStart());
+        const range = getCurrentRange();
+        if (!range.start || !range.end) {
+            layer.msg('请先选择浏览开始/结束日期');
+            return Promise.reject(new Error('日期范围缺失'));
+        }
+
         return fetch('/api/shift/plan/preview', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({start: defaultStart})
+            body: JSON.stringify({
+                start: range.start,
+                end: range.end
+            })
         })
             .then(res => {
                 if (!res.ok) throw new Error('预览失败');
@@ -71,7 +87,7 @@
                 orders.forEach(item => {
                     const key = buildPlanOrderKey(item);
                     if (!nextMap[key]) {
-                        nextMap[key] = planOrderStartMap[key] || defaultStart;
+                        nextMap[key] = planOrderStartMap[key] || range.start;
                     }
                 });
                 planOrderStartMap = nextMap;
@@ -103,12 +119,13 @@
         layer.open({
             type: 1,
             title: '自动排产 - 浏览分解',
-            area: ['100%', '82%'],
+            area: ['100%', '80%'],
             maxmin: true,
             btn: ['排产', '关闭'],
             content: `
                 <div style="padding: 12px; max-height: 650px; overflow: auto;">
                     <div style="margin-bottom: 8px; color: #666;">请为每组订单设置开始时间，再点击“排产”。</div>
+                    <div style="margin-bottom: 8px; font-weight: 700;">待排产订单汇总</div>
                     <table class="layui-table">
                         <thead>
                             <tr>
@@ -141,8 +158,11 @@
                                 }
                             });
                         }
-                    } catch (e) {}
+                    } catch (e) {
+                        // ignore
+                    }
                 });
+
                 if (invalid) {
                     layer.msg('请为每条订单汇总填写开始时间');
                     return;
@@ -160,13 +180,16 @@
     }
 
     function requestAutoPlanPreviewByOrderStart(orderStartTimes) {
+        const range = getCurrentRange();
         const startList = Object.values(orderStartTimes || {}).filter(Boolean).sort();
-        const fallbackStart = startList.length ? startList[0] : toDateValue(getDefaultPlanStart());
+        const fallbackStart = startList.length ? startList[0] : range.start;
+
         fetch('/api/shift/plan/preview', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 start: fallbackStart,
+                end: range.end,
                 orderStartTimes: orderStartTimes
             })
         })
@@ -195,7 +218,10 @@
 
     function resolvePlanRangeText(data, events) {
         const planStart = data && data.planStart ? String(data.planStart) : '';
+        const planEnd = data && data.planEnd ? String(data.planEnd) : '';
+        if (planStart && planEnd) return `${planStart} ~ ${planEnd}`;
         if (planStart) return planStart;
+        if (planEnd) return planEnd;
         if (!events || !events.length) return '';
         const starts = events.map(item => item && item.start).filter(Boolean).sort();
         const ends = events.map(item => item && item.end).filter(Boolean).sort();
@@ -246,7 +272,7 @@
         layer.open({
             type: 1,
             title: '自动排产结果预览',
-            area: ['100%', '82%'],
+            area: ['100%', '80%'],
             maxmin: true,
             btn: ['写入排产', '关闭'],
             content: `
@@ -312,7 +338,9 @@
                 if (err && err.message) {
                     try {
                         const parsed = JSON.parse(err.message);
-                        if (parsed && parsed.message) message = parsed.message;
+                        if (parsed && parsed.message) {
+                            message = parsed.message;
+                        }
                     } catch (e) {
                         message = err.message;
                     }
@@ -321,8 +349,13 @@
             });
     }
 
-
+    document.addEventListener('DOMContentLoaded', function () {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        document.getElementById('planStart').value = toDateValue(monthStart);
+        document.getElementById('planEnd').value = toDateValue(nextMonthStart);
+    });
 </script>
 </body>
 </html>
-
