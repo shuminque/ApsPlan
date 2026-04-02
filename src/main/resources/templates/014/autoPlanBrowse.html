@@ -12,10 +12,6 @@
         <div class="layui-card-header" style="font-weight:700;">自动排产</div>
         <div class="layui-card-body">
             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
-                <div>
-                    <label>排产结束日期</label>
-                    <input id="planEnd" type="date" class="layui-input" style="width:200px;">
-                </div>
                 <button class="layui-btn" onclick="previewAutoPlan()">开始浏览并排产</button>
                 <button class="layui-btn layui-btn-primary" onclick="window.location.href='/calendar'">返回生产日历</button>
             </div>
@@ -57,22 +53,12 @@
             .replace(/'/g, '&#39;');
     }
 
-    function getPlanEnd() {
-        const endInput = document.getElementById('planEnd');
-        const endValue = endInput && endInput.value;
-        if (endValue) return endValue;
-        const fallback = new Date();
-        fallback.setMonth(fallback.getMonth() + 1);
-        return toDateValue(fallback);
-    }
-
     function requestAutoPlanBrowseData() {
         const defaultStart = toDateValue(getDefaultPlanStart());
-        const end = getPlanEnd();
         return fetch('/api/shift/plan/preview', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({start: defaultStart, end: end})
+            body: JSON.stringify({start: defaultStart})
         })
             .then(res => {
                 if (!res.ok) throw new Error('预览失败');
@@ -181,7 +167,6 @@
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 start: fallbackStart,
-                end: getPlanEnd(),
                 orderStartTimes: orderStartTimes
             })
         })
@@ -210,10 +195,7 @@
 
     function resolvePlanRangeText(data, events) {
         const planStart = data && data.planStart ? String(data.planStart) : '';
-        const planEnd = data && data.planEnd ? String(data.planEnd) : '';
-        if (planStart && planEnd) return `${planStart} ~ ${planEnd}`;
         if (planStart) return planStart;
-        if (planEnd) return planEnd;
         if (!events || !events.length) return '';
         const starts = events.map(item => item && item.start).filter(Boolean).sort();
         const ends = events.map(item => item && item.end).filter(Boolean).sort();
@@ -339,12 +321,8 @@
             });
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
-        const endInput = document.getElementById('planEnd');
-        const defaultEnd = new Date();
-        defaultEnd.setMonth(defaultEnd.getMonth() + 1);
-        endInput.value = toDateValue(defaultEnd);
-    });
+
 </script>
 </body>
 </html>
+
