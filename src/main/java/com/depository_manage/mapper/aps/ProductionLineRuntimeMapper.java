@@ -11,5 +11,7 @@ public interface ProductionLineRuntimeMapper {
 
     List<ProductionLineRuntime> selectList(@Param("lineId") Long lineId);
 
+    int insertRuntime(ProductionLineRuntime runtime);
+
     int updateRuntime(ProductionLineRuntime runtime);
 }

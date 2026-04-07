@@ -2,12 +2,17 @@ package com.depository_manage.service.aps.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.depository_manage.entity.aps.ProductionLine;
+import com.depository_manage.entity.aps.ProductionLineModelConfig;
+import com.depository_manage.entity.aps.ProductionLineRuntime;
 import com.depository_manage.entity.aps.ProductionOrder;
 import com.depository_manage.entity.aps.ProductionOrderStatus;
 import com.depository_manage.entity.aps.ProductionPlan;
 import com.depository_manage.entity.aps.ProductionPlanItem;
+import com.depository_manage.entity.aps.RuntimeStatus;
 import com.depository_manage.exception.MyException;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
+import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
+import com.depository_manage.mapper.aps.ProductionLineRuntimeMapper;
 import com.depository_manage.mapper.aps.ProductionOrderMapper;
 import com.depository_manage.mapper.aps.ProductionPlanItemMapper;
 import com.depository_manage.mapper.aps.ProductionPlanMapper;
@@ -19,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.Duration;
 import java.time.ZoneId;
@@ -52,6 +58,10 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
     private ProductionOrderMapper productionOrderMapper;
     @Resource
     private ProductionLineMapper productionLineMapper;
+    @Resource
+    private ProductionLineRuntimeMapper productionLineRuntimeMapper;
+    @Resource
+    private ProductionLineModelConfigMapper productionLineModelConfigMapper;
 
     @Override
     @Transactional(transactionManager = "apsTransactionManager", rollbackFor = Exception.class)
@@ -206,8 +216,97 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         if (inserted == 0) {
             throw new MyException("未写入任何排产明细，请检查订单匹配条件或预览数据");
         }
+        syncRuntimeFromCommittedPlan(parsedEvents, now);
+        log.info("commit plan runtime sync done, batch_no={}, affected_lines={}, inserted_items={}",
+                batchNo,
+                parsedEvents.stream().map(p -> p.lineId).filter(Objects::nonNull).collect(Collectors.toSet()).size(),
+                inserted);
 
         return inserted;
+    }
+
+    private void syncRuntimeFromCommittedPlan(List<ParsedPlanEvent> parsedEvents, Date now) {
+        if (parsedEvents == null || parsedEvents.isEmpty() || now == null) {
+            return;
+        }
+        LocalDateTime nowAt = toLocalDateTime(now);
+        Map<Long, List<ParsedPlanEvent>> eventsByLine = parsedEvents.stream()
+                .filter(p -> p.lineId != null)
+                .collect(Collectors.groupingBy(p -> p.lineId));
+        if (eventsByLine.isEmpty()) {
+            return;
+        }
+
+        for (Map.Entry<Long, List<ParsedPlanEvent>> entry : eventsByLine.entrySet()) {
+            Long lineId = entry.getKey();
+            List<ParsedPlanEvent> lineEvents = entry.getValue();
+            lineEvents.sort((left, right) -> {
+                int startCmp = right.startDate.compareTo(left.startDate);
+                if (startCmp != 0) {
+                    return startCmp;
+                }
+                return left.endDate.compareTo(right.endDate);
+            });
+            ParsedPlanEvent runningEvent = lineEvents.stream()
+                    .filter(e -> !now.before(e.startDate) && now.before(e.endDate))
+                    .findFirst()
+                    .orElse(null);
+
+            List<ProductionLineRuntime> runtimes = productionLineRuntimeMapper.selectList(lineId);
+            ProductionLineRuntime before = runtimes.isEmpty() ? null : runtimes.get(0);
+            ProductionLineRuntime runtime = before == null ? new ProductionLineRuntime() : before;
+            runtime.setLineId(lineId);
+
+            if (runningEvent != null) {
+                runtime.setCurrentModel(runningEvent.model);
+                runtime.setCurrentCapacity(resolveRuntimeCapacity(lineId, runningEvent.model, before));
+                runtime.setStatus(RuntimeStatus.RUNNING);
+            } else {
+                runtime.setStatus(RuntimeStatus.IDLE);
+            }
+            runtime.setUpdateTime(now);
+
+            if (runtime.getId() == null) {
+                productionLineRuntimeMapper.insertRuntime(runtime);
+            } else {
+                productionLineRuntimeMapper.updateRuntime(runtime);
+            }
+
+            log.info("runtime synced, line_id={}, now={}, before_status={}, before_model={}, before_capacity={}, after_status={}, after_model={}, after_capacity={}",
+                    lineId,
+                    nowAt,
+                    before == null ? null : before.getStatus(),
+                    before == null ? null : before.getCurrentModel(),
+                    before == null ? null : before.getCurrentCapacity(),
+                    runtime.getStatus(),
+                    runtime.getCurrentModel(),
+                    runtime.getCurrentCapacity());
+        }
+    }
+
+    private BigDecimal resolveRuntimeCapacity(Long lineId, String model, ProductionLineRuntime currentRuntime) {
+        if (lineId == null || model == null || model.trim().isEmpty()) {
+            return currentRuntime == null ? null : currentRuntime.getCurrentCapacity();
+        }
+        List<ProductionLineModelConfig> configs = productionLineModelConfigMapper.selectPageList(lineId, null, 0L, 1000L);
+        Optional<ProductionLineModelConfig> bestConfig = configs.stream()
+                .filter(c -> c != null && c.getCapacityPerHour() != null && c.getModel() != null)
+                .filter(c -> c.getStatus() == null || c.getStatus() != 0)
+                .filter(c -> model.startsWith(c.getModel().trim()))
+                .sorted((left, right) -> {
+                    int lenCompare = Integer.compare(right.getModel().trim().length(), left.getModel().trim().length());
+                    if (lenCompare != 0) {
+                        return lenCompare;
+                    }
+                    Integer leftPriority = left.getPriority() == null ? Integer.MAX_VALUE : left.getPriority();
+                    Integer rightPriority = right.getPriority() == null ? Integer.MAX_VALUE : right.getPriority();
+                    return Integer.compare(leftPriority, rightPriority);
+                })
+                .findFirst();
+        if (bestConfig.isPresent()) {
+            return bestConfig.get().getCapacityPerHour();
+        }
+        return currentRuntime == null ? null : currentRuntime.getCurrentCapacity();
     }
 
     private void applyInsertAdjustments(List<ParsedPlanEvent> parsedEvents, Set<Long> selectedLines, LocalDateTime now) {
