@@ -3,6 +3,7 @@ package com.depository_manage.controller.aps;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.exception.MyException;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
+import com.depository_manage.pojo.shift.OrderSchedulingEvaluationDTO;
 import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 import com.depository_manage.service.aps.ProductionPlanningService;
 import com.depository_manage.service.aps.ProductionPlanService;
@@ -76,6 +77,17 @@ public class ShiftCalendarController {
         return previewState.insertSuggestion == null
                 ? new PlanPreviewResponseDTO.InsertSuggestionDTO()
                 : previewState.insertSuggestion;
+    }
+
+    /**
+     * 订单排产评估接口，当前先固定返回结构，后续算法直接填充该结构。
+     */
+    @GetMapping("/plan/evaluateOrderScheduling")
+    public OrderSchedulingEvaluationDTO evaluateOrderScheduling(@RequestParam Long orderId) {
+        if (orderId == null || orderId <= 0) {
+            throw new MyException("orderId 不能为空");
+        }
+        return new OrderSchedulingEvaluationDTO();
     }
 
     @PostMapping("/plan/commit")
