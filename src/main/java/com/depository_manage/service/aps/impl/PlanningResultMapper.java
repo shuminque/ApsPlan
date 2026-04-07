@@ -5,6 +5,8 @@ import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.PlanPreviewDailyDTO;
 import com.depository_manage.pojo.shift.PlanPreviewOrderDTO;
 import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -25,6 +27,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 class PlanningResultMapper {
+    private static final Logger log = LoggerFactory.getLogger(PlanningResultMapper.class);
     private static final int MANUAL_INSERT_LINE_REQUIRED = -1;
     private static final String MANUAL_INSERT_LINE_HINT = "需人工指定插单线";
     private static final String NO_ELIGIBLE_RUNNING_LINES = "NO_ELIGIBLE_RUNNING_LINES";
@@ -92,7 +95,7 @@ class PlanningResultMapper {
             return suggestion;
         }
 
-        Set<Long> eligibleLineIds = resolveEligibleLineIds(snapshot, assessment);
+        Set<Long> eligibleLineIds = resolveEligibleLineIds(assessment);
         Map<Long, String> lineNameById = snapshot.getProductionLines().stream()
                 .filter(line -> line.getId() != null)
                 .collect(Collectors.toMap(line -> line.getId(), line -> Optional.ofNullable(line.getLineName()).orElse(""), (a, b) -> a));
@@ -116,6 +119,12 @@ class PlanningResultMapper {
         candidates.sort(Comparator.comparing(PlanPreviewResponseDTO.CandidateLineDTO::getReleasableCapacity,
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(c -> Optional.ofNullable(c.getLineName()).orElse("")));
+        log.info("insert suggestion eligible/candidate lines: assessment.eligibleLineIds={}, candidateLines={}",
+                eligibleLineIds,
+                candidates.stream()
+                        .map(PlanPreviewResponseDTO.CandidateLineDTO::getLineId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList()));
         suggestion.setCandidateLines(candidates);
         if (requiredInsertQuantity > 0 && candidates.isEmpty()) {
             suggestion.setDiagnosticTag(NO_ELIGIBLE_RUNNING_LINES);
@@ -126,38 +135,12 @@ class PlanningResultMapper {
         return suggestion;
     }
 
-    private Set<Long> resolveEligibleLineIds(PlanningSnapshot snapshot, FulfillabilityAssessment assessment) {
-        if (snapshot == null) {
+    private Set<Long> resolveEligibleLineIds(FulfillabilityAssessment assessment) {
+        List<Long> eligibleLineIds = assessment == null ? Collections.<Long>emptyList() : assessment.getEligibleLineIds();
+        if (eligibleLineIds == null || eligibleLineIds.isEmpty()) {
             return Collections.emptySet();
         }
-        List<Long> lineWhitelist = assessment == null ? Collections.<Long>emptyList() : assessment.getTriggerGapLineIds();
-        if (lineWhitelist != null && !lineWhitelist.isEmpty()) {
-            return lineWhitelist.stream().filter(Objects::nonNull).collect(Collectors.toSet());
-        }
-        String triggerModel = assessment == null ? null : assessment.getTriggerGapModel();
-        String triggerCraft = assessment == null ? null : assessment.getTriggerGapCraft();
-        if ((triggerModel == null || triggerModel.trim().isEmpty()) && (triggerCraft == null || triggerCraft.trim().isEmpty())) {
-            return snapshot.getProductionLines().stream()
-                    .map(line -> line.getId())
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toSet());
-        }
-        Set<Long> eligibleLineIds = new java.util.HashSet<>();
-        for (List<LineCapacity> capacities : snapshot.getLineCapByModel().values()) {
-            if (capacities == null || capacities.isEmpty()) {
-                continue;
-            }
-            for (LineCapacity capacity : capacities) {
-                if (capacity == null || capacity.lineId == null) {
-                    continue;
-                }
-                if (!Objects.equals(triggerModel, capacity.model) || !capacity.matchesCraft(triggerCraft)) {
-                    continue;
-                }
-                eligibleLineIds.add(capacity.lineId);
-            }
-        }
-        return eligibleLineIds;
+        return eligibleLineIds.stream().filter(Objects::nonNull).collect(Collectors.toSet());
     }
 
     private int estimateRequiredLineCount(int requiredInsertQuantity,
@@ -191,8 +174,8 @@ class PlanningResultMapper {
         if (deadline.isBefore(planStart)) {
             return Collections.emptyMap();
         }
-        String triggerModel = assessment == null ? null : assessment.getTriggerGapModel();
-        String triggerCraft = assessment == null ? null : assessment.getTriggerGapCraft();
+        String triggerModel = assessment == null ? null : assessment.getEligibleDemandModel();
+        String triggerCraft = assessment == null ? null : assessment.getEligibleDemandCraft();
         if ((triggerModel == null || triggerModel.trim().isEmpty()) && (triggerCraft == null || triggerCraft.trim().isEmpty())) {
             return Collections.emptyMap();
         }

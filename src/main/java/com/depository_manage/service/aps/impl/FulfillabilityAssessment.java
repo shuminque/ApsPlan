@@ -11,28 +11,28 @@ public class FulfillabilityAssessment {
     private final int requiredInsertQuantity;
     private final int requiredInsertLineCount;
     private final String insertDeadline;
-    private final String triggerGapModel;
-    private final String triggerGapCraft;
-    private final List<Long> triggerGapLineIds;
+    private final String eligibleDemandModel;
+    private final String eligibleDemandCraft;
+    private final List<Long> eligibleLineIds;
 
     public FulfillabilityAssessment(boolean canFulfillByIdleLines,
                                     int idleCapacityBeforeDeadline,
                                     int requiredInsertQuantity,
                                     int requiredInsertLineCount,
                                     String insertDeadline,
-                                    String triggerGapModel,
-                                    String triggerGapCraft,
-                                    List<Long> triggerGapLineIds) {
+                                    String eligibleDemandModel,
+                                    String eligibleDemandCraft,
+                                    List<Long> eligibleLineIds) {
         this.canFulfillByIdleLines = canFulfillByIdleLines;
         this.idleCapacityBeforeDeadline = idleCapacityBeforeDeadline;
         this.requiredInsertQuantity = requiredInsertQuantity;
         this.requiredInsertLineCount = requiredInsertLineCount;
         this.insertDeadline = insertDeadline;
-        this.triggerGapModel = triggerGapModel;
-        this.triggerGapCraft = triggerGapCraft;
-        this.triggerGapLineIds = triggerGapLineIds == null
+        this.eligibleDemandModel = eligibleDemandModel;
+        this.eligibleDemandCraft = eligibleDemandCraft;
+        this.eligibleLineIds = eligibleLineIds == null
                 ? Collections.emptyList()
-                : Collections.unmodifiableList(new ArrayList<Long>(triggerGapLineIds));
+                : Collections.unmodifiableList(new ArrayList<Long>(eligibleLineIds));
     }
 
     public boolean isCanFulfillByIdleLines() {
@@ -56,14 +56,26 @@ public class FulfillabilityAssessment {
     }
 
     public String getTriggerGapModel() {
-        return triggerGapModel;
+        return eligibleDemandModel;
     }
 
     public String getTriggerGapCraft() {
-        return triggerGapCraft;
+        return eligibleDemandCraft;
     }
 
     public List<Long> getTriggerGapLineIds() {
-        return triggerGapLineIds;
+        return eligibleLineIds;
+    }
+
+    public String getEligibleDemandModel() {
+        return eligibleDemandModel;
+    }
+
+    public String getEligibleDemandCraft() {
+        return eligibleDemandCraft;
+    }
+
+    public List<Long> getEligibleLineIds() {
+        return eligibleLineIds;
     }
 }
