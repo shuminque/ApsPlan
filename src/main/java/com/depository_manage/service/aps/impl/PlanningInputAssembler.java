@@ -69,8 +69,9 @@ class PlanningInputAssembler {
     }
 
     PlanningSnapshot assemble(NormalizedPlanningRequest normalizedRequest) {
+        List<String> orderStatusFilters = resolveOrderStatusFilters(normalizedRequest.getMode());
         List<ProductionOrder> openOrders = productionOrderService.list(new LambdaQueryWrapper<ProductionOrder>()
-                .in(ProductionOrder::getStatus, ProductionOrderStatus.openStatusFilterValues())
+                .in(ProductionOrder::getStatus, orderStatusFilters)
                 .gt(ProductionOrder::getQuantity, 0));
         if (openOrders.isEmpty()) {
             return new PlanningSnapshot(Collections.emptyList(), Collections.emptyList(), Collections.emptyMap(),
@@ -108,6 +109,13 @@ class PlanningInputAssembler {
         return new PlanningSnapshot(openOrders, safetyStocks, orderByKey, safetyStockByKey, currentInventoryByKey,
                 shiftHoursByDay, lineModelConfigs, productionLines, lineCapByModel, remainingCapacityByLineDay,
                 runtimeViewByLineId);
+    }
+
+    private List<String> resolveOrderStatusFilters(String mode) {
+        if ("INSERT".equalsIgnoreCase(mode)) {
+            return ProductionOrderStatus.openStatusFilterValues();
+        }
+        return ProductionOrderStatus.aliasesFor(ProductionOrderStatus.PENDING.getCode());
     }
 
     private Map<LocalDate, BigDecimal> buildShiftHours(LocalDate start, LocalDate endExclusive, LocalDateTime planStartAt) {
