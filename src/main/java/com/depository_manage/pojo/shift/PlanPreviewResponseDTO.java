@@ -20,11 +20,13 @@ public class PlanPreviewResponseDTO {
     private Boolean autoInsertTriggered = false;
     private Integer requiredInsertQuantity = 0;
     private Integer requiredInsertLineCount = 0;
+    private String requiredInsertLineHint;
     private String insertDeadline;
 
     @Data
     public static class InsertSuggestionDTO {
         private Integer requiredInsertLineCount = 0;
+        private String requiredInsertLineHint;
         private List<CandidateLineDTO> candidateLines = new ArrayList<>();
     }
 
