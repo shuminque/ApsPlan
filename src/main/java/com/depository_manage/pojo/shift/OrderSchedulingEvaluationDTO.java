@@ -36,6 +36,9 @@ public class OrderSchedulingEvaluationDTO {
     @JsonProperty("predicted_finish_time")
     private String predictedFinishTime;
 
+    @JsonProperty("recommended_lines")
+    private List<DelayRecommendationLineDTO> recommendedLines = new ArrayList<>();
+
     public enum Stage {
         FREE_OK,
         PREEMPT_REQUIRED,
@@ -93,5 +96,20 @@ public class OrderSchedulingEvaluationDTO {
 
         @JsonProperty("estimated_finish_time")
         private String estimatedFinishTime;
+    }
+
+    @Data
+    public static class DelayRecommendationLineDTO {
+        private Long lineId;
+        private String lineName;
+
+        @JsonProperty("earliest_start_time")
+        private String earliestStartTime;
+
+        @JsonProperty("earliest_finish_time")
+        private String earliestFinishTime;
+
+        @JsonProperty("recommended_qty")
+        private Integer recommendedQty;
     }
 }
