@@ -1,5 +1,6 @@
 package com.depository_manage.service.aps.impl;
 
+import com.depository_manage.entity.aps.RuntimeStatus;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.PlanPreviewDailyDTO;
 import com.depository_manage.pojo.shift.PlanPreviewOrderDTO;
@@ -16,6 +17,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
 class PlanningResultMapper {
     private static final int MANUAL_INSERT_LINE_REQUIRED = -1;
     private static final String MANUAL_INSERT_LINE_HINT = "需人工指定插单线";
+    private static final String NO_ELIGIBLE_RUNNING_LINES = "NO_ELIGIBLE_RUNNING_LINES";
 
     private final DateTimeFormatter dateTimeFormatter;
     private final String planColor;
@@ -93,35 +96,30 @@ class PlanningResultMapper {
         Map<Long, String> lineNameById = snapshot.getProductionLines().stream()
                 .filter(line -> line.getId() != null)
                 .collect(Collectors.toMap(line -> line.getId(), line -> Optional.ofNullable(line.getLineName()).orElse(""), (a, b) -> a));
-        Map<Long, Integer> releasableByLine = new HashMap<>();
-        for (Map.Entry<LineDayKey, Integer> entry : snapshot.getRemainingCapacityByLineDay().entrySet()) {
-            LineDayKey key = entry.getKey();
-            if (key == null || key.getLineId() == null || key.getDay() == null || !key.getDay().isBefore(endExclusive)
-                    || !eligibleLineIds.contains(key.getLineId())) {
-                continue;
-            }
-            int dayCapacity = Math.max(0, Optional.ofNullable(entry.getValue()).orElse(0));
-            releasableByLine.merge(key.getLineId(), dayCapacity, Integer::sum);
-        }
+        Map<Long, Integer> releasableByLine = calculateReleasableCapacityByLine(snapshot, assessment, endExclusive);
 
         List<PlanPreviewResponseDTO.CandidateLineDTO> candidates = new ArrayList<>();
-        for (Map.Entry<Long, Integer> entry : releasableByLine.entrySet()) {
-            if (entry.getValue() <= 0) {
+        for (Long lineId : eligibleLineIds) {
+            Integer releasableCapacity = releasableByLine.get(lineId);
+            if (releasableCapacity == null || releasableCapacity <= 0) {
                 continue;
             }
             PlanPreviewResponseDTO.CandidateLineDTO candidate = new PlanPreviewResponseDTO.CandidateLineDTO();
-            candidate.setLineId(entry.getKey());
-            candidate.setLineName(lineNameById.getOrDefault(entry.getKey(), "产线-" + entry.getKey()));
-            candidate.setReleasableCapacity(entry.getValue());
-            PlanningSnapshot.LineRuntimeView runtimeView = snapshot.getRuntimeViewByLineId().get(entry.getKey());
+            candidate.setLineId(lineId);
+            candidate.setLineName(lineNameById.getOrDefault(lineId, "产线-" + lineId));
+            candidate.setReleasableCapacity(releasableCapacity);
+            PlanningSnapshot.LineRuntimeView runtimeView = snapshot.getRuntimeViewByLineId().get(lineId);
             candidate.setCurrentModel(runtimeView == null ? null : runtimeView.getCurrentModel());
-            candidate.setRiskTag(resolveRiskTag(runtimeView, entry.getValue()));
+            candidate.setRiskTag(resolveRiskTag(runtimeView, releasableCapacity));
             candidates.add(candidate);
         }
         candidates.sort(Comparator.comparing(PlanPreviewResponseDTO.CandidateLineDTO::getReleasableCapacity,
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(c -> Optional.ofNullable(c.getLineName()).orElse("")));
         suggestion.setCandidateLines(candidates);
+        if (requiredInsertQuantity > 0 && candidates.isEmpty()) {
+            suggestion.setDiagnosticTag(NO_ELIGIBLE_RUNNING_LINES);
+        }
         if (!manualLineSelectionRequired) {
             suggestion.setRequiredInsertLineCount(estimateRequiredLineCount(requiredInsertQuantity, candidates));
         }
@@ -182,6 +180,98 @@ class PlanningResultMapper {
         return lineCount;
     }
 
+    private Map<Long, Integer> calculateReleasableCapacityByLine(PlanningSnapshot snapshot,
+                                                                 FulfillabilityAssessment assessment,
+                                                                 LocalDate endExclusive) {
+        if (snapshot == null || endExclusive == null) {
+            return Collections.emptyMap();
+        }
+        LocalDate planStart = snapshot.getShiftHoursByDay().keySet().stream().min(LocalDate::compareTo).orElse(endExclusive);
+        LocalDate deadline = endExclusive.minusDays(1);
+        if (deadline.isBefore(planStart)) {
+            return Collections.emptyMap();
+        }
+        String triggerModel = assessment == null ? null : assessment.getTriggerGapModel();
+        String triggerCraft = assessment == null ? null : assessment.getTriggerGapCraft();
+        if ((triggerModel == null || triggerModel.trim().isEmpty()) && (triggerCraft == null || triggerCraft.trim().isEmpty())) {
+            return Collections.emptyMap();
+        }
+        List<LineCapacity> matchedCapacities = findMatchingCapacities(triggerModel, snapshot.getLineCapByModel());
+        Map<Long, BigDecimal> baseCapacityPerHourByLine = new HashMap<>();
+        for (LineCapacity capacity : matchedCapacities) {
+            if (capacity == null || capacity.lineId == null || capacity.capacityPerHour == null || !capacity.matchesCraft(triggerCraft)) {
+                continue;
+            }
+            BigDecimal normalized = capacity.capacityPerHour.max(BigDecimal.ZERO);
+            baseCapacityPerHourByLine.merge(capacity.lineId, normalized, BigDecimal::max);
+        }
+
+        Map<Long, Integer> releasableByLine = new HashMap<>();
+        for (Map.Entry<Long, BigDecimal> entry : baseCapacityPerHourByLine.entrySet()) {
+            PlanningSnapshot.LineRuntimeView runtimeView = snapshot.getRuntimeViewByLineId().get(entry.getKey());
+            if (!hasStatus(runtimeView, RuntimeStatus.RUNNING)) {
+                continue;
+            }
+            BigDecimal capacityPerHour = resolveCapacityPerHour(runtimeView, entry.getValue());
+            int lineCapacity = 0;
+            LocalDate cursor = planStart;
+            while (!cursor.isAfter(deadline)) {
+                BigDecimal hours = snapshot.getShiftHoursByDay().getOrDefault(cursor, BigDecimal.ZERO).max(BigDecimal.ZERO);
+                lineCapacity += capacityPerHour.multiply(hours).setScale(0, RoundingMode.FLOOR).intValue();
+                cursor = cursor.plusDays(1);
+            }
+            releasableByLine.put(entry.getKey(), Math.max(lineCapacity, 0));
+        }
+        return releasableByLine;
+    }
+
+    private List<LineCapacity> findMatchingCapacities(String model, Map<String, List<LineCapacity>> lineCapByModel) {
+        if (model == null || model.trim().isEmpty() || lineCapByModel == null || lineCapByModel.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String normalizedModel = model.trim();
+        List<LineCapacity> exactMatches = lineCapByModel.get(normalizedModel);
+        if (exactMatches != null && !exactMatches.isEmpty()) {
+            return exactMatches;
+        }
+        List<LineCapacity> seriesMatches = new ArrayList<>();
+        for (Map.Entry<String, List<LineCapacity>> entry : lineCapByModel.entrySet()) {
+            if (!isSeriesMatch(normalizedModel, entry.getKey())) {
+                continue;
+            }
+            seriesMatches.addAll(entry.getValue());
+        }
+        return seriesMatches;
+    }
+
+    private boolean isSeriesMatch(String demandModel, String configModel) {
+        if (demandModel == null || demandModel.trim().isEmpty() || configModel == null || configModel.trim().isEmpty()) {
+            return false;
+        }
+        String normalizedDemandModel = normalizeModelForSeriesMatch(demandModel);
+        String normalizedConfigModel = normalizeModelForSeriesMatch(configModel);
+        if (normalizedDemandModel.isEmpty() || normalizedConfigModel.isEmpty()) {
+            return false;
+        }
+        return normalizedDemandModel.startsWith(normalizedConfigModel)
+                || normalizedDemandModel.contains(normalizedConfigModel);
+    }
+
+    private String normalizeModelForSeriesMatch(String model) {
+        return model == null ? "" : model.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "");
+    }
+
+    private BigDecimal resolveCapacityPerHour(PlanningSnapshot.LineRuntimeView runtimeView, BigDecimal baseCapacityPerHour) {
+        if (runtimeView != null && runtimeView.getCurrentCapacity() != null && runtimeView.getCurrentCapacity().compareTo(BigDecimal.ZERO) > 0) {
+            return runtimeView.getCurrentCapacity();
+        }
+        return baseCapacityPerHour == null ? BigDecimal.ZERO : baseCapacityPerHour;
+    }
+
+    private boolean hasStatus(PlanningSnapshot.LineRuntimeView runtimeView, int status) {
+        return runtimeView != null && runtimeView.getStatus() != null && runtimeView.getStatus() == status;
+    }
+
     private String resolveRiskTag(PlanningSnapshot.LineRuntimeView runtimeView, int releasableCapacity) {
         if (releasableCapacity <= 0) {
             return "NO_CAPACITY";
@@ -189,7 +279,7 @@ class PlanningResultMapper {
         if (runtimeView == null) {
             return "RUNTIME_UNKNOWN";
         }
-        if (runtimeView.getStatus() != null && runtimeView.getStatus() == 0) {
+        if (runtimeView.getStatus() != null && runtimeView.getStatus() == RuntimeStatus.IDLE) {
             return "LINE_STOPPED";
         }
         String currentModel = runtimeView.getCurrentModel();

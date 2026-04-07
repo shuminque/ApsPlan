@@ -27,6 +27,7 @@ public class PlanPreviewResponseDTO {
     public static class InsertSuggestionDTO {
         private Integer requiredInsertLineCount = 0;
         private String requiredInsertLineHint;
+        private String diagnosticTag;
         private List<CandidateLineDTO> candidateLines = new ArrayList<>();
     }
 
