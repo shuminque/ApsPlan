@@ -113,11 +113,14 @@ public class PlanningSnapshot {
             this.changeoverEndTime = changeoverEndTime;
         }
 
-        public static LineRuntimeView fromRuntime(ProductionLineRuntime runtime, LocalDateTime changeoverStartTime, LocalDateTime changeoverEndTime) {
+        public static LineRuntimeView fromRuntime(ProductionLineRuntime runtime,
+                                                  Integer normalizedStatus,
+                                                  LocalDateTime changeoverStartTime,
+                                                  LocalDateTime changeoverEndTime) {
             if (runtime == null) {
                 return null;
             }
-            return new LineRuntimeView(runtime.getStatus(), runtime.getCurrentModel(), runtime.getCurrentCapacity(),
+            return new LineRuntimeView(normalizedStatus, runtime.getCurrentModel(), runtime.getCurrentCapacity(),
                     changeoverStartTime, changeoverEndTime);
         }
 

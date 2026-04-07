@@ -1,5 +1,7 @@
 package com.depository_manage.service.aps.impl;
 
+import com.depository_manage.entity.aps.RuntimeStatus;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -11,9 +13,6 @@ import java.util.Map;
 import java.util.Objects;
 
 class FulfillabilityEvaluator {
-
-    private static final int RUNTIME_IDLE = 0;
-    private static final int RUNTIME_RUNNING = 1;
 
     FulfillabilityAssessment evaluate(List<DemandItem> demands,
                                       LocalDate planStart,
@@ -39,7 +38,7 @@ class FulfillabilityEvaluator {
 
         Map<Long, BigDecimal> baseCapacityPerHourByLine = resolveBaseCapacityPerHourByLine(lineCapByModel);
         int idleCapacityBeforeDeadline = capacityBeforeDeadline(planStart, deadline, shiftHoursByDay,
-                baseCapacityPerHourByLine, runtimeViewByLineId, RUNTIME_IDLE);
+                baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.IDLE);
 
         int requiredInsertQuantity = Math.max(requiredQuantity - idleCapacityBeforeDeadline, 0);
         if (requiredInsertQuantity <= 0) {
@@ -47,7 +46,7 @@ class FulfillabilityEvaluator {
         }
 
         List<Integer> runningLineCapacities = capacityByLineBeforeDeadline(planStart, deadline, shiftHoursByDay,
-                baseCapacityPerHourByLine, runtimeViewByLineId, RUNTIME_RUNNING);
+                baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.RUNNING);
         int requiredInsertLineCount = estimateRequiredInsertLineCount(requiredInsertQuantity, runningLineCapacities);
         return new FulfillabilityAssessment(false, idleCapacityBeforeDeadline, requiredInsertQuantity, requiredInsertLineCount);
     }

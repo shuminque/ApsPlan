@@ -6,6 +6,7 @@ import com.depository_manage.entity.aps.ProductionLineModelConfig;
 import com.depository_manage.entity.aps.ProductionOrder;
 import com.depository_manage.entity.aps.ProductionOrderStatus;
 import com.depository_manage.entity.aps.ProductionLineRuntime;
+import com.depository_manage.entity.aps.RuntimeStatus;
 import com.depository_manage.entity.aps.SafetyStock;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
@@ -295,8 +296,7 @@ class PlanningInputAssembler {
                 int dayCapacity = effectiveCapacityPerHour.multiply(nonNegative(shiftHours))
                         .setScale(0, RoundingMode.FLOOR)
                         .intValue();
-                if (isLineStopped(runtimeViewByLineId.get(lineCapacity.lineId))
-                        || isInChangeoverWindow(runtimeViewByLineId.get(lineCapacity.lineId), cursor)) {
+                if (isLineStopped(runtimeViewByLineId.get(lineCapacity.lineId))) {
                     dayCapacity = 0;
                 }
                 remainingCapacityByLineDay.put(new LineDayKey(lineCapacity.lineId, cursor), Math.max(dayCapacity, 0));
@@ -332,14 +332,15 @@ class PlanningInputAssembler {
                 changeoverEndTime = null;
             }
             runtimeViewByLineId.put(runtime.getLineId(),
-                    PlanningSnapshot.LineRuntimeView.fromRuntime(runtime, changeoverStartTime, changeoverEndTime));
+                    PlanningSnapshot.LineRuntimeView.fromRuntime(runtime, normalizeRuntimeStatus(runtime.getStatus()),
+                            changeoverStartTime, changeoverEndTime));
         }
         return runtimeViewByLineId;
     }
 
     private BigDecimal resolveEffectiveCapacityPerHour(LineCapacity lineCapacity, PlanningSnapshot.LineRuntimeView runtimeView) {
         BigDecimal fallbackCapacity = nonNegative(lineCapacity.capacityPerHour);
-        if (runtimeView == null || runtimeView.getStatus() == null || runtimeView.getStatus() != 1) {
+        if (runtimeView == null || runtimeView.getStatus() == null || runtimeView.getStatus() != RuntimeStatus.RUNNING) {
             return fallbackCapacity;
         }
         BigDecimal runtimeCapacity = nonNegative(runtimeView.getCurrentCapacity());
@@ -350,21 +351,7 @@ class PlanningInputAssembler {
     }
 
     private boolean isLineStopped(PlanningSnapshot.LineRuntimeView runtimeView) {
-        return runtimeView != null && runtimeView.getStatus() != null && runtimeView.getStatus() == 0;
-    }
-
-    private boolean isInChangeoverWindow(PlanningSnapshot.LineRuntimeView runtimeView, LocalDate day) {
-        if (runtimeView == null || runtimeView.getStatus() == null || runtimeView.getStatus() != 2) {
-            return false;
-        }
-        LocalDateTime start = runtimeView.getChangeoverStartTime();
-        LocalDateTime end = runtimeView.getChangeoverEndTime();
-        if (start == null || end == null || end.isBefore(start)) {
-            return true;
-        }
-        LocalDateTime dayStart = day.atStartOfDay();
-        LocalDateTime dayEnd = day.plusDays(1).atStartOfDay();
-        return start.isBefore(dayEnd) && end.isAfter(dayStart);
+        return runtimeView != null && runtimeView.getStatus() != null && runtimeView.getStatus() == RuntimeStatus.IDLE;
     }
 
     private BigDecimal nonNegative(BigDecimal value) {
@@ -372,6 +359,13 @@ class PlanningInputAssembler {
             return BigDecimal.ZERO;
         }
         return value;
+    }
+
+    private Integer normalizeRuntimeStatus(Integer status) {
+        if (status == null || status == RuntimeStatus.IDLE || status == RuntimeStatus.RUNNING) {
+            return status;
+        }
+        return RuntimeStatus.IDLE;
     }
 
     private LineCapacity pickHigherCapacityLine(LineCapacity left,
