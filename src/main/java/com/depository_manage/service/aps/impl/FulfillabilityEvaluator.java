@@ -50,6 +50,8 @@ class FulfillabilityEvaluator {
 
             List<Integer> runningLineCapacities = capacityByLineBeforeDeadline(planStart, deadline, shiftHoursByDay,
                     baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.RUNNING);
+            logRunningCapacityDiagnostics(demand, requiredInsertQuantity, eligibleLines, baseCapacityPerHourByLine,
+                    runtimeViewByLineId, runningLineCapacities);
             int requiredInsertLineCount = estimateRequiredInsertLineCount(requiredInsertQuantity, runningLineCapacities);
             FulfillabilityAssessment candidate = new FulfillabilityAssessment(false, idleCapacityBeforeDeadline,
                     requiredInsertQuantity, requiredInsertLineCount, deadline.toString(),
@@ -244,6 +246,9 @@ class FulfillabilityEvaluator {
         if (requiredInsertQuantity <= 0) {
             return 0;
         }
+        if (runningLineCapacities == null || runningLineCapacities.isEmpty()) {
+            return -1;
+        }
         int covered = 0;
         int lineCount = 0;
         for (Integer lineCapacity : runningLineCapacities) {
@@ -256,7 +261,40 @@ class FulfillabilityEvaluator {
                 return lineCount;
             }
         }
-        return runningLineCapacities.isEmpty() ? 0 : lineCount;
+        return lineCount;
+    }
+
+    private void logRunningCapacityDiagnostics(DemandItem demand,
+                                               int requiredInsertQuantity,
+                                               List<LineCapacity> eligibleLines,
+                                               Map<Long, BigDecimal> baseCapacityPerHourByLine,
+                                               Map<Long, PlanningSnapshot.LineRuntimeView> runtimeViewByLineId,
+                                               List<Integer> runningLineCapacities) {
+        List<Long> runningStatusLineIds = new ArrayList<>();
+        for (Long lineId : baseCapacityPerHourByLine.keySet()) {
+            if (hasStatus(runtimeViewByLineId.get(lineId), RuntimeStatus.RUNNING)) {
+                runningStatusLineIds.add(lineId);
+            }
+        }
+        String emptyReason = "NONE";
+        if (requiredInsertQuantity > 0 && (runningLineCapacities == null || runningLineCapacities.isEmpty())) {
+            if (eligibleLines == null || eligibleLines.isEmpty() || baseCapacityPerHourByLine.isEmpty()) {
+                emptyReason = "LINE_MATCH_FILTERED";
+            } else if (runningStatusLineIds.isEmpty()) {
+                emptyReason = "STATUS_FILTERED";
+            } else {
+                emptyReason = "CAPACITY_CALCULATED_ZERO";
+            }
+        }
+        log.info("fulfillability runningLineCapacities detail: model={}, craft={}, requiredInsertQuantity={}, eligibleLineCount={}, baseLineCount={}, runningStatusLineIds={}, runningLineCapacities={}, emptyReason={}",
+                demand == null ? null : demand.model(),
+                demand == null ? null : demand.requiredCraft(),
+                requiredInsertQuantity,
+                eligibleLines == null ? 0 : eligibleLines.size(),
+                baseCapacityPerHourByLine.size(),
+                runningStatusLineIds,
+                runningLineCapacities,
+                emptyReason);
     }
 
     private BigDecimal resolveCapacityPerHour(PlanningSnapshot.LineRuntimeView runtimeView, BigDecimal baseCapacityPerHour) {

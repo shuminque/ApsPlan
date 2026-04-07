@@ -23,6 +23,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 class PlanningResultMapper {
+    private static final int MANUAL_INSERT_LINE_REQUIRED = -1;
+    private static final String MANUAL_INSERT_LINE_HINT = "需人工指定插单线";
 
     private final DateTimeFormatter dateTimeFormatter;
     private final String planColor;
@@ -57,10 +59,13 @@ class PlanningResultMapper {
                 : null;
         int requiredInsertQuantity = assessment == null ? 0 : Math.max(assessment.getRequiredInsertQuantity(), 0);
         boolean autoInsertTriggered = requiredInsertQuantity > 0;
-        int requiredInsertLineCount = assessment == null ? 0 : Math.max(assessment.getRequiredInsertLineCount(), 0);
+        int rawRequiredInsertLineCount = assessment == null ? 0 : assessment.getRequiredInsertLineCount();
+        boolean manualLineSelectionRequired = rawRequiredInsertLineCount == MANUAL_INSERT_LINE_REQUIRED;
+        int requiredInsertLineCount = manualLineSelectionRequired ? 0 : Math.max(rawRequiredInsertLineCount, 0);
         response.setAutoInsertTriggered(autoInsertTriggered);
         response.setRequiredInsertQuantity(requiredInsertQuantity);
         response.setRequiredInsertLineCount(requiredInsertLineCount);
+        response.setRequiredInsertLineHint(manualLineSelectionRequired ? MANUAL_INSERT_LINE_HINT : null);
         response.setInsertDeadline(assessment == null ? null : assessment.getInsertDeadline());
         response.setInsertSuggestion(buildInsertSuggestion(snapshot, endExclusive, autoInsertTriggered, assessment));
         return response;
@@ -71,9 +76,12 @@ class PlanningResultMapper {
                                                                              boolean autoInsertTriggered,
                                                                              FulfillabilityAssessment assessment) {
         PlanPreviewResponseDTO.InsertSuggestionDTO suggestion = new PlanPreviewResponseDTO.InsertSuggestionDTO();
-        int requiredInsertLineCount = assessment == null ? 0 : Math.max(assessment.getRequiredInsertLineCount(), 0);
+        int rawRequiredInsertLineCount = assessment == null ? 0 : assessment.getRequiredInsertLineCount();
+        boolean manualLineSelectionRequired = rawRequiredInsertLineCount == MANUAL_INSERT_LINE_REQUIRED;
+        int requiredInsertLineCount = manualLineSelectionRequired ? 0 : Math.max(rawRequiredInsertLineCount, 0);
         int requiredInsertQuantity = assessment == null ? 0 : Math.max(assessment.getRequiredInsertQuantity(), 0);
         suggestion.setRequiredInsertLineCount(requiredInsertLineCount);
+        suggestion.setRequiredInsertLineHint(manualLineSelectionRequired ? MANUAL_INSERT_LINE_HINT : null);
         if (snapshot == null || endExclusive == null) {
             return suggestion;
         }
@@ -114,7 +122,9 @@ class PlanningResultMapper {
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(c -> Optional.ofNullable(c.getLineName()).orElse("")));
         suggestion.setCandidateLines(candidates);
-        suggestion.setRequiredInsertLineCount(estimateRequiredLineCount(requiredInsertQuantity, candidates));
+        if (!manualLineSelectionRequired) {
+            suggestion.setRequiredInsertLineCount(estimateRequiredLineCount(requiredInsertQuantity, candidates));
+        }
         return suggestion;
     }
 
