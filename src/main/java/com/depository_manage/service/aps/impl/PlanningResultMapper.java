@@ -52,23 +52,30 @@ class PlanningResultMapper {
         response.setSqueezedOrderCount(result.getMetrics().getSqueezedOrderCount());
         response.setDelayedDays(result.getMetrics().getDelayedDays());
         response.setInsertFulfillmentRate(result.getMetrics().getInsertFulfillmentRate());
-        response.setInsertSuggestion(buildInsertSuggestion(result, snapshot, endExclusive));
+        FulfillabilityAssessment assessment = result.getDiagnostics() instanceof FulfillabilityAssessment
+                ? (FulfillabilityAssessment) result.getDiagnostics()
+                : null;
+        int requiredInsertQuantity = assessment == null ? 0 : Math.max(assessment.getRequiredInsertQuantity(), 0);
+        boolean autoInsertTriggered = requiredInsertQuantity > 0;
+        int requiredInsertLineCount = assessment == null ? 0 : Math.max(assessment.getRequiredInsertLineCount(), 0);
+        response.setAutoInsertTriggered(autoInsertTriggered);
+        response.setRequiredInsertQuantity(requiredInsertQuantity);
+        response.setRequiredInsertLineCount(requiredInsertLineCount);
+        response.setInsertDeadline(assessment == null ? null : assessment.getInsertDeadline());
+        response.setInsertSuggestion(buildInsertSuggestion(snapshot, endExclusive, autoInsertTriggered, requiredInsertLineCount));
         return response;
     }
 
-    private PlanPreviewResponseDTO.InsertSuggestionDTO buildInsertSuggestion(PlanningResult result,
-                                                                             PlanningSnapshot snapshot,
-                                                                             LocalDate endExclusive) {
+    private PlanPreviewResponseDTO.InsertSuggestionDTO buildInsertSuggestion(PlanningSnapshot snapshot,
+                                                                             LocalDate endExclusive,
+                                                                             boolean autoInsertTriggered,
+                                                                             int requiredInsertLineCount) {
         PlanPreviewResponseDTO.InsertSuggestionDTO suggestion = new PlanPreviewResponseDTO.InsertSuggestionDTO();
+        suggestion.setRequiredInsertLineCount(Math.max(requiredInsertLineCount, 0));
         if (snapshot == null || endExclusive == null) {
             return suggestion;
         }
-        int insertGap = result.getDemands().stream()
-                .mapToInt(d -> Math.max(0, d.required() - d.plannedQuantity()))
-                .sum();
-
-        if (insertGap <= 0) {
-            suggestion.setRequiredInsertLineCount(0);
+        if (!autoInsertTriggered) {
             return suggestion;
         }
 
@@ -103,28 +110,7 @@ class PlanningResultMapper {
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(c -> Optional.ofNullable(c.getLineName()).orElse("")));
         suggestion.setCandidateLines(candidates);
-        suggestion.setRequiredInsertLineCount(calculateRequiredLineCount(insertGap, candidates));
         return suggestion;
-    }
-
-    private int calculateRequiredLineCount(int insertGap, List<PlanPreviewResponseDTO.CandidateLineDTO> candidates) {
-        if (insertGap <= 0 || candidates == null || candidates.isEmpty()) {
-            return 0;
-        }
-        int cumulative = 0;
-        int count = 0;
-        for (PlanPreviewResponseDTO.CandidateLineDTO candidate : candidates) {
-            int capacity = Math.max(0, Optional.ofNullable(candidate.getReleasableCapacity()).orElse(0));
-            if (capacity <= 0) {
-                continue;
-            }
-            cumulative += capacity;
-            count++;
-            if (cumulative >= insertGap) {
-                return count;
-            }
-        }
-        return candidates.size();
     }
 
     private String resolveRiskTag(PlanningSnapshot.LineRuntimeView runtimeView, int releasableCapacity) {

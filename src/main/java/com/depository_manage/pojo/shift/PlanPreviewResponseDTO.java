@@ -17,6 +17,10 @@ public class PlanPreviewResponseDTO {
     private Integer squeezedOrderCount = 0;
     private Integer delayedDays = 0;
     private BigDecimal insertFulfillmentRate = BigDecimal.ZERO;
+    private Boolean autoInsertTriggered = false;
+    private Integer requiredInsertQuantity = 0;
+    private Integer requiredInsertLineCount = 0;
+    private String insertDeadline;
 
     @Data
     public static class InsertSuggestionDTO {
