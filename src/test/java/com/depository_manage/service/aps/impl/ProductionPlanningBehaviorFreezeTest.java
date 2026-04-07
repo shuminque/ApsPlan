@@ -152,7 +152,7 @@ class ProductionPlanningBehaviorFreezeTest {
         ProductionLine line = new ProductionLine();
         line.setId(lineId);
         line.setLineName(lineName);
-        line.setStatus(1);
+        line.setStatus(0);
         return line;
     }
 }
