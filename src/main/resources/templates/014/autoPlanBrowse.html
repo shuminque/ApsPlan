@@ -33,6 +33,7 @@
     let planBrowseData = null;
     let planOrderStartMap = {};
     let selectedInsertLineIdsForCommit = [];
+    let insertSelectionConfirmedForPreview = false;
 
     function toDateValue(date) {
         const year = date.getFullYear();
@@ -200,9 +201,18 @@
             })
             .then(data => {
                 previewPlanData = data || {events: [], orders: [], dailyOutputs: []};
+                selectedInsertLineIdsForCommit = [];
+                insertSelectionConfirmedForPreview = false;
                 openPlanPreviewDialog(previewPlanData);
+                if (isAutoInsertTriggered(previewPlanData)) {
+                    openAutoInsertTriggerDialog(previewPlanData);
+                }
             })
             .catch(() => layer.msg('自动排产预览失败'));
+    }
+
+    function isAutoInsertTriggered(data) {
+        return !!(data && data.autoInsertTriggered);
     }
 
     function formatMetricValue(value) {
@@ -235,7 +245,6 @@
     function openPlanPreviewDialog(data) {
         const orders = data.orders || [];
         const events = data.events || [];
-        const insertSuggestion = data.insertSuggestion || {};
         const planRangeText = resolvePlanRangeText(data, events);
 
         const orderRows = orders.map(item => `
@@ -302,7 +311,7 @@
                 </div>
             `,
             yes: function(index) {
-                handleCommitWithInsertSuggestion(insertSuggestion, function () {
+                handleCommitWithInsertSuggestion(data, function () {
                     layer.confirm('确认将当前排产结果写入班次排班吗？', {icon: 3, title: '确认写入'}, function(confirmIndex){
                         commitAutoPlan();
                         layer.close(confirmIndex);
@@ -313,27 +322,55 @@
         });
     }
 
-    function handleCommitWithInsertSuggestion(insertSuggestion, onReadyToCommit) {
-        const requiredInsertLineCount = Number(insertSuggestion.requiredInsertLineCount || 0);
-        const candidateLines = Array.isArray(insertSuggestion.candidateLines) ? insertSuggestion.candidateLines : [];
-        if (requiredInsertLineCount > 0) {
-            layer.msg('当前常规排产无法完全满足插单需求，请选择建议插单产线后再提交');
-            if (!candidateLines.length) {
+    function handleCommitWithInsertSuggestion(data, onReadyToCommit) {
+        const insertSuggestion = data && data.insertSuggestion ? data.insertSuggestion : {};
+        const requiredInsertLineCount = Number((data && data.requiredInsertLineCount) || insertSuggestion.requiredInsertLineCount || 0);
+        if (isAutoInsertTriggered(data)) {
+            if (insertSelectionConfirmedForPreview
+                && Array.isArray(selectedInsertLineIdsForCommit)
+                && selectedInsertLineIdsForCommit.length >= requiredInsertLineCount) {
+                onReadyToCommit();
                 return;
             }
-            openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onReadyToCommit);
+            layer.msg('请先确认插单信息并选择插单产线后再提交');
+            openAutoInsertTriggerDialog(data, onReadyToCommit);
             return;
         }
         selectedInsertLineIdsForCommit = [];
+        insertSelectionConfirmedForPreview = false;
         onReadyToCommit();
     }
 
-    function openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onConfirm) {
+    function openAutoInsertTriggerDialog(data, onConfirmThen) {
+        const insertSuggestion = data && data.insertSuggestion ? data.insertSuggestion : {};
+        const requiredInsertLineCount = Number((data && data.requiredInsertLineCount) || insertSuggestion.requiredInsertLineCount || 0);
+        const candidateLines = Array.isArray(insertSuggestion.candidateLines) ? insertSuggestion.candidateLines : [];
+        const requiredInsertQuantity = Number((data && data.requiredInsertQuantity) || 0);
+        const insertDeadline = (data && data.insertDeadline) ? String(data.insertDeadline) : '-';
+        if (!candidateLines.length) {
+            layer.msg('已触发插单，但暂无推荐产线，请人工处理后再提交');
+            return;
+        }
+        layer.msg('检测到插单需求，请先确认插单产线');
+        openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, function () {
+            insertSelectionConfirmedForPreview = true;
+            if (typeof onConfirmThen === 'function') {
+                onConfirmThen();
+            }
+        }, {
+            requiredInsertQuantity: requiredInsertQuantity,
+            insertDeadline: insertDeadline
+        });
+    }
+
+    function openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onConfirm, extraInfo) {
         const defaultSelectedIndex = Math.max(requiredInsertLineCount, 0);
         const totalReleasableCapacity = candidateLines.reduce(function (sum, line) {
             const capacity = Number(line && line.releasableCapacity);
             return Number.isFinite(capacity) ? sum + capacity : sum;
         }, 0);
+        const requiredInsertQuantity = Number((extraInfo && extraInfo.requiredInsertQuantity) || 0);
+        const insertDeadline = (extraInfo && extraInfo.insertDeadline) ? String(extraInfo.insertDeadline) : '-';
         const riskTagDescriptions = {
             LOW: '可用风险低，可优先用于插单',
             LINE_STOPPED: '产线停机，预计无法释放产能',
@@ -372,7 +409,9 @@
                         需至少选择 ${requiredInsertLineCount} 条产线用于插单。系统已默认勾选推荐项，可手动调整。
                     </div>
                     <div style="margin-bottom: 8px; color: #333;">
+                        <div>缺口数量：<b>${requiredInsertQuantity}</b></div>
                         <div>系统建议最少插单线数量：<b>${requiredInsertLineCount}</b></div>
+                        <div>对应交期：<b>${insertDeadline}</b></div>
                         <div>候选线总可释放产能：<b>${totalReleasableCapacity}</b></div>
                     </div>
                     <div style="margin-bottom: 10px; padding: 8px 10px; background: #f8f8f8; border-radius: 4px;">
@@ -404,6 +443,7 @@
                     return;
                 }
                 selectedInsertLineIdsForCommit = selectedIds;
+                insertSelectionConfirmedForPreview = true;
                 layer.close(index);
                 onConfirm();
             }
