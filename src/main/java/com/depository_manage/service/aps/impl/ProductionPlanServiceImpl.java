@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -55,6 +56,12 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
     @Override
     @Transactional(transactionManager = "apsTransactionManager", rollbackFor = Exception.class)
     public int commitPlan(List<CalendarEventDTO> events) {
+        return commitPlan(events, java.util.Collections.emptySet());
+    }
+
+    @Override
+    @Transactional(transactionManager = "apsTransactionManager", rollbackFor = Exception.class)
+    public int commitPlan(List<CalendarEventDTO> events, Set<Long> selectedInsertLineIds) {
         if (events == null || events.isEmpty()) {
             return 0;
         }
@@ -65,6 +72,12 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
                 .collect(Collectors.toList());
         if (parsedEvents.isEmpty()) {
             return 0;
+        }
+        Set<Long> selectedLines = Optional.ofNullable(selectedInsertLineIds).orElse(java.util.Collections.emptySet()).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (!selectedLines.isEmpty()) {
+            applyInsertAdjustments(parsedEvents, selectedLines, LocalDateTime.now());
         }
 
         LocalDateTime rollbackFrom = parsedEvents.stream()
@@ -79,6 +92,9 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
                 .map(p -> p.lineId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
+        if (!selectedLines.isEmpty()) {
+            rollbackLineIds.removeAll(selectedLines);
+        }
         rollbackPlanWindow(rollbackFrom, rollbackTo, rollbackLineIds);
 
         Map<String, List<ProductionOrder>> orderGroupMap = loadOpenOrdersByKey();
@@ -192,6 +208,146 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         }
 
         return inserted;
+    }
+
+    private void applyInsertAdjustments(List<ParsedPlanEvent> parsedEvents, Set<Long> selectedLines, LocalDateTime now) {
+        Map<Long, List<ParsedPlanEvent>> insertEventsByLine = parsedEvents.stream()
+                .filter(p -> p.lineId != null && selectedLines.contains(p.lineId))
+                .collect(Collectors.groupingBy(p -> p.lineId));
+        if (insertEventsByLine.isEmpty()) {
+            return;
+        }
+
+        Date nowDate = toDate(now);
+        List<ProductionPlanItem> occupiedItems = productionPlanItemMapper.selectList(new LambdaQueryWrapper<ProductionPlanItem>()
+                .in(ProductionPlanItem::getLineId, insertEventsByLine.keySet())
+                .gt(ProductionPlanItem::getEndDate, nowDate)
+                .orderByAsc(ProductionPlanItem::getLineId)
+                .orderByAsc(ProductionPlanItem::getStartDate)
+                .orderByAsc(ProductionPlanItem::getId));
+        Map<Long, List<ProductionPlanItem>> occupiedByLine = occupiedItems.stream()
+                .collect(Collectors.groupingBy(ProductionPlanItem::getLineId));
+
+        for (Map.Entry<Long, List<ParsedPlanEvent>> entry : insertEventsByLine.entrySet()) {
+            Long lineId = entry.getKey();
+            List<ParsedPlanEvent> insertEvents = entry.getValue();
+            insertEvents.sort((a, b) -> a.startDate.compareTo(b.startDate));
+
+            LocalDateTime firstPreviewStart = toLocalDateTime(insertEvents.get(0).startDate);
+            LocalDateTime cursor = firstPreviewStart.isAfter(now) ? firstPreviewStart : now;
+            for (ParsedPlanEvent event : insertEvents) {
+                Duration duration = Duration.between(toLocalDateTime(event.startDate), toLocalDateTime(event.endDate));
+                if (duration.isNegative() || duration.isZero()) {
+                    duration = Duration.ofMinutes(1);
+                }
+                event.startDate = toDate(cursor);
+                cursor = cursor.plus(duration);
+                event.endDate = toDate(cursor);
+            }
+            postponeUnfinishedOnLine(occupiedByLine.getOrDefault(lineId, new ArrayList<>()), now, cursor);
+        }
+    }
+
+    private void postponeUnfinishedOnLine(List<ProductionPlanItem> occupiedItems, LocalDateTime now, LocalDateTime beginAt) {
+        if (occupiedItems == null || occupiedItems.isEmpty()) {
+            return;
+        }
+        List<ProductionPlanItem> toReschedule = new ArrayList<>();
+        Date nowDate = toDate(now);
+        Date updateAt = new Date();
+        for (ProductionPlanItem item : occupiedItems) {
+            LocalDateTime start = toLocalDateTime(item.getStartDate());
+            LocalDateTime end = toLocalDateTime(item.getEndDate());
+            if (!start.isBefore(now)) {
+                toReschedule.add(item);
+                continue;
+            }
+            if (!end.isAfter(now)) {
+                continue;
+            }
+
+            int totalQty = Optional.ofNullable(item.getAssignQty()).orElse(0);
+            int totalOrderQty = Optional.ofNullable(item.getOrderDemandQty()).orElse(0);
+            int totalSafetyQty = Optional.ofNullable(item.getSafetyDemandQty()).orElse(0);
+            long totalSeconds = Math.max(1L, Duration.between(start, end).getSeconds());
+            long finishedSeconds = Math.max(0L, Duration.between(start, now).getSeconds());
+            int finishedTotalQty = (int) Math.min(totalQty, Math.floor((double) totalQty * finishedSeconds / totalSeconds));
+            int finishedOrderQty = (int) Math.min(totalOrderQty, Math.floor((double) totalOrderQty * finishedSeconds / totalSeconds));
+            int finishedSafetyQty = Math.max(0, finishedTotalQty - finishedOrderQty);
+            if (finishedSafetyQty > totalSafetyQty) {
+                finishedSafetyQty = totalSafetyQty;
+                finishedOrderQty = Math.max(0, finishedTotalQty - finishedSafetyQty);
+            }
+            int remainTotal = Math.max(0, totalQty - finishedTotalQty);
+            int remainOrder = Math.max(0, totalOrderQty - finishedOrderQty);
+            int remainSafety = Math.max(0, totalSafetyQty - finishedSafetyQty);
+
+            if (finishedTotalQty <= 0) {
+                productionPlanItemMapper.deleteById(item.getId());
+            } else {
+                item.setAssignQty(finishedTotalQty);
+                item.setOrderDemandQty(finishedOrderQty);
+                item.setSafetyDemandQty(finishedSafetyQty);
+                item.setEndDate(nowDate);
+                item.setUpdatedAt(updateAt);
+                productionPlanItemMapper.updateById(item);
+            }
+            if (remainTotal > 0) {
+                ProductionPlanItem remain = cloneItem(item);
+                remain.setId(null);
+                remain.setStartDate(nowDate);
+                remain.setEndDate(toDate(end));
+                remain.setAssignQty(remainTotal);
+                remain.setOrderDemandQty(remainOrder);
+                remain.setSafetyDemandQty(remainSafety);
+                remain.setCreatedAt(updateAt);
+                remain.setUpdatedAt(updateAt);
+                toReschedule.add(remain);
+            }
+        }
+
+        toReschedule.sort((a, b) -> {
+            int c = a.getStartDate().compareTo(b.getStartDate());
+            if (c != 0) {
+                return c;
+            }
+            return Optional.ofNullable(a.getId()).orElse(Long.MAX_VALUE)
+                    .compareTo(Optional.ofNullable(b.getId()).orElse(Long.MAX_VALUE));
+        });
+
+        LocalDateTime cursor = beginAt.isAfter(now) ? beginAt : now;
+        for (ProductionPlanItem item : toReschedule) {
+            LocalDateTime originalStart = toLocalDateTime(item.getStartDate());
+            LocalDateTime originalEnd = toLocalDateTime(item.getEndDate());
+            Duration duration = Duration.between(originalStart, originalEnd);
+            if (duration.isNegative() || duration.isZero()) {
+                duration = Duration.ofMinutes(1);
+            }
+            item.setStartDate(toDate(cursor));
+            cursor = cursor.plus(duration);
+            item.setEndDate(toDate(cursor));
+            item.setUpdatedAt(updateAt);
+            if (item.getId() == null) {
+                item.setCreatedAt(updateAt);
+                productionPlanItemMapper.insert(item);
+            } else {
+                productionPlanItemMapper.updateById(item);
+            }
+        }
+    }
+
+    private ProductionPlanItem cloneItem(ProductionPlanItem item) {
+        ProductionPlanItem cloned = new ProductionPlanItem();
+        cloned.setPlanId(item.getPlanId());
+        cloned.setPlanBatchNo(item.getPlanBatchNo());
+        cloned.setOrderId(item.getOrderId());
+        cloned.setCustomer(item.getCustomer());
+        cloned.setModel(item.getModel());
+        cloned.setOuterInnerRing(item.getOuterInnerRing());
+        cloned.setLineId(item.getLineId());
+        cloned.setLineName(item.getLineName());
+        cloned.setSource(item.getSource());
+        return cloned;
     }
 
     @Override
