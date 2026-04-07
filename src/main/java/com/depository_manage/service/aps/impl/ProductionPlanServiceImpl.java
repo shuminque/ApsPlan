@@ -137,6 +137,8 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
                 item.setStartDate(parsed.startDate);
                 item.setEndDate(parsed.endDate);
                 item.setAssignQty(assignToOrder);
+                item.setOrderDemandQty(assignToOrder);
+                item.setSafetyDemandQty(0);
                 item.setSource("RULE_PRIORITY");
                 item.setCreatedAt(now);
                 item.setUpdatedAt(now);
@@ -267,6 +269,8 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         parsed.outerInnerRing = outerInnerRing;
         parsed.model = model;
         parsed.assignQty = assignQty;
+        parsed.orderDemandQty = assignQty;
+        parsed.safetyDemandQty = 0;
         parsed.startDate = Date.from(start.atZone(ZoneId.systemDefault()).toInstant());
         parsed.endDate = Date.from(end.atZone(ZoneId.systemDefault()).toInstant());
         return parsed;
@@ -292,6 +296,8 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         parsed.outerInnerRing = outerInnerRing;
         parsed.model = model;
         parsed.assignQty = quantity;
+        parsed.orderDemandQty = Optional.ofNullable(event.getOrderDemandQty()).orElse(quantity);
+        parsed.safetyDemandQty = Optional.ofNullable(event.getSafetyDemandQty()).orElse(0);
         parsed.startDate = Date.from(start.atZone(ZoneId.systemDefault()).toInstant());
         parsed.endDate = Date.from(end.atZone(ZoneId.systemDefault()).toInstant());
         return parsed;
@@ -353,6 +359,8 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         private Date startDate;
         private Date endDate;
         private int assignQty;
+        private int orderDemandQty;
+        private int safetyDemandQty;
 
         private String orderKey() {
             return buildNormalizedOrderKey(customer, outerInnerRing, model);

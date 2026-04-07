@@ -35,6 +35,16 @@ public class ShiftCalendarServiceImpl implements ShiftCalendarService {
         List<CalendarEventDTO> merged = new ArrayList<>();
         merged.addAll(shiftScheduleMapper.selectCalendarEvents(startDate, endDate));
         merged.addAll(productionPlanItemMapper.selectPlanCalendarEvents(startDate, endDate));
+        for (CalendarEventDTO event : merged) {
+            if (event == null) {
+                continue;
+            }
+            event.setOrderDemandQty(event.getOrderDemandQty() == null ? 0 : event.getOrderDemandQty());
+            event.setSafetyDemandQty(event.getSafetyDemandQty() == null ? 0 : event.getSafetyDemandQty());
+            if ("PLAN".equalsIgnoreCase(event.getEventType()) && event.getQuantity() == null) {
+                event.setQuantity(event.getOrderDemandQty() + event.getSafetyDemandQty());
+            }
+        }
         merged.sort(Comparator.comparing(CalendarEventDTO::getStart, Comparator.nullsLast(String::compareTo)));
         return merged;
     }

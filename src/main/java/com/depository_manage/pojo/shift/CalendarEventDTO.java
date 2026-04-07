@@ -26,6 +26,8 @@ public class CalendarEventDTO {
     private String outerInnerRing;
     private String model;
     private Integer quantity;
+    private Integer orderDemandQty;
+    private Integer safetyDemandQty;
     /**
      * 结果指标（结构化输出，前端直接渲染）
      */

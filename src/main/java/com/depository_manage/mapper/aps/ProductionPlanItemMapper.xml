@@ -18,6 +18,8 @@
         <result column="start_date" property="startDate"/>
         <result column="end_date" property="endDate"/>
         <result column="assign_qty" property="assignQty"/>
+        <result column="order_demand_qty" property="orderDemandQty"/>
+        <result column="safety_demand_qty" property="safetyDemandQty"/>
         <result column="source" property="source"/>
         <result column="create_time" property="createdAt"/>
         <result column="update_time" property="updatedAt"/>
@@ -33,6 +35,9 @@
         <result column="color" property="color"/>
         <result column="eventType" property="eventType"/>
         <result column="source" property="source"/>
+        <result column="assign_qty" property="quantity"/>
+        <result column="order_demand_qty" property="orderDemandQty"/>
+        <result column="safety_demand_qty" property="safetyDemandQty"/>
     </resultMap>
 
     <select id="selectPlanCalendarEvents" resultMap="PlanCalendarEventResultMap">
@@ -54,7 +59,10 @@
             DATE_FORMAT(ppi.end_date, '%H:%i:%s') AS endTime,
             '#9B59B6' AS color,
             'PLAN' AS eventType,
-            IFNULL(ppi.source, 'PRODUCTION_PLAN_ITEM') AS source
+            IFNULL(ppi.source, 'PRODUCTION_PLAN_ITEM') AS source,
+            IFNULL(ppi.assign_qty, 0) AS assign_qty,
+            IFNULL(ppi.order_demand_qty, 0) AS order_demand_qty,
+            IFNULL(ppi.safety_demand_qty, 0) AS safety_demand_qty
         FROM production_plan_item ppi
         WHERE ppi.start_date &lt;= #{endDate}
           AND ppi.end_date &gt;= #{startDate}
