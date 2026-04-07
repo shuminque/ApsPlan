@@ -650,18 +650,78 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
         return date.toInstant().atZone(zoneId).toLocalDateTime();
     }
 
-    private record LineMatch(Long lineId, String lineName, Integer priority, BigDecimal capacityPerHour) {
+    private static final class LineMatch {
+        private final Long lineId;
+        private final String lineName;
+        private final Integer priority;
+        private final BigDecimal capacityPerHour;
+
+        private LineMatch(Long lineId, String lineName, Integer priority, BigDecimal capacityPerHour) {
+            this.lineId = lineId;
+            this.lineName = lineName;
+            this.priority = priority;
+            this.capacityPerHour = capacityPerHour;
+        }
+
+        private Long lineId() {
+            return lineId;
+        }
+
+        private Integer priority() {
+            return priority;
+        }
     }
 
-    private record TimeRange(LocalDateTime start, LocalDateTime end) {
+    private static final class TimeRange {
+        private final LocalDateTime start;
+        private final LocalDateTime end;
+
+        private TimeRange(LocalDateTime start, LocalDateTime end) {
+            this.start = start;
+            this.end = end;
+        }
+
+        private LocalDateTime start() {
+            return start;
+        }
     }
 
-    private record LineQueueCandidate(Long lineId, String lineName, BigDecimal capacityPerHour, LocalDateTime earliestStart) {
+    private static final class LineQueueCandidate {
+        private final Long lineId;
+        private final String lineName;
+        private final BigDecimal capacityPerHour;
+        private final LocalDateTime earliestStart;
+
+        private LineQueueCandidate(Long lineId, String lineName, BigDecimal capacityPerHour, LocalDateTime earliestStart) {
+            this.lineId = lineId;
+            this.lineName = lineName;
+            this.capacityPerHour = capacityPerHour;
+            this.earliestStart = earliestStart;
+        }
+
+        private LocalDateTime earliestStart() {
+            return earliestStart;
+        }
+
+        private Long lineId() {
+            return lineId;
+        }
     }
 
-    private record DelayAssessment(LocalDateTime predictedFinishTime,
-                                   int delayDays,
-                                   int delayMinutes,
-                                   List<OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO> recommendedLines) {
+    private static final class DelayAssessment {
+        private final LocalDateTime predictedFinishTime;
+        private final int delayDays;
+        private final int delayMinutes;
+        private final List<OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO> recommendedLines;
+
+        private DelayAssessment(LocalDateTime predictedFinishTime,
+                                int delayDays,
+                                int delayMinutes,
+                                List<OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO> recommendedLines) {
+            this.predictedFinishTime = predictedFinishTime;
+            this.delayDays = delayDays;
+            this.delayMinutes = delayMinutes;
+            this.recommendedLines = recommendedLines;
+        }
     }
 }
