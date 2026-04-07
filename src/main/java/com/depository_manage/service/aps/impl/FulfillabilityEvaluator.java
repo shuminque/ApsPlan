@@ -25,30 +25,45 @@ class FulfillabilityEvaluator {
         }
 
         List<DemandItem> targetDemands = pickTargetDemands(demands);
-        int requiredQuantity = targetDemands.stream().mapToInt(DemandItem::required).sum();
-        if (requiredQuantity <= 0) {
-            return new FulfillabilityAssessment(true, 0, 0, 0, null);
+        Map<Long, BigDecimal> baseCapacityPerHourByLine = resolveBaseCapacityPerHourByLine(lineCapByModel);
+        FulfillabilityAssessment worstGapAssessment = null;
+        for (DemandItem demand : targetDemands) {
+            if (demand == null || demand.required() <= 0) {
+                continue;
+            }
+            LocalDate deadline = demand.earliestDeliveryDate() == null ? defaultDeadline : demand.earliestDeliveryDate();
+            int idleCapacityBeforeDeadline = capacityBeforeDeadline(planStart, deadline, shiftHoursByDay,
+                    baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.IDLE);
+            int requiredInsertQuantity = Math.max(demand.required() - idleCapacityBeforeDeadline, 0);
+            if (requiredInsertQuantity <= 0) {
+                continue;
+            }
+
+            List<Integer> runningLineCapacities = capacityByLineBeforeDeadline(planStart, deadline, shiftHoursByDay,
+                    baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.RUNNING);
+            int requiredInsertLineCount = estimateRequiredInsertLineCount(requiredInsertQuantity, runningLineCapacities);
+            FulfillabilityAssessment candidate = new FulfillabilityAssessment(false, idleCapacityBeforeDeadline,
+                    requiredInsertQuantity, requiredInsertLineCount, deadline.toString());
+            if (shouldReplaceWorstGap(worstGapAssessment, candidate)) {
+                worstGapAssessment = candidate;
+            }
+        }
+        if (worstGapAssessment != null) {
+            return worstGapAssessment;
         }
 
-        LocalDate deadline = targetDemands.stream()
+        int minRequiredQuantity = targetDemands.stream().mapToInt(DemandItem::required).filter(value -> value > 0).min().orElse(0);
+        if (minRequiredQuantity <= 0) {
+            return new FulfillabilityAssessment(true, 0, 0, 0, null);
+        }
+        LocalDate earliestDeadline = targetDemands.stream()
                 .map(DemandItem::earliestDeliveryDate)
                 .filter(Objects::nonNull)
                 .min(LocalDate::compareTo)
                 .orElse(defaultDeadline);
-
-        Map<Long, BigDecimal> baseCapacityPerHourByLine = resolveBaseCapacityPerHourByLine(lineCapByModel);
-        int idleCapacityBeforeDeadline = capacityBeforeDeadline(planStart, deadline, shiftHoursByDay,
+        int idleCapacityBeforeDeadline = capacityBeforeDeadline(planStart, earliestDeadline, shiftHoursByDay,
                 baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.IDLE);
-
-        int requiredInsertQuantity = Math.max(requiredQuantity - idleCapacityBeforeDeadline, 0);
-        if (requiredInsertQuantity <= 0) {
-            return new FulfillabilityAssessment(true, idleCapacityBeforeDeadline, 0, 0, deadline.toString());
-        }
-
-        List<Integer> runningLineCapacities = capacityByLineBeforeDeadline(planStart, deadline, shiftHoursByDay,
-                baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.RUNNING);
-        int requiredInsertLineCount = estimateRequiredInsertLineCount(requiredInsertQuantity, runningLineCapacities);
-        return new FulfillabilityAssessment(false, idleCapacityBeforeDeadline, requiredInsertQuantity, requiredInsertLineCount, deadline.toString());
+        return new FulfillabilityAssessment(true, idleCapacityBeforeDeadline, 0, 0, earliestDeadline.toString());
     }
 
     private List<DemandItem> pickTargetDemands(List<DemandItem> demands) {
@@ -59,6 +74,25 @@ class FulfillabilityEvaluator {
             }
         }
         return lockedInsertDemands.isEmpty() ? demands : lockedInsertDemands;
+    }
+
+    private boolean shouldReplaceWorstGap(FulfillabilityAssessment current, FulfillabilityAssessment candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        if (current == null) {
+            return true;
+        }
+        if (candidate.getRequiredInsertQuantity() != current.getRequiredInsertQuantity()) {
+            return candidate.getRequiredInsertQuantity() > current.getRequiredInsertQuantity();
+        }
+        if (candidate.getInsertDeadline() == null) {
+            return false;
+        }
+        if (current.getInsertDeadline() == null) {
+            return true;
+        }
+        return candidate.getInsertDeadline().compareTo(current.getInsertDeadline()) < 0;
     }
 
     private Map<Long, BigDecimal> resolveBaseCapacityPerHourByLine(Map<String, List<LineCapacity>> lineCapByModel) {
