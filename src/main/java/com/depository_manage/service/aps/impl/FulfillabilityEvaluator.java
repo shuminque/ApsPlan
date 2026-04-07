@@ -27,7 +27,7 @@ class FulfillabilityEvaluator {
                                       Map<String, List<LineCapacity>> lineCapByModel,
                                       Map<Long, PlanningSnapshot.LineRuntimeView> runtimeViewByLineId) {
         if (demands == null || demands.isEmpty() || planStart == null || defaultDeadline == null) {
-            return new FulfillabilityAssessment(true, 0, 0, 0, null);
+            return new FulfillabilityAssessment(true, 0, 0, 0, null, null, null, Collections.<Long>emptyList());
         }
 
         List<DemandItem> targetDemands = pickTargetDemands(demands);
@@ -52,7 +52,8 @@ class FulfillabilityEvaluator {
                     baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.RUNNING);
             int requiredInsertLineCount = estimateRequiredInsertLineCount(requiredInsertQuantity, runningLineCapacities);
             FulfillabilityAssessment candidate = new FulfillabilityAssessment(false, idleCapacityBeforeDeadline,
-                    requiredInsertQuantity, requiredInsertLineCount, deadline.toString());
+                    requiredInsertQuantity, requiredInsertLineCount, deadline.toString(),
+                    demand.model(), demand.requiredCraft(), resolveLineIds(eligibleLines));
             if (shouldReplaceWorstGap(worstGapAssessment, candidate)) {
                 worstGapAssessment = candidate;
             }
@@ -63,7 +64,7 @@ class FulfillabilityEvaluator {
 
         int minRequiredQuantity = targetDemands.stream().mapToInt(DemandItem::required).filter(value -> value > 0).min().orElse(0);
         if (minRequiredQuantity <= 0) {
-            return new FulfillabilityAssessment(true, 0, 0, 0, null);
+            return new FulfillabilityAssessment(true, 0, 0, 0, null, null, null, Collections.<Long>emptyList());
         }
         LocalDate earliestDeadline = targetDemands.stream()
                 .map(DemandItem::earliestDeliveryDate)
@@ -80,7 +81,10 @@ class FulfillabilityEvaluator {
         );
         int idleCapacityBeforeDeadline = capacityBeforeDeadline(planStart, earliestDeadline, shiftHoursByDay,
                 fallbackCapacityByLine, runtimeViewByLineId, RuntimeStatus.IDLE);
-        return new FulfillabilityAssessment(true, idleCapacityBeforeDeadline, 0, 0, earliestDeadline.toString());
+        return new FulfillabilityAssessment(true, idleCapacityBeforeDeadline, 0, 0, earliestDeadline.toString(),
+                minDemand == null ? null : minDemand.model(),
+                minDemand == null ? null : minDemand.requiredCraft(),
+                resolveLineIds(resolveEligibleLinesForDemand(minDemand, lineCapByModel)));
     }
 
     private List<DemandItem> pickTargetDemands(List<DemandItem> demands) {
@@ -135,6 +139,17 @@ class FulfillabilityEvaluator {
         List<LineCapacity> matchedLines = findMatchingLines(demand.model(), lineCapByModel);
         return matchedLines.stream()
                 .filter(line -> line.matchesCraft(demand.requiredCraft()))
+                .collect(Collectors.toList());
+    }
+
+    private List<Long> resolveLineIds(List<LineCapacity> capacities) {
+        if (capacities == null || capacities.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return capacities.stream()
+                .map(capacity -> capacity == null ? null : capacity.lineId)
+                .filter(Objects::nonNull)
+                .distinct()
                 .collect(Collectors.toList());
     }
 
