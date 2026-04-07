@@ -24,6 +24,10 @@ public class ProductionPlanItem {
     private Date startDate;
     private Date endDate;
     private Integer assignQty;
+    @TableField("order_demand_qty")
+    private Integer orderDemandQty;
+    @TableField("safety_demand_qty")
+    private Integer safetyDemandQty;
     private String source;
     @TableField("create_time")
     private Date createdAt;

@@ -280,6 +280,8 @@ class PlanningResultMapper {
         dto.setOuterInnerRing(slice.outerInnerRing());
         dto.setModel(slice.model());
         dto.setQuantity(quantity);
+        dto.setOrderDemandQty(quantity);
+        dto.setSafetyDemandQty(0);
         applyEventMetrics(dto, startInclusive, endExclusive, quantity, slice.capacityPerHour(), shiftHoursByDay);
         return dto;
     }
