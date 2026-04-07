@@ -62,16 +62,18 @@ class PlanningResultMapper {
         response.setRequiredInsertQuantity(requiredInsertQuantity);
         response.setRequiredInsertLineCount(requiredInsertLineCount);
         response.setInsertDeadline(assessment == null ? null : assessment.getInsertDeadline());
-        response.setInsertSuggestion(buildInsertSuggestion(snapshot, endExclusive, autoInsertTriggered, requiredInsertLineCount));
+        response.setInsertSuggestion(buildInsertSuggestion(snapshot, endExclusive, autoInsertTriggered, assessment));
         return response;
     }
 
     private PlanPreviewResponseDTO.InsertSuggestionDTO buildInsertSuggestion(PlanningSnapshot snapshot,
                                                                              LocalDate endExclusive,
                                                                              boolean autoInsertTriggered,
-                                                                             int requiredInsertLineCount) {
+                                                                             FulfillabilityAssessment assessment) {
         PlanPreviewResponseDTO.InsertSuggestionDTO suggestion = new PlanPreviewResponseDTO.InsertSuggestionDTO();
-        suggestion.setRequiredInsertLineCount(Math.max(requiredInsertLineCount, 0));
+        int requiredInsertLineCount = assessment == null ? 0 : Math.max(assessment.getRequiredInsertLineCount(), 0);
+        int requiredInsertQuantity = assessment == null ? 0 : Math.max(assessment.getRequiredInsertQuantity(), 0);
+        suggestion.setRequiredInsertLineCount(requiredInsertLineCount);
         if (snapshot == null || endExclusive == null) {
             return suggestion;
         }
@@ -79,13 +81,15 @@ class PlanningResultMapper {
             return suggestion;
         }
 
+        Set<Long> eligibleLineIds = resolveEligibleLineIds(snapshot, assessment);
         Map<Long, String> lineNameById = snapshot.getProductionLines().stream()
                 .filter(line -> line.getId() != null)
                 .collect(Collectors.toMap(line -> line.getId(), line -> Optional.ofNullable(line.getLineName()).orElse(""), (a, b) -> a));
         Map<Long, Integer> releasableByLine = new HashMap<>();
         for (Map.Entry<LineDayKey, Integer> entry : snapshot.getRemainingCapacityByLineDay().entrySet()) {
             LineDayKey key = entry.getKey();
-            if (key == null || key.getLineId() == null || key.getDay() == null || !key.getDay().isBefore(endExclusive)) {
+            if (key == null || key.getLineId() == null || key.getDay() == null || !key.getDay().isBefore(endExclusive)
+                    || !eligibleLineIds.contains(key.getLineId())) {
                 continue;
             }
             int dayCapacity = Math.max(0, Optional.ofNullable(entry.getValue()).orElse(0));
@@ -110,7 +114,62 @@ class PlanningResultMapper {
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(c -> Optional.ofNullable(c.getLineName()).orElse("")));
         suggestion.setCandidateLines(candidates);
+        suggestion.setRequiredInsertLineCount(estimateRequiredLineCount(requiredInsertQuantity, candidates));
         return suggestion;
+    }
+
+    private Set<Long> resolveEligibleLineIds(PlanningSnapshot snapshot, FulfillabilityAssessment assessment) {
+        if (snapshot == null) {
+            return Collections.emptySet();
+        }
+        List<Long> lineWhitelist = assessment == null ? Collections.<Long>emptyList() : assessment.getTriggerGapLineIds();
+        if (lineWhitelist != null && !lineWhitelist.isEmpty()) {
+            return lineWhitelist.stream().filter(Objects::nonNull).collect(Collectors.toSet());
+        }
+        String triggerModel = assessment == null ? null : assessment.getTriggerGapModel();
+        String triggerCraft = assessment == null ? null : assessment.getTriggerGapCraft();
+        if ((triggerModel == null || triggerModel.trim().isEmpty()) && (triggerCraft == null || triggerCraft.trim().isEmpty())) {
+            return snapshot.getProductionLines().stream()
+                    .map(line -> line.getId())
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+        }
+        Set<Long> eligibleLineIds = new java.util.HashSet<>();
+        for (List<LineCapacity> capacities : snapshot.getLineCapByModel().values()) {
+            if (capacities == null || capacities.isEmpty()) {
+                continue;
+            }
+            for (LineCapacity capacity : capacities) {
+                if (capacity == null || capacity.lineId == null) {
+                    continue;
+                }
+                if (!Objects.equals(triggerModel, capacity.model) || !capacity.matchesCraft(triggerCraft)) {
+                    continue;
+                }
+                eligibleLineIds.add(capacity.lineId);
+            }
+        }
+        return eligibleLineIds;
+    }
+
+    private int estimateRequiredLineCount(int requiredInsertQuantity,
+                                          List<PlanPreviewResponseDTO.CandidateLineDTO> candidates) {
+        if (requiredInsertQuantity <= 0 || candidates == null || candidates.isEmpty()) {
+            return 0;
+        }
+        int covered = 0;
+        int lineCount = 0;
+        for (PlanPreviewResponseDTO.CandidateLineDTO candidate : candidates) {
+            if (candidate == null || candidate.getReleasableCapacity() == null || candidate.getReleasableCapacity() <= 0) {
+                continue;
+            }
+            covered += candidate.getReleasableCapacity();
+            lineCount += 1;
+            if (covered >= requiredInsertQuantity) {
+                return lineCount;
+            }
+        }
+        return lineCount;
     }
 
     private String resolveRiskTag(PlanningSnapshot.LineRuntimeView runtimeView, int releasableCapacity) {
