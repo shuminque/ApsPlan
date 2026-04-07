@@ -25,7 +25,7 @@
 <script type="text/html" id="lineRowBar">
     <button class="btn btn-sm btn-outline-primary me-1" lay-event="edit">编辑</button>
     <button class="btn btn-sm btn-outline-danger me-1" lay-event="del">删除</button>
-    <button class="btn btn-sm btn-outline-warning" lay-event="toggle">{{ Number(d.status)===1 ? '停用' : '启用' }}</button>
+    <button class="btn btn-sm btn-outline-warning" lay-event="toggle">{{ Number(d.status)===0 ? '停用' : '启用' }}</button>
 </script>
 
 <div class="modal fade" id="lineModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg"><div class="modal-content">
@@ -35,7 +35,7 @@
         <div class="col-md-6"><label for="formLineName" class="form-label required">产线名称</label><input type="text" id="formLineName" name="lineName" class="form-control" required></div>
         <div class="col-md-4"><label for="formWorkshop" class="form-label">车间</label><input type="text" id="formWorkshop" name="workshop" class="form-control"></div>
         <div class="col-md-4"><label for="formCraft" class="form-label">工艺</label><input type="text" id="formCraft" name="craft" class="form-control"></div>
-        <div class="col-md-4"><label for="formStatus" class="form-label">状态</label><select id="formStatus" name="status" class="form-select"><option value="1" selected>启用</option><option value="0">停用</option></select></div>
+        <div class="col-md-4"><label for="formStatus" class="form-label">状态</label><select id="formStatus" name="status" class="form-select"><option value="0" selected>启用</option><option value="1">停用</option></select></div>
         <div class="col-12"><label for="formRemark" class="form-label">备注</label><textarea id="formRemark" name="remark" rows="3" class="form-control"></textarea></div>
     </div></form></div>
     <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary" id="btnSave">保存</button></div>
@@ -48,11 +48,11 @@
 const lineModal = new bootstrap.Modal(document.getElementById('lineModal')); let currentRecords=[]; let modalMode='add';
 function showError(msg){alert(msg)}
 function formatDateTime(v){if(!v)return '';const d=new Date(v);if(isNaN(d.getTime()))return v;return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`}
-function statusBadge(status){return Number(status)===1?'<span class="layui-badge layui-bg-green">启用</span>':'<span class="layui-badge">停用</span>'}
+function statusBadge(status){return Number(status)===0?'<span class="layui-badge layui-bg-green">启用</span>':'<span class="layui-badge">停用</span>'}
 function handleResponse(res){if(!res||res.code!==200){showError(res?res.msg:'请求失败');return false;}return true;}
 function getRowById(id){return currentRecords.find(item=>String(item.id)===String(id));}
 function loadLineOptions(){return $.ajax({url:'/api/model-config/line-options',method:'GET',success:function(res){if(!res||res.code!==200)return;const options=(res.data||[]).map(i=>`<option value="${(i.lineName||'').replace(/"/g,'&quot;')}">${(i.lineName||'')}</option>`).join('');$('#lineName').append(options);}});}
-function openModal(mode,rowData){modalMode=mode;$('#lineForm')[0].reset();$('#lineId').val('');if(mode==='edit'&&rowData){$('#lineModalTitle').text('编辑产线');$('#lineId').val(rowData.id||'');$('#formLineCode').val(rowData.lineCode||'');$('#formLineName').val(rowData.lineName||'');$('#formWorkshop').val(rowData.workshop||'');$('#formCraft').val(rowData.craft||'');$('#formStatus').val(String(rowData.status==null?1:rowData.status));$('#formRemark').val(rowData.remark||'');}else{$('#lineModalTitle').text('新增产线');$('#formStatus').val('1');}lineModal.show();}
+function openModal(mode,rowData){modalMode=mode;$('#lineForm')[0].reset();$('#lineId').val('');if(mode==='edit'&&rowData){$('#lineModalTitle').text('编辑产线');$('#lineId').val(rowData.id||'');$('#formLineCode').val(rowData.lineCode||'');$('#formLineName').val(rowData.lineName||'');$('#formWorkshop').val(rowData.workshop||'');$('#formCraft').val(rowData.craft||'');$('#formStatus').val(String(rowData.status==null?0:rowData.status));$('#formRemark').val(rowData.remark||'');}else{$('#lineModalTitle').text('新增产线');$('#formStatus').val('0');}lineModal.show();}
 function saveLine(renderTable){const form=document.getElementById('lineForm');if(!form.checkValidity())return $('#lineForm').addClass('was-validated');const payload={id:$('#lineId').val()||null,lineCode:$('#formLineCode').val().trim(),lineName:$('#formLineName').val().trim(),workshop:$('#formWorkshop').val().trim(),craft:$('#formCraft').val().trim(),status:Number($('#formStatus').val()),remark:$('#formRemark').val().trim()};$.ajax({url:modalMode==='add'?'/api/production-line/add':'/api/production-line/update',method:modalMode==='add'?'POST':'PUT',contentType:'application/json',data:JSON.stringify(payload),success:function(res){if(handleResponse(res)){lineModal.hide();renderTable();}}});}
 
 layui.use(['table'], function(){
@@ -82,7 +82,7 @@ layui.use(['table'], function(){
     table.on('tool(lineTable)', function(obj){
         if(obj.event==='edit'){const row=getRowById(obj.data.id); if(row) openModal('edit', row);} 
         if(obj.event==='del'){ if(!confirm('确定要删除该产线吗？')) return; $.ajax({url:'/api/production-line/delete/'+obj.data.id,method:'DELETE',success:function(res){ if(handleResponse(res)) renderTable(); }}); }
-        if(obj.event==='toggle'){ const status=Number(obj.data.status)===1?0:1; $.ajax({url:'/api/production-line/status/'+obj.data.id,method:'PUT',data:{status:status},success:function(res){ if(handleResponse(res)) renderTable(); }}); }
+        if(obj.event==='toggle'){ const status=Number(obj.data.status)===0?1:0; $.ajax({url:'/api/production-line/status/'+obj.data.id,method:'PUT',data:{status:status},success:function(res){ if(handleResponse(res)) renderTable(); }}); }
     });
 });
 </script>
