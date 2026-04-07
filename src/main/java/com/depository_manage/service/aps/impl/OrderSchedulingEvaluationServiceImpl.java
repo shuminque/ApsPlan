@@ -130,6 +130,7 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
                 DelayAssessment delayAssessment = assessDelayAndRecommendLines(matches, quantity, now, deliveryDate);
                 dto.setPredictedFinishTime(delayAssessment.predictedFinishTime == null ? null : delayAssessment.predictedFinishTime.toString());
                 dto.setDelayDays(delayAssessment.delayDays);
+                dto.setDelayMinutes(delayAssessment.delayMinutes);
                 dto.setRecommendedLines(delayAssessment.recommendedLines);
             }
             return dto;
@@ -380,6 +381,7 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
             candidate.setOrderDemandQty(orderDemandQty);
             candidate.setEstimatedOutput(estimatedOutput);
             candidate.setReleasableCapacityQty(preemptableQty);
+            candidate.setPreemptableQty(preemptableQty);
             candidate.setImpactDelayMinutes(Math.max(impactDelayMinutes, 0));
             candidates.add(candidate);
         }
@@ -432,7 +434,7 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
                                                          LocalDateTime now,
                                                          LocalDate deliveryDate) {
         if (matches == null || matches.isEmpty() || quantity == null || quantity <= 0) {
-            return new DelayAssessment(null, 0, new ArrayList<>());
+            return new DelayAssessment(null, 0, 0, new ArrayList<>());
         }
         Set<Long> lineIds = matches.stream()
                 .map(LineMatch::lineId)
@@ -457,7 +459,7 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
             queueCandidates.add(new LineQueueCandidate(match.lineId, match.lineName, match.capacityPerHour, earliestStart));
         }
         if (queueCandidates.isEmpty()) {
-            return new DelayAssessment(null, 0, new ArrayList<>());
+            return new DelayAssessment(null, 0, 0, new ArrayList<>());
         }
 
         LocalDateTime predictedFinish = solveEarliestJointFinish(queueCandidates, quantity);
@@ -480,10 +482,13 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
                         .thenComparing(OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO::getLineId, Comparator.nullsLast(Long::compareTo)))
                 .collect(Collectors.toList());
         int delayDays = 0;
+        int delayMinutes = 0;
         if (predictedFinish != null && deliveryDate != null && predictedFinish.toLocalDate().isAfter(deliveryDate)) {
             delayDays = (int) ChronoUnit.DAYS.between(deliveryDate, predictedFinish.toLocalDate());
+            LocalDateTime deliveryDeadline = deliveryDate.plusDays(1).atStartOfDay();
+            delayMinutes = (int) Math.max(ChronoUnit.MINUTES.between(deliveryDeadline, predictedFinish), 0);
         }
-        return new DelayAssessment(predictedFinish, Math.max(delayDays, 0), recommendedLines);
+        return new DelayAssessment(predictedFinish, Math.max(delayDays, 0), Math.max(delayMinutes, 0), recommendedLines);
     }
 
     private LocalDateTime computeEarliestQueueStart(LocalDateTime now, List<ProductionPlanItem> items) {
@@ -656,6 +661,7 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
 
     private record DelayAssessment(LocalDateTime predictedFinishTime,
                                    int delayDays,
+                                   int delayMinutes,
                                    List<OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO> recommendedLines) {
     }
 }
