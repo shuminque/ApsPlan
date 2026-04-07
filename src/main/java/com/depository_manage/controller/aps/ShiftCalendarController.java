@@ -6,6 +6,7 @@ import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.OrderSchedulingEvaluationDTO;
 import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 import com.depository_manage.service.aps.ProductionPlanningService;
+import com.depository_manage.service.aps.OrderSchedulingEvaluationService;
 import com.depository_manage.service.aps.ProductionPlanService;
 import com.depository_manage.service.aps.ShiftCalendarService;
 import com.depository_manage.service.aps.planning.PlanningRequest;
@@ -41,6 +42,8 @@ public class ShiftCalendarController {
     private ProductionPlanningService productionPlanningService;
     @Resource
     private ProductionPlanService productionPlanService;
+    @Resource
+    private OrderSchedulingEvaluationService orderSchedulingEvaluationService;
 
     // 获取日历事件
     @GetMapping("/events")
@@ -83,11 +86,26 @@ public class ShiftCalendarController {
      * 订单排产评估接口，当前先固定返回结构，后续算法直接填充该结构。
      */
     @GetMapping("/plan/evaluateOrderScheduling")
-    public OrderSchedulingEvaluationDTO evaluateOrderScheduling(@RequestParam Long orderId) {
-        if (orderId == null || orderId <= 0) {
-            throw new MyException("orderId 不能为空");
+    public OrderSchedulingEvaluationDTO evaluateOrderScheduling(@RequestParam String model,
+                                                                @RequestParam(required = false) String craft,
+                                                                @RequestParam Integer quantity,
+                                                                @RequestParam String deliveryDate) {
+        if (!org.springframework.util.StringUtils.hasText(model)) {
+            throw new MyException("model 不能为空");
         }
-        return new OrderSchedulingEvaluationDTO();
+        if (quantity == null || quantity <= 0) {
+            throw new MyException("quantity 必须大于 0");
+        }
+        if (!org.springframework.util.StringUtils.hasText(deliveryDate)) {
+            throw new MyException("deliveryDate 不能为空");
+        }
+        java.time.LocalDate dueDate;
+        try {
+            dueDate = java.time.LocalDate.parse(deliveryDate);
+        } catch (Exception ex) {
+            throw new MyException("deliveryDate 格式错误，要求 yyyy-MM-dd");
+        }
+        return orderSchedulingEvaluationService.evaluate(model, craft, quantity, dueDate);
     }
 
     @PostMapping("/plan/commit")
