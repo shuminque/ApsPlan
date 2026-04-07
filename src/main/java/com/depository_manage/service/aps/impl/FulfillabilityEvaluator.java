@@ -53,9 +53,10 @@ class FulfillabilityEvaluator {
             logRunningCapacityDiagnostics(demand, requiredInsertQuantity, eligibleLines, baseCapacityPerHourByLine,
                     runtimeViewByLineId, runningLineCapacities);
             int requiredInsertLineCount = estimateRequiredInsertLineCount(requiredInsertQuantity, runningLineCapacities);
+            List<Long> eligibleLineIds = resolveLineIds(eligibleLines);
             FulfillabilityAssessment candidate = new FulfillabilityAssessment(false, idleCapacityBeforeDeadline,
                     requiredInsertQuantity, requiredInsertLineCount, deadline.toString(),
-                    demand.model(), demand.requiredCraft(), resolveLineIds(eligibleLines));
+                    demand.model(), demand.requiredCraft(), eligibleLineIds);
             if (shouldReplaceWorstGap(worstGapAssessment, candidate)) {
                 worstGapAssessment = candidate;
             }
