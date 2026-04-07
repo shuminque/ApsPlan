@@ -233,7 +233,7 @@
         const value = String(priority || '').trim();
         if (['0', '普通', 'NORMAL'].includes(value)) return '0';
         if (['1', '加急', 'URGENT'].includes(value)) return '1';
-        if (['2', '插单', 'INSERT'].includes(value)) return '2';
+        if (['2', '插单', 'INSERT'].includes(value)) return '1';
         return value;
     }
 
@@ -249,7 +249,6 @@
         const normalized = normalizeOrderPriority(priority);
         if (normalized === '0') return '普通';
         if (normalized === '1') return '加急';
-        if (normalized === '2') return '插单';
         return normalized || '-';
     }
 
@@ -257,7 +256,7 @@
         const status = normalizeOrderStatus(order.status);
         const priority = normalizeOrderPriority(order.priority);
         const isPending = status === '0';
-        const isPriorityMatched = priority === '1' || priority === '2';
+        const isPriorityMatched = priority === '1';
         return isPending && isPriorityMatched;
     }
 
@@ -311,7 +310,7 @@
             content: `
                 <div style="padding: 12px;">
                     <div style="margin-bottom: 8px;color:#666;">
-                        仅展示状态=待排产 且 priority=加急/插单 的候选订单，可多选。
+                        仅展示状态=待排产 且 priority=加急 的候选订单，可多选。
                     </div>
                     <table class="layui-table">
                         <thead>

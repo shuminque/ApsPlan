@@ -64,7 +64,6 @@ class PlanningResultMapper {
             return suggestion;
         }
         int insertGap = result.getDemands().stream()
-                .filter(DemandItem::lockedInsert)
                 .mapToInt(d -> Math.max(0, d.required() - d.plannedQuantity()))
                 .sum();
 

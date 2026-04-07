@@ -112,9 +112,6 @@ class PlanningInputAssembler {
     }
 
     private List<String> resolveOrderStatusFilters(String mode) {
-        if ("INSERT".equalsIgnoreCase(mode)) {
-            return ProductionOrderStatus.openStatusFilterValues();
-        }
         return ProductionOrderStatus.aliasesFor(ProductionOrderStatus.PENDING.getCode());
     }
 
