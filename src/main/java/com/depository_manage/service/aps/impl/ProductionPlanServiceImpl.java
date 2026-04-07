@@ -475,22 +475,7 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
             return 0;
         }
 
-        Map<Long, Integer> rollbackQtyByOrder = rollbackItems.stream()
-                .filter(item -> item.getOrderId() != null)
-                .collect(Collectors.groupingBy(ProductionPlanItem::getOrderId, Collectors.summingInt(item -> Optional.ofNullable(item.getOrderDemandQty()).orElse(0))));
-        if (!rollbackQtyByOrder.isEmpty()) {
-            List<ProductionOrder> rollbackOrders = productionOrderMapper.selectBatchIds(rollbackQtyByOrder.keySet());
-            Date nowDate = new Date();
-            for (ProductionOrder order : rollbackOrders) {
-                int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
-                int rollbackQty = rollbackQtyByOrder.getOrDefault(order.getId(), 0);
-                int updatedAssigned = Math.max(0, assigned - rollbackQty);
-                order.setAssignedQuantity(updatedAssigned);
-                refreshOrderStatus(order, updatedAssigned);
-                order.setUpdatedAt(nowDate);
-                productionOrderMapper.updateById(order);
-            }
-        }
+        rollbackOrderAssignments(rollbackItems);
 
         List<Long> itemIds = rollbackItems.stream()
                 .map(ProductionPlanItem::getId)
@@ -500,6 +485,113 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
             return productionPlanItemMapper.deleteBatchIds(itemIds);
         }
         return 0;
+    }
+
+    @Override
+    @Transactional(transactionManager = "apsTransactionManager", rollbackFor = Exception.class)
+    public boolean deletePlanItem(Long id) {
+        if (id == null) {
+            return false;
+        }
+        ProductionPlanItem item = productionPlanItemMapper.selectById(id);
+        if (item == null) {
+            return false;
+        }
+        rollbackOrderAssignments(java.util.Collections.singletonList(item));
+        return productionPlanItemMapper.deleteById(id) > 0;
+    }
+
+    @Override
+    @Transactional(transactionManager = "apsTransactionManager", rollbackFor = Exception.class)
+    public boolean updatePlanItem(Long id, ProductionPlanItem updateRequest) {
+        if (id == null || updateRequest == null) {
+            return false;
+        }
+        ProductionPlanItem existing = productionPlanItemMapper.selectById(id);
+        if (existing == null) {
+            return false;
+        }
+
+        Integer assignQty = updateRequest.getAssignQty() == null ? existing.getAssignQty() : updateRequest.getAssignQty();
+        Integer orderDemandQty = updateRequest.getOrderDemandQty() == null ? existing.getOrderDemandQty() : updateRequest.getOrderDemandQty();
+        Integer safetyDemandQty = updateRequest.getSafetyDemandQty() == null ? existing.getSafetyDemandQty() : updateRequest.getSafetyDemandQty();
+        int normalizedAssignQty = Optional.ofNullable(assignQty).orElse(0);
+        int normalizedOrderDemandQty = Optional.ofNullable(orderDemandQty).orElse(0);
+        int normalizedSafetyDemandQty = Optional.ofNullable(safetyDemandQty).orElse(0);
+
+        if (existing.getOrderId() == null) {
+            normalizedOrderDemandQty = 0;
+            normalizedSafetyDemandQty = normalizedAssignQty;
+        }
+        validateDemandBreakdown(normalizedAssignQty, normalizedOrderDemandQty, normalizedSafetyDemandQty,
+                "update_plan_item_id=" + id);
+
+        int oldOrderDemand = Optional.ofNullable(existing.getOrderDemandQty()).orElse(0);
+        existing.setAssignQty(normalizedAssignQty);
+        existing.setOrderDemandQty(normalizedOrderDemandQty);
+        existing.setSafetyDemandQty(normalizedSafetyDemandQty);
+        if (updateRequest.getLineId() != null) {
+            existing.setLineId(updateRequest.getLineId());
+        }
+        if (updateRequest.getLineName() != null) {
+            existing.setLineName(updateRequest.getLineName());
+        }
+        if (updateRequest.getStartDate() != null) {
+            existing.setStartDate(updateRequest.getStartDate());
+        }
+        if (updateRequest.getEndDate() != null) {
+            existing.setEndDate(updateRequest.getEndDate());
+        }
+        if (existing.getStartDate() != null && existing.getEndDate() != null
+                && existing.getStartDate().after(existing.getEndDate())) {
+            throw new MyException("开始时间不能晚于结束时间");
+        }
+        if (updateRequest.getSource() != null) {
+            existing.setSource(updateRequest.getSource());
+        }
+        existing.setUpdatedAt(new Date());
+
+        int delta = normalizedOrderDemandQty - oldOrderDemand;
+        if (existing.getOrderId() != null && delta != 0) {
+            applyOrderAssignmentDelta(existing.getOrderId(), delta);
+        }
+        return productionPlanItemMapper.updateById(existing) > 0;
+    }
+
+    private void rollbackOrderAssignments(List<ProductionPlanItem> rollbackItems) {
+        Map<Long, Integer> rollbackQtyByOrder = rollbackItems.stream()
+                .filter(item -> item.getOrderId() != null)
+                .collect(Collectors.groupingBy(ProductionPlanItem::getOrderId, Collectors.summingInt(item -> Optional.ofNullable(item.getOrderDemandQty()).orElse(0))));
+        if (rollbackQtyByOrder.isEmpty()) {
+            return;
+        }
+        List<ProductionOrder> rollbackOrders = productionOrderMapper.selectBatchIds(rollbackQtyByOrder.keySet());
+        Date nowDate = new Date();
+        for (ProductionOrder order : rollbackOrders) {
+            int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
+            int rollbackQty = rollbackQtyByOrder.getOrDefault(order.getId(), 0);
+            int updatedAssigned = Math.max(0, assigned - rollbackQty);
+            order.setAssignedQuantity(updatedAssigned);
+            refreshOrderStatus(order, updatedAssigned);
+            order.setUpdatedAt(nowDate);
+            productionOrderMapper.updateById(order);
+        }
+    }
+
+    private void applyOrderAssignmentDelta(Long orderId, int delta) {
+        if (orderId == null || delta == 0) {
+            return;
+        }
+        ProductionOrder order = productionOrderMapper.selectById(orderId);
+        if (order == null) {
+            return;
+        }
+        int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
+        int updatedAssigned = Math.max(0, assigned + delta);
+        order.setAssignedQuantity(updatedAssigned);
+        refreshOrderStatus(order, updatedAssigned);
+        order.setUpdatedAt(new Date());
+        productionOrderMapper.updateById(order);
     }
 
     private Map<String, List<ProductionOrder>> loadOpenOrdersByKey() {
