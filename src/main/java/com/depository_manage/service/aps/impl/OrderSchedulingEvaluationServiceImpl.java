@@ -7,6 +7,7 @@ import com.depository_manage.entity.aps.ProductionPlanItem;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
+import com.depository_manage.mapper.aps.ProductionLineRuntimeMapper;
 import com.depository_manage.mapper.aps.ProductionPlanItemMapper;
 import com.depository_manage.pojo.shift.OrderSchedulingEvaluationDTO;
 import com.depository_manage.service.aps.OrderSchedulingEvaluationService;
@@ -45,6 +46,8 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
     private ProductionLineModelConfigMapper modelConfigMapper;
     @Resource
     private ProductionPlanItemMapper productionPlanItemMapper;
+    @Resource
+    private ProductionLineRuntimeMapper productionLineRuntimeMapper;
     @Resource
     private ShiftCalendarService shiftCalendarService;
 
@@ -115,7 +118,20 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
         dto.setFreeCapacityQtyBeforeDue(totalFreeQty);
 
         if (totalFreeQty < quantity) {
-            dto.setStage(OrderSchedulingEvaluationDTO.Stage.DELAY_REQUIRED);
+            List<OrderSchedulingEvaluationDTO.PreemptCandidateDTO> candidates = buildPreemptCandidates(matches, now);
+            dto.setPreemptCandidates(candidates);
+            int releasableQty = candidates.stream()
+                    .map(OrderSchedulingEvaluationDTO.PreemptCandidateDTO::getReleasableCapacityQty)
+                    .filter(Objects::nonNull)
+                    .mapToInt(Integer::intValue)
+                    .sum();
+            int gapQty = quantity - totalFreeQty;
+            if (releasableQty >= gapQty && !candidates.isEmpty()) {
+                dto.setStage(OrderSchedulingEvaluationDTO.Stage.PREEMPT_REQUIRED);
+                dto.setRequiredPreemptLineCount(calcRequiredPreemptLineCount(gapQty, candidates));
+            } else {
+                dto.setStage(OrderSchedulingEvaluationDTO.Stage.DELAY_REQUIRED);
+            }
             return dto;
         }
 
@@ -272,6 +288,125 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
                 Comparator.nullsLast(String::compareTo))
                 .thenComparing(OrderSchedulingEvaluationDTO.AllocationSuggestionDTO::getLineId, Comparator.nullsLast(Long::compareTo)));
         return suggestions;
+    }
+
+    private List<OrderSchedulingEvaluationDTO.PreemptCandidateDTO> buildPreemptCandidates(List<LineMatch> matches,
+                                                                                           LocalDateTime now) {
+        Map<Long, BigDecimal> capacityByLine = matches.stream()
+                .collect(Collectors.toMap(LineMatch::lineId,
+                        lineMatch -> lineMatch.capacityPerHour == null ? BigDecimal.ZERO : lineMatch.capacityPerHour,
+                        (a, b) -> a));
+        List<com.depository_manage.entity.aps.ProductionLineRuntime> runningLines = productionLineRuntimeMapper.selectList(null).stream()
+                .filter(Objects::nonNull)
+                .filter(runtime -> runtime.getStatus() != null && runtime.getStatus() == 1)
+                .collect(Collectors.toList());
+        if (runningLines.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Set<Long> lineIds = runningLines.stream()
+                .map(com.depository_manage.entity.aps.ProductionLineRuntime::getLineId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (lineIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Date nowDate = toDate(now);
+        List<ProductionPlanItem> runningItems = productionPlanItemMapper.selectList(new LambdaQueryWrapper<ProductionPlanItem>()
+                .in(ProductionPlanItem::getLineId, lineIds)
+                .le(ProductionPlanItem::getStartDate, nowDate)
+                .ge(ProductionPlanItem::getEndDate, nowDate));
+        Map<Long, ProductionPlanItem> currentByLine = runningItems.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> item.getLineId() != null)
+                .collect(Collectors.toMap(ProductionPlanItem::getLineId, item -> item, (left, right) -> {
+                    Date leftStart = left.getStartDate();
+                    Date rightStart = right.getStartDate();
+                    if (leftStart == null) {
+                        return right;
+                    }
+                    if (rightStart == null) {
+                        return left;
+                    }
+                    return rightStart.after(leftStart) ? right : left;
+                }));
+
+        List<OrderSchedulingEvaluationDTO.PreemptCandidateDTO> candidates = new ArrayList<>();
+        for (com.depository_manage.entity.aps.ProductionLineRuntime runtime : runningLines) {
+            Long lineId = runtime.getLineId();
+            ProductionPlanItem item = currentByLine.get(lineId);
+            if (item == null || item.getStartDate() == null || item.getAssignQty() == null || item.getAssignQty() <= 0) {
+                continue;
+            }
+            BigDecimal capacityPerHour = runtime.getCurrentCapacity() != null ? runtime.getCurrentCapacity() : capacityByLine.get(lineId);
+            if (capacityPerHour == null || capacityPerHour.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            LocalDateTime startedAt = toLocalDateTime(item.getStartDate());
+            LocalDateTime activeUntil = now;
+            if (item.getEndDate() != null) {
+                LocalDateTime endedAt = toLocalDateTime(item.getEndDate());
+                if (endedAt.isBefore(activeUntil)) {
+                    activeUntil = endedAt;
+                }
+            }
+            if (!activeUntil.isAfter(startedAt)) {
+                continue;
+            }
+            long effectiveMinutes = calcShiftWindowMinutes(startedAt, activeUntil);
+            int estimatedOutput = BigDecimal.valueOf(effectiveMinutes)
+                    .multiply(capacityPerHour)
+                    .divide(BigDecimal.valueOf(60), 0, RoundingMode.FLOOR)
+                    .intValue();
+            estimatedOutput = Math.min(estimatedOutput, item.getAssignQty());
+            int orderDemandQty = item.getOrderDemandQty() == null ? 0 : Math.max(item.getOrderDemandQty(), 0);
+            if (!(estimatedOutput >= orderDemandQty && estimatedOutput < item.getAssignQty())) {
+                continue;
+            }
+            int preemptableQty = item.getAssignQty() - Math.max(estimatedOutput, orderDemandQty);
+            if (preemptableQty <= 0) {
+                continue;
+            }
+            int impactDelayMinutes = BigDecimal.valueOf(preemptableQty)
+                    .multiply(BigDecimal.valueOf(60))
+                    .divide(capacityPerHour, 0, RoundingMode.CEILING)
+                    .intValue();
+
+            OrderSchedulingEvaluationDTO.PreemptCandidateDTO candidate = new OrderSchedulingEvaluationDTO.PreemptCandidateDTO();
+            candidate.setLineId(lineId);
+            candidate.setLineName(runtime.getLineName());
+            candidate.setPlanItemId(item.getId());
+            candidate.setModel(item.getModel());
+            candidate.setAssignQty(item.getAssignQty());
+            candidate.setOrderDemandQty(orderDemandQty);
+            candidate.setEstimatedOutput(estimatedOutput);
+            candidate.setReleasableCapacityQty(preemptableQty);
+            candidate.setImpactDelayMinutes(Math.max(impactDelayMinutes, 0));
+            candidates.add(candidate);
+        }
+        candidates.sort(Comparator.comparing(OrderSchedulingEvaluationDTO.PreemptCandidateDTO::getReleasableCapacityQty,
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(OrderSchedulingEvaluationDTO.PreemptCandidateDTO::getImpactDelayMinutes,
+                        Comparator.nullsLast(Integer::compareTo))
+                .thenComparing(OrderSchedulingEvaluationDTO.PreemptCandidateDTO::getLineId,
+                        Comparator.nullsLast(Long::compareTo)));
+        return candidates;
+    }
+
+    private int calcRequiredPreemptLineCount(int gapQty, List<OrderSchedulingEvaluationDTO.PreemptCandidateDTO> candidates) {
+        int remaining = Math.max(gapQty, 0);
+        int used = 0;
+        for (OrderSchedulingEvaluationDTO.PreemptCandidateDTO candidate : candidates) {
+            if (remaining <= 0) {
+                break;
+            }
+            int qty = candidate.getReleasableCapacityQty() == null ? 0 : Math.max(candidate.getReleasableCapacityQty(), 0);
+            if (qty <= 0) {
+                continue;
+            }
+            remaining -= qty;
+            used++;
+        }
+        return Math.max(used, 0);
     }
 
     private TimeRange overlap(LocalDateTime rangeStart,

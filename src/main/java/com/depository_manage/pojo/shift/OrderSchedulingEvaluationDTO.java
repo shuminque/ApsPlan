@@ -46,9 +46,19 @@ public class OrderSchedulingEvaluationDTO {
     public static class PreemptCandidateDTO {
         private Long lineId;
         private String lineName;
+        private Long planItemId;
+        private String model;
+        private Integer assignQty;
+        private Integer orderDemandQty;
+
+        @JsonProperty("estimated_output")
+        private Integer estimatedOutput = 0;
 
         @JsonProperty("releasable_capacity_qty")
         private Integer releasableCapacityQty = 0;
+
+        @JsonProperty("impact_delay_minutes")
+        private Integer impactDelayMinutes = 0;
     }
 
     @Data

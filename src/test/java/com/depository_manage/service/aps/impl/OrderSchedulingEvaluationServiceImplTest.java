@@ -2,10 +2,12 @@ package com.depository_manage.service.aps.impl;
 
 import com.depository_manage.entity.aps.ProductionLine;
 import com.depository_manage.entity.aps.ProductionLineModelConfig;
+import com.depository_manage.entity.aps.ProductionLineRuntime;
 import com.depository_manage.entity.aps.ProductionPlanItem;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
+import com.depository_manage.mapper.aps.ProductionLineRuntimeMapper;
 import com.depository_manage.mapper.aps.ProductionPlanItemMapper;
 import com.depository_manage.pojo.shift.OrderSchedulingEvaluationDTO;
 import com.depository_manage.service.aps.ShiftCalendarService;
@@ -34,6 +36,7 @@ class OrderSchedulingEvaluationServiceImplTest {
     private final ProductionLineMapper productionLineMapper = mock(ProductionLineMapper.class);
     private final ProductionLineModelConfigMapper modelConfigMapper = mock(ProductionLineModelConfigMapper.class);
     private final ProductionPlanItemMapper planItemMapper = mock(ProductionPlanItemMapper.class);
+    private final ProductionLineRuntimeMapper runtimeMapper = mock(ProductionLineRuntimeMapper.class);
     private final ShiftCalendarService shiftCalendarService = mock(ShiftCalendarService.class);
 
     private OrderSchedulingEvaluationServiceImpl service;
@@ -44,6 +47,7 @@ class OrderSchedulingEvaluationServiceImplTest {
         ReflectionTestUtils.setField(service, "productionLineMapper", productionLineMapper);
         ReflectionTestUtils.setField(service, "modelConfigMapper", modelConfigMapper);
         ReflectionTestUtils.setField(service, "productionPlanItemMapper", planItemMapper);
+        ReflectionTestUtils.setField(service, "productionLineRuntimeMapper", runtimeMapper);
         ReflectionTestUtils.setField(service, "shiftCalendarService", shiftCalendarService);
         service.setClock(Clock.fixed(Instant.parse("2026-01-01T08:00:00Z"), ZoneId.of("UTC")));
         service.setZoneId(ZoneId.of("UTC"));
@@ -92,6 +96,44 @@ class OrderSchedulingEvaluationServiceImplTest {
         assertTrue(dto.getLineFreeCapacities().isEmpty());
     }
 
+    @Test
+    void shouldReturnPreemptCandidatesWhenGapCanBeCovered() {
+        when(productionLineMapper.selectPageList(null, 0L, 2000L)).thenReturn(Collections.singletonList(
+                line(1L, "L1", "棒料", 0)
+        ));
+        when(modelConfigMapper.selectPageList(null, null, 0L, 5000L)).thenReturn(Collections.singletonList(
+                cfg(1L, "6205", 60, 1, 1)
+        ));
+        when(shiftCalendarService.getSchedulesByDate("2026-01-01")).thenReturn(Collections.singletonList(
+                shift(101L, "2026-01-01T08:00:00", "2026-01-01T20:00:00")
+        ));
+        when(shiftCalendarService.getSchedulesByDate("2025-12-31")).thenReturn(Collections.emptyList());
+
+        ProductionPlanItem occupied = plan(1L, "2026-01-01T08:00:00", "2026-01-01T20:00:00");
+        when(planItemMapper.selectList(any())).thenReturn(Collections.singletonList(occupied));
+
+        ProductionLineRuntime runtime = new ProductionLineRuntime();
+        runtime.setLineId(1L);
+        runtime.setLineName("L1");
+        runtime.setStatus(1);
+        runtime.setCurrentCapacity(BigDecimal.valueOf(60));
+        when(runtimeMapper.selectList(null)).thenReturn(Collections.singletonList(runtime));
+
+        occupied.setId(1001L);
+        occupied.setModel("6205-2RS");
+        occupied.setAssignQty(800);
+        occupied.setOrderDemandQty(120);
+
+        OrderSchedulingEvaluationDTO dto = service.evaluate("6205-2RS", "棒料", 900, LocalDate.parse("2026-01-01"));
+
+        assertEquals(OrderSchedulingEvaluationDTO.Stage.PREEMPT_REQUIRED, dto.getStage());
+        assertEquals(1, dto.getRequiredPreemptLineCount());
+        assertEquals(1, dto.getPreemptCandidates().size());
+        assertEquals(480, dto.getPreemptCandidates().get(0).getEstimatedOutput());
+        assertEquals(320, dto.getPreemptCandidates().get(0).getReleasableCapacityQty());
+        assertEquals(320, dto.getPreemptCandidates().get(0).getImpactDelayMinutes());
+    }
+
     private ProductionLine line(Long id, String name, String craft, int status) {
         ProductionLine line = new ProductionLine();
         line.setId(id);
@@ -124,6 +166,8 @@ class OrderSchedulingEvaluationServiceImplTest {
         item.setLineId(lineId);
         item.setStartDate(toDate(start));
         item.setEndDate(toDate(end));
+        item.setAssignQty(100);
+        item.setOrderDemandQty(100);
         return item;
     }
 
