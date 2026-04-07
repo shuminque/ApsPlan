@@ -1,6 +1,7 @@
 package com.depository_manage.service.aps;
 
 import com.depository_manage.pojo.shift.CalendarEventDTO;
+import com.depository_manage.entity.aps.ProductionPlanItem;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,4 +15,8 @@ public interface ProductionPlanService {
     }
 
     int rollbackPlanWindow(LocalDateTime from, LocalDateTime to, Set<Long> lineIds);
+
+    boolean deletePlanItem(Long id);
+
+    boolean updatePlanItem(Long id, ProductionPlanItem updateRequest);
 }

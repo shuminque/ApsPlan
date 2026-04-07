@@ -165,6 +165,24 @@
                             ]
                         },
                         {
+                            "title": "计划批次查询",
+                            "href": "/production_plan",
+                            "icon": "layui-icon layui-icon-list",
+                            "target": "_self",
+                            "roles": [
+                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+                            ]
+                        },
+                        {
+                            "title": "计划明细管理",
+                            "href": "/production_plan_item",
+                            "icon": "layui-icon layui-icon-list",
+                            "target": "_self",
+                            "roles": [
+                                "SAB_cg", "SAB_sh", "ZAB_cg", "ZAB_sh", "ALL", "onlyRead"
+                            ]
+                        },
+                        {
                             "title": "产线系列配置",
                             "href": "/production_line_model_config",
                             "icon": "layui-icon layui-icon-list",

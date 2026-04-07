@@ -246,6 +246,20 @@ public class PageController {
         return mv;
     }
 
+    @GetMapping("/production_plan")
+    public ModelAndView productionPlan() {
+        ModelAndView mv = new ModelAndView();
+        mv.setViewName("calendorder/production_plan");
+        return mv;
+    }
+
+    @GetMapping("/production_plan_item")
+    public ModelAndView productionPlanItem() {
+        ModelAndView mv = new ModelAndView();
+        mv.setViewName("calendorder/production_plan_item");
+        return mv;
+    }
+
     @GetMapping("/production_line_history")
     public ModelAndView productionLineHistory() {
         ModelAndView mv = new ModelAndView();

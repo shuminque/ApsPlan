@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>计划明细管理</title>
+    <link rel="stylesheet" href="/static/lib/layui-v2.8.17/css/layui.css" media="all">
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+    <style>body{background:#f8f9fa;padding:16px;}</style>
+</head>
+<body>
+<div class="card mb-3"><div class="card-body"><div class="row g-2 align-items-end">
+    <div class="col-md-2"><select id="lineId" class="form-select"><option value="">全部产线</option></select></div>
+    <div class="col-md-2"><input id="model" class="form-control" placeholder="型号"></div>
+    <div class="col-md-2"><input id="customer" class="form-control" placeholder="客户"></div>
+    <div class="col-md-2"><input id="startTime" type="date" class="form-control"></div>
+    <div class="col-md-2"><input id="endTime" type="date" class="form-control"></div>
+    <div class="col-md-2 d-flex gap-2"><button class="btn btn-primary" id="btnSearch">查询</button><button class="btn btn-outline-secondary" id="btnReset">重置</button></div>
+</div></div></div>
+<div class="card"><div class="card-body"><table id="itemTable" lay-filter="itemTable"></table></div></div>
+
+<script type="text/html" id="rowBar">
+    <button class="btn btn-sm btn-outline-primary" lay-event="edit">编辑</button>
+    <button class="btn btn-sm btn-outline-danger" lay-event="del">删除</button>
+</script>
+
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">编辑计划明细</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <form id="editForm" class="needs-validation" novalidate>
+            <input type="hidden" id="id"><input type="hidden" id="orderId">
+            <div class="row g-3">
+                <div class="col-md-4"><label class="form-label">产线</label><select id="lineIdEdit" class="form-select"></select></div>
+                <div class="col-md-4"><label class="form-label">产线名</label><input id="lineNameEdit" class="form-control"></div>
+                <div class="col-md-4"><label class="form-label">来源</label><input id="sourceEdit" class="form-control"></div>
+                <div class="col-md-4"><label class="form-label">总量</label><input id="assignQtyEdit" type="number" min="0" class="form-control" required></div>
+                <div class="col-md-4"><label class="form-label">订单量</label><input id="orderDemandQtyEdit" type="number" min="0" class="form-control" required></div>
+                <div class="col-md-4"><label class="form-label">安全库存量</label><input id="safetyDemandQtyEdit" type="number" min="0" class="form-control" required></div>
+                <div class="col-md-6"><label class="form-label">开始时间</label><input id="startDateEdit" type="datetime-local" class="form-control"></div>
+                <div class="col-md-6"><label class="form-label">结束时间</label><input id="endDateEdit" type="datetime-local" class="form-control"></div>
+            </div>
+        </form>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" id="btnSave">保存</button></div>
+</div></div></div>
+
+<script src="/static/js/http_code.jquery.com_jquery-3.6.0.min.js"></script>
+<script src="/static/lib/layui-v2.8.17/layui.js"></script>
+<script src="/static/js/bootstrap@5.1.0_dist_js_bootstrap.bundle.js"></script>
+<script>
+    let table, cache=[], lines=[]; const modal = new bootstrap.Modal(document.getElementById('editModal'));
+    function f(v){ if(!v) return ''; const d = new Date(v); if(isNaN(d.getTime())) return v; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+    function t(v){ if(!v) return ''; const d = new Date(v); if(isNaN(d.getTime())) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+    function toReq(v){ return v ? v.replace('T',' ') + ':00' : null; }
+    function loadLines(){ return $.get('/api/model-config/line-options', function(res){ if(res&&res.code===200){ lines = res.data||[]; const ops=lines.map(v=>`<option value="${v.id}">${v.lineName}</option>`).join(''); $('#lineId').append(ops); $('#lineIdEdit').append(ops); } }); }
+    function loadTable(){
+        table.render({elem:'#itemTable',url:'/api/production-plan-item/list',method:'get',
+            where:{lineId:$('#lineId').val()||null,model:$('#model').val(),customer:$('#customer').val(),startTime:$('#startTime').val(),endTime:$('#endTime').val()},
+            request:{pageName:'page',limitName:'size'},page:true,limit:20,
+            parseData:res=>{ cache=(res&&res.data&&res.data.records)||[]; return {code:0,msg:'',count:res.data.total,data:cache};},
+            cols:[[ {field:'id',title:'ID',width:80},{field:'planBatchNo',title:'批次号'},{field:'lineName',title:'产线'},{field:'customer',title:'客户'},{field:'model',title:'型号'},
+                {field:'assignQty',title:'总量'},{field:'orderDemandQty',title:'订单量'},{field:'safetyDemandQty',title:'安全库存量'},
+                {field:'startDate',title:'开始',templet:d=>f(d.startDate)},{field:'endDate',title:'结束',templet:d=>f(d.endDate)},{title:'操作',toolbar:'#rowBar',width:150} ]]});
+    }
+    function openEdit(row){
+        $('#editForm')[0].reset(); $('#id').val(row.id); $('#orderId').val(row.orderId||'');
+        $('#lineIdEdit').val(row.lineId||''); $('#lineNameEdit').val(row.lineName||''); $('#sourceEdit').val(row.source||'');
+        $('#assignQtyEdit').val(row.assignQty||0); $('#orderDemandQtyEdit').val(row.orderDemandQty||0); $('#safetyDemandQtyEdit').val(row.safetyDemandQty||0);
+        $('#startDateEdit').val(t(row.startDate)); $('#endDateEdit').val(t(row.endDate)); modal.show();
+    }
+    function save(){
+        const payload={ lineId: $('#lineIdEdit').val()?Number($('#lineIdEdit').val()):null, lineName:$('#lineNameEdit').val().trim()||null, source:$('#sourceEdit').val().trim()||null,
+            assignQty:Number($('#assignQtyEdit').val()||0), orderDemandQty:Number($('#orderDemandQtyEdit').val()||0), safetyDemandQty:Number($('#safetyDemandQtyEdit').val()||0),
+            startDate:toReq($('#startDateEdit').val()), endDate:toReq($('#endDateEdit').val()) };
+        if(payload.assignQty !== payload.orderDemandQty + payload.safetyDemandQty){ return alert('总量必须等于订单量+安全库存量'); }
+        $.ajax({url:'/api/production-plan-item/'+$('#id').val(),method:'PUT',contentType:'application/json',data:JSON.stringify(payload),
+            success:function(res){ if(!res||res.code!==200) return alert(res?res.msg:'保存失败'); modal.hide(); loadTable(); }, error:function(){alert('保存失败');}});
+    }
+    function del(id){ if(!confirm('确认删除?')) return; $.ajax({url:'/api/production-plan-item/'+id,method:'DELETE',success:function(res){ if(!res||res.code!==200) return alert(res?res.msg:'删除失败'); loadTable(); },error:function(){alert('删除失败');}}); }
+    layui.use(['table'], function(){ table = layui.table; loadLines().then(loadTable); $('#btnSearch').on('click',loadTable); $('#btnReset').on('click',()=>{$('#lineId,#model,#customer,#startTime,#endTime').val(''); loadTable();}); $('#btnSave').on('click',save);
+        table.on('tool(itemTable)', function(obj){ if(obj.event==='edit') openEdit(obj.data); if(obj.event==='del') del(obj.data.id); });
+    });
+</script>
+</body>
+</html>
