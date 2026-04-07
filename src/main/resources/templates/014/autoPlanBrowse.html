@@ -316,7 +316,11 @@
     function handleCommitWithInsertSuggestion(insertSuggestion, onReadyToCommit) {
         const requiredInsertLineCount = Number(insertSuggestion.requiredInsertLineCount || 0);
         const candidateLines = Array.isArray(insertSuggestion.candidateLines) ? insertSuggestion.candidateLines : [];
-        if (requiredInsertLineCount > 0 && candidateLines.length > 0) {
+        if (requiredInsertLineCount > 0) {
+            layer.msg('当前常规排产无法完全满足插单需求，请选择建议插单产线后再提交');
+            if (!candidateLines.length) {
+                return;
+            }
             openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onReadyToCommit);
             return;
         }
@@ -326,6 +330,20 @@
 
     function openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onConfirm) {
         const defaultSelectedIndex = Math.max(requiredInsertLineCount, 0);
+        const totalReleasableCapacity = candidateLines.reduce(function (sum, line) {
+            const capacity = Number(line && line.releasableCapacity);
+            return Number.isFinite(capacity) ? sum + capacity : sum;
+        }, 0);
+        const riskTagDescriptions = {
+            LOW: '可用风险低，可优先用于插单',
+            LINE_STOPPED: '产线停机，预计无法释放产能',
+            RUNTIME_UNKNOWN: '运行状态未知，需人工确认',
+            MODEL_UNKNOWN: '当前型号未知，切换成本不明确',
+            NO_CAPACITY: '当前无可释放产能'
+        };
+        const riskLegend = Object.keys(riskTagDescriptions).map(function (tag) {
+            return `<li><span style="display:inline-block;min-width:130px;color:#333;">${tag}</span>${riskTagDescriptions[tag]}</li>`;
+        }).join('');
         const rows = candidateLines.map(function (line, idx) {
             const lineId = line.lineId === null || line.lineId === undefined ? '' : String(line.lineId);
             const checked = idx < defaultSelectedIndex ? 'checked' : '';
@@ -352,6 +370,14 @@
                 <div style="padding: 12px; max-height: 430px; overflow: auto;">
                     <div style="margin-bottom: 8px; color: #666;">
                         需至少选择 ${requiredInsertLineCount} 条产线用于插单。系统已默认勾选推荐项，可手动调整。
+                    </div>
+                    <div style="margin-bottom: 8px; color: #333;">
+                        <div>系统建议最少插单线数量：<b>${requiredInsertLineCount}</b></div>
+                        <div>候选线总可释放产能：<b>${totalReleasableCapacity}</b></div>
+                    </div>
+                    <div style="margin-bottom: 10px; padding: 8px 10px; background: #f8f8f8; border-radius: 4px;">
+                        <div style="font-weight:700; margin-bottom:6px;">风险标签说明</div>
+                        <ul style="margin: 0; padding-left: 18px; color:#666;">${riskLegend}</ul>
                     </div>
                     <table class="layui-table">
                         <thead>
