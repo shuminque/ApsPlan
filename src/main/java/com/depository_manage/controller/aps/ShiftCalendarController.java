@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
@@ -125,7 +126,10 @@ public class ShiftCalendarController {
                     previewState.generatedAt,
                     previewState.generatedBy);
         }
-        int committed = productionPlanService.commitPlan(toCommit);
+        Set<Long> selectedInsertLineIdSet = request.getSelectedInsertLineIds() == null
+                ? Collections.emptySet()
+                : request.getSelectedInsertLineIds().stream().filter(Objects::nonNull).collect(Collectors.toSet());
+        int committed = productionPlanService.commitPlan(toCommit, selectedInsertLineIdSet);
         PREVIEW_CACHE.remove(session.getId());
         return committed;
     }
