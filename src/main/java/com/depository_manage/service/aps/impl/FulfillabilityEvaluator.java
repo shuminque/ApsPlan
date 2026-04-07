@@ -21,13 +21,13 @@ class FulfillabilityEvaluator {
                                       Map<String, List<LineCapacity>> lineCapByModel,
                                       Map<Long, PlanningSnapshot.LineRuntimeView> runtimeViewByLineId) {
         if (demands == null || demands.isEmpty() || planStart == null || defaultDeadline == null) {
-            return new FulfillabilityAssessment(true, 0, 0, 0);
+            return new FulfillabilityAssessment(true, 0, 0, 0, null);
         }
 
         List<DemandItem> targetDemands = pickTargetDemands(demands);
         int requiredQuantity = targetDemands.stream().mapToInt(DemandItem::required).sum();
         if (requiredQuantity <= 0) {
-            return new FulfillabilityAssessment(true, 0, 0, 0);
+            return new FulfillabilityAssessment(true, 0, 0, 0, null);
         }
 
         LocalDate deadline = targetDemands.stream()
@@ -42,13 +42,13 @@ class FulfillabilityEvaluator {
 
         int requiredInsertQuantity = Math.max(requiredQuantity - idleCapacityBeforeDeadline, 0);
         if (requiredInsertQuantity <= 0) {
-            return new FulfillabilityAssessment(true, idleCapacityBeforeDeadline, 0, 0);
+            return new FulfillabilityAssessment(true, idleCapacityBeforeDeadline, 0, 0, deadline.toString());
         }
 
         List<Integer> runningLineCapacities = capacityByLineBeforeDeadline(planStart, deadline, shiftHoursByDay,
                 baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.RUNNING);
         int requiredInsertLineCount = estimateRequiredInsertLineCount(requiredInsertQuantity, runningLineCapacities);
-        return new FulfillabilityAssessment(false, idleCapacityBeforeDeadline, requiredInsertQuantity, requiredInsertLineCount);
+        return new FulfillabilityAssessment(false, idleCapacityBeforeDeadline, requiredInsertQuantity, requiredInsertLineCount, deadline.toString());
     }
 
     private List<DemandItem> pickTargetDemands(List<DemandItem> demands) {
