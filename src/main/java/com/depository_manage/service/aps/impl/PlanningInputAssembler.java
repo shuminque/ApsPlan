@@ -351,7 +351,11 @@ class PlanningInputAssembler {
     }
 
     private boolean isLineStopped(PlanningSnapshot.LineRuntimeView runtimeView) {
-        return runtimeView != null && runtimeView.getStatus() != null && runtimeView.getStatus() == RuntimeStatus.IDLE;
+        if (runtimeView == null || runtimeView.getStatus() == null) {
+            return false;
+        }
+        return runtimeView.getStatus() != RuntimeStatus.IDLE
+                && runtimeView.getStatus() != RuntimeStatus.RUNNING;
     }
 
     private boolean isStandbyLine(ProductionLine productionLine) {
@@ -366,10 +370,7 @@ class PlanningInputAssembler {
     }
 
     private Integer normalizeRuntimeStatus(Integer status) {
-        if (status == null || status == RuntimeStatus.IDLE || status == RuntimeStatus.RUNNING) {
-            return status;
-        }
-        return RuntimeStatus.IDLE;
+        return status;
     }
 
     private LineCapacity pickHigherCapacityLine(LineCapacity left,
