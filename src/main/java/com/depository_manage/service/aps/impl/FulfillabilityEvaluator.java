@@ -1,18 +1,24 @@
 package com.depository_manage.service.aps.impl;
 
 import com.depository_manage.entity.aps.RuntimeStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 class FulfillabilityEvaluator {
+    private static final Logger log = LoggerFactory.getLogger(FulfillabilityEvaluator.class);
 
     FulfillabilityAssessment evaluate(List<DemandItem> demands,
                                       LocalDate planStart,
@@ -25,12 +31,15 @@ class FulfillabilityEvaluator {
         }
 
         List<DemandItem> targetDemands = pickTargetDemands(demands);
-        Map<Long, BigDecimal> baseCapacityPerHourByLine = resolveBaseCapacityPerHourByLine(lineCapByModel);
         FulfillabilityAssessment worstGapAssessment = null;
         for (DemandItem demand : targetDemands) {
             if (demand == null || demand.required() <= 0) {
                 continue;
             }
+            List<LineCapacity> eligibleLines = resolveEligibleLinesForDemand(demand, lineCapByModel);
+            Map<Long, BigDecimal> baseCapacityPerHourByLine = resolveBaseCapacityPerHourByLine(eligibleLines);
+            log.info("fulfillability evaluate lines={}, demandModel={}, demandCraft={}",
+                    baseCapacityPerHourByLine.keySet(), demand.model(), demand.requiredCraft());
             LocalDate deadline = demand.earliestDeliveryDate() == null ? defaultDeadline : demand.earliestDeliveryDate();
             int idleCapacityBeforeDeadline = capacityBeforeDeadline(planStart, deadline, shiftHoursByDay,
                     baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.IDLE);
@@ -61,8 +70,16 @@ class FulfillabilityEvaluator {
                 .filter(Objects::nonNull)
                 .min(LocalDate::compareTo)
                 .orElse(defaultDeadline);
+        DemandItem minDemand = targetDemands.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> item.required() > 0)
+                .min(Comparator.comparingInt(DemandItem::required))
+                .orElse(null);
+        Map<Long, BigDecimal> fallbackCapacityByLine = resolveBaseCapacityPerHourByLine(
+                resolveEligibleLinesForDemand(minDemand, lineCapByModel)
+        );
         int idleCapacityBeforeDeadline = capacityBeforeDeadline(planStart, earliestDeadline, shiftHoursByDay,
-                baseCapacityPerHourByLine, runtimeViewByLineId, RuntimeStatus.IDLE);
+                fallbackCapacityByLine, runtimeViewByLineId, RuntimeStatus.IDLE);
         return new FulfillabilityAssessment(true, idleCapacityBeforeDeadline, 0, 0, earliestDeadline.toString());
     }
 
@@ -95,21 +112,66 @@ class FulfillabilityEvaluator {
         return candidate.getInsertDeadline().compareTo(current.getInsertDeadline()) < 0;
     }
 
-    private Map<Long, BigDecimal> resolveBaseCapacityPerHourByLine(Map<String, List<LineCapacity>> lineCapByModel) {
+    private Map<Long, BigDecimal> resolveBaseCapacityPerHourByLine(List<LineCapacity> capacities) {
         Map<Long, BigDecimal> result = new HashMap<>();
-        if (lineCapByModel == null || lineCapByModel.isEmpty()) {
+        if (capacities == null || capacities.isEmpty()) {
             return result;
         }
-        for (List<LineCapacity> capacities : lineCapByModel.values()) {
-            for (LineCapacity capacity : capacities) {
-                if (capacity == null || capacity.lineId == null || capacity.capacityPerHour == null) {
-                    continue;
-                }
-                BigDecimal normalized = capacity.capacityPerHour.max(BigDecimal.ZERO);
-                result.merge(capacity.lineId, normalized, BigDecimal::max);
+        for (LineCapacity capacity : capacities) {
+            if (capacity == null || capacity.lineId == null || capacity.capacityPerHour == null) {
+                continue;
             }
+            BigDecimal normalized = capacity.capacityPerHour.max(BigDecimal.ZERO);
+            result.merge(capacity.lineId, normalized, BigDecimal::max);
         }
         return result;
+    }
+
+    private List<LineCapacity> resolveEligibleLinesForDemand(DemandItem demand,
+                                                             Map<String, List<LineCapacity>> lineCapByModel) {
+        if (demand == null) {
+            return Collections.emptyList();
+        }
+        List<LineCapacity> matchedLines = findMatchingLines(demand.model(), lineCapByModel);
+        return matchedLines.stream()
+                .filter(line -> line.matchesCraft(demand.requiredCraft()))
+                .collect(Collectors.toList());
+    }
+
+    private List<LineCapacity> findMatchingLines(String demandModel, Map<String, List<LineCapacity>> lineCapByModel) {
+        if (demandModel == null || demandModel.trim().isEmpty() || lineCapByModel == null || lineCapByModel.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String normalizedDemandModel = demandModel.trim();
+        List<LineCapacity> exactMatches = lineCapByModel.get(normalizedDemandModel);
+        if (exactMatches != null && !exactMatches.isEmpty()) {
+            return exactMatches;
+        }
+        List<LineCapacity> seriesMatches = new ArrayList<LineCapacity>();
+        for (Map.Entry<String, List<LineCapacity>> entry : lineCapByModel.entrySet()) {
+            if (!isSeriesMatch(normalizedDemandModel, entry.getKey())) {
+                continue;
+            }
+            seriesMatches.addAll(entry.getValue());
+        }
+        return seriesMatches;
+    }
+
+    private boolean isSeriesMatch(String demandModel, String configModel) {
+        if (demandModel == null || demandModel.trim().isEmpty() || configModel == null || configModel.trim().isEmpty()) {
+            return false;
+        }
+        String normalizedDemandModel = normalizeModelForSeriesMatch(demandModel);
+        String normalizedConfigModel = normalizeModelForSeriesMatch(configModel);
+        if (normalizedDemandModel.isEmpty() || normalizedConfigModel.isEmpty()) {
+            return false;
+        }
+        return normalizedDemandModel.startsWith(normalizedConfigModel)
+                || normalizedDemandModel.contains(normalizedConfigModel);
+    }
+
+    private String normalizeModelForSeriesMatch(String model) {
+        return model == null ? "" : model.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "");
     }
 
     private int capacityBeforeDeadline(LocalDate planStart,
