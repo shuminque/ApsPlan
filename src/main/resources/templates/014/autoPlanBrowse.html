@@ -32,6 +32,7 @@
     let previewPlanData = null;
     let planBrowseData = null;
     let planOrderStartMap = {};
+    let selectedInsertLineIdsForCommit = [];
 
     function toDateValue(date) {
         const year = date.getFullYear();
@@ -234,6 +235,7 @@
     function openPlanPreviewDialog(data) {
         const orders = data.orders || [];
         const events = data.events || [];
+        const insertSuggestion = data.insertSuggestion || {};
         const planRangeText = resolvePlanRangeText(data, events);
 
         const orderRows = orders.map(item => `
@@ -300,11 +302,84 @@
                 </div>
             `,
             yes: function(index) {
-                layer.confirm('确认将当前排产结果写入班次排班吗？', {icon: 3, title: '确认写入'}, function(confirmIndex){
-                    commitAutoPlan();
-                    layer.close(confirmIndex);
-                    layer.close(index);
+                handleCommitWithInsertSuggestion(insertSuggestion, function () {
+                    layer.confirm('确认将当前排产结果写入班次排班吗？', {icon: 3, title: '确认写入'}, function(confirmIndex){
+                        commitAutoPlan();
+                        layer.close(confirmIndex);
+                        layer.close(index);
+                    });
                 });
+            }
+        });
+    }
+
+    function handleCommitWithInsertSuggestion(insertSuggestion, onReadyToCommit) {
+        const requiredInsertLineCount = Number(insertSuggestion.requiredInsertLineCount || 0);
+        const candidateLines = Array.isArray(insertSuggestion.candidateLines) ? insertSuggestion.candidateLines : [];
+        if (requiredInsertLineCount > 0 && candidateLines.length > 0) {
+            openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onReadyToCommit);
+            return;
+        }
+        selectedInsertLineIdsForCommit = [];
+        onReadyToCommit();
+    }
+
+    function openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onConfirm) {
+        const defaultSelectedIndex = Math.max(requiredInsertLineCount, 0);
+        const rows = candidateLines.map(function (line, idx) {
+            const lineId = line.lineId === null || line.lineId === undefined ? '' : String(line.lineId);
+            const checked = idx < defaultSelectedIndex ? 'checked' : '';
+            const releasableCapacity = line.releasableCapacity === null || line.releasableCapacity === undefined ? '-' : line.releasableCapacity;
+            return `
+                <tr>
+                    <td><input type="checkbox" class="layui-form-checkbox insert-line-checkbox" data-line-id="${escapeHtml(lineId)}" ${checked}></td>
+                    <td>${line.lineName || '-'}</td>
+                    <td>${releasableCapacity}</td>
+                    <td>${line.currentModel || '-'}</td>
+                    <td>${line.riskTag || '-'}</td>
+                    <td>${idx < defaultSelectedIndex ? '推荐' : ''}</td>
+                </tr>
+            `;
+        }).join('');
+
+        layer.open({
+            type: 1,
+            title: '插单推荐产线',
+            area: ['760px', '520px'],
+            maxmin: true,
+            btn: ['确定', '取消'],
+            content: `
+                <div style="padding: 12px; max-height: 430px; overflow: auto;">
+                    <div style="margin-bottom: 8px; color: #666;">
+                        需至少选择 ${requiredInsertLineCount} 条产线用于插单。系统已默认勾选推荐项，可手动调整。
+                    </div>
+                    <table class="layui-table">
+                        <thead>
+                            <tr>
+                                <th style="width:80px;">选择</th>
+                                <th>lineName</th>
+                                <th>releasableCapacity</th>
+                                <th>currentModel</th>
+                                <th>riskTag</th>
+                                <th>是否推荐</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `,
+            yes: function(index) {
+                const checkedBoxes = Array.from(document.querySelectorAll('.insert-line-checkbox:checked'));
+                const selectedIds = checkedBoxes
+                    .map(item => item.getAttribute('data-line-id') || '')
+                    .filter(Boolean);
+                if (selectedIds.length < requiredInsertLineCount) {
+                    layer.msg(`至少需要选择 ${requiredInsertLineCount} 条产线后才能写入排产`);
+                    return;
+                }
+                selectedInsertLineIdsForCommit = selectedIds;
+                layer.close(index);
+                onConfirm();
             }
         });
     }
@@ -328,6 +403,7 @@
             .then(inserted => {
                 if (inserted > 0) {
                     previewPlanData = null;
+                    selectedInsertLineIdsForCommit = [];
                     layer.msg('自动排产已写入班次排班');
                     return;
                 }
