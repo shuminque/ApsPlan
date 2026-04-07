@@ -13,6 +13,8 @@ import com.depository_manage.mapper.aps.ProductionPlanItemMapper;
 import com.depository_manage.mapper.aps.ProductionPlanMapper;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.service.aps.ProductionPlanService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +37,7 @@ import java.util.stream.Collectors;
 @Service
 public class ProductionPlanServiceImpl implements ProductionPlanService {
 
+    private static final Logger log = LoggerFactory.getLogger(ProductionPlanServiceImpl.class);
     private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final DateTimeFormatter BATCH_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final Pattern PLAN_TITLE_PATTERN = Pattern.compile("^(.*?)\\s+(.*?)\\/(.*?)\\s+(.*?)\\s+x\\s+([0-9,]+)$");
@@ -79,7 +82,9 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         rollbackPlanWindow(rollbackFrom, rollbackTo, rollbackLineIds);
 
         Map<String, List<ProductionOrder>> orderGroupMap = loadOpenOrdersByKey();
-        boolean hasMatchedOrder = parsedEvents.stream()
+        boolean hasOrderDemand = parsedEvents.stream().anyMatch(p -> p.orderDemandQty > 0);
+        boolean hasMatchedOrder = !hasOrderDemand || parsedEvents.stream()
+                .filter(p -> p.orderDemandQty > 0)
                 .map(ParsedPlanEvent::orderKey)
                 .anyMatch(orderKey -> {
                     List<ProductionOrder> candidates = orderGroupMap.get(orderKey);
@@ -108,47 +113,77 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
 
         int inserted = 0;
         for (ParsedPlanEvent parsed : parsedEvents) {
-            List<ProductionOrder> candidates = orderGroupMap.getOrDefault(parsed.orderKey(), new ArrayList<>());
-            if (candidates.isEmpty()) {
-                continue;
+            int leftOrderDemandQty = parsed.orderDemandQty;
+            if (leftOrderDemandQty > 0) {
+                List<ProductionOrder> candidates = orderGroupMap.getOrDefault(parsed.orderKey(), new ArrayList<>());
+                if (candidates.isEmpty()) {
+                    log.warn("skip order demand allocation because no open order matched, key={}", parsed.orderKey());
+                }
+                for (ProductionOrder order : candidates) {
+                    if (leftOrderDemandQty <= 0) {
+                        break;
+                    }
+                    int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
+                    int quantity = Optional.ofNullable(order.getQuantity()).orElse(0);
+                    int remain = Math.max(0, quantity - assigned);
+                    if (remain <= 0) {
+                        continue;
+                    }
+                    int assignToOrder = Math.min(leftOrderDemandQty, remain);
+                    validateDemandBreakdown(assignToOrder, assignToOrder, 0, "order_id=" + order.getId());
+
+                    ProductionPlanItem item = new ProductionPlanItem();
+                    item.setPlanId(plan.getId());
+                    item.setPlanBatchNo(batchNo);
+                    item.setOrderId(order.getId());
+                    item.setCustomer(order.getCustomer());
+                    item.setModel(order.getModel());
+                    item.setOuterInnerRing(order.getOuterInnerRing());
+                    item.setLineId(parsed.lineId);
+                    item.setLineName(parsed.lineName);
+                    item.setStartDate(parsed.startDate);
+                    item.setEndDate(parsed.endDate);
+                    item.setAssignQty(assignToOrder);
+                    item.setOrderDemandQty(assignToOrder);
+                    item.setSafetyDemandQty(0);
+                    item.setSource("RULE_PRIORITY");
+                    item.setCreatedAt(now);
+                    item.setUpdatedAt(now);
+                    productionPlanItemMapper.insert(item);
+                    inserted++;
+
+                    order.setAssignedQuantity(assigned + assignToOrder);
+                    order.setStatus(ProductionOrderStatus.PLANNED.getCode());
+                    productionOrderMapper.updateById(order);
+                    leftOrderDemandQty -= assignToOrder;
+                }
+                if (leftOrderDemandQty > 0) {
+                    log.warn("order demand not fully allocated, remaining_qty={}, key={}", leftOrderDemandQty, parsed.orderKey());
+                }
             }
-            int left = parsed.assignQty;
-            for (ProductionOrder order : candidates) {
-                if (left <= 0) {
-                    break;
-                }
-                int assigned = Optional.ofNullable(order.getAssignedQuantity()).orElse(0);
-                int quantity = Optional.ofNullable(order.getQuantity()).orElse(0);
-                int remain = Math.max(0, quantity - assigned);
-                if (remain <= 0) {
-                    continue;
-                }
-                int assignToOrder = Math.min(left, remain);
 
-                ProductionPlanItem item = new ProductionPlanItem();
-                item.setPlanId(plan.getId());
-                item.setPlanBatchNo(batchNo);
-                item.setOrderId(order.getId());
-                item.setCustomer(order.getCustomer());
-                item.setModel(order.getModel());
-                item.setOuterInnerRing(order.getOuterInnerRing());
-                item.setLineId(parsed.lineId);
-                item.setLineName(parsed.lineName);
-                item.setStartDate(parsed.startDate);
-                item.setEndDate(parsed.endDate);
-                item.setAssignQty(assignToOrder);
-                item.setOrderDemandQty(assignToOrder);
-                item.setSafetyDemandQty(0);
-                item.setSource("RULE_PRIORITY");
-                item.setCreatedAt(now);
-                item.setUpdatedAt(now);
-                productionPlanItemMapper.insert(item);
+            if (parsed.safetyDemandQty > 0) {
+                validateDemandBreakdown(parsed.safetyDemandQty, 0, parsed.safetyDemandQty,
+                        "line_id=" + parsed.lineId + ",line_name=" + parsed.lineName);
+                ProductionPlanItem safetyItem = new ProductionPlanItem();
+                safetyItem.setPlanId(plan.getId());
+                safetyItem.setPlanBatchNo(batchNo);
+                safetyItem.setOrderId(null);
+                safetyItem.setCustomer(parsed.customer);
+                safetyItem.setModel(parsed.model);
+                safetyItem.setOuterInnerRing(parsed.outerInnerRing);
+                safetyItem.setLineId(parsed.lineId);
+                safetyItem.setLineName(parsed.lineName);
+                safetyItem.setStartDate(parsed.startDate);
+                safetyItem.setEndDate(parsed.endDate);
+                safetyItem.setAssignQty(parsed.safetyDemandQty);
+                safetyItem.setOrderDemandQty(0);
+                safetyItem.setSafetyDemandQty(parsed.safetyDemandQty);
+                safetyItem.setSource("RULE_PRIORITY");
+                safetyItem.setCreatedAt(now);
+                safetyItem.setUpdatedAt(now);
+                productionPlanItemMapper.insert(safetyItem);
                 inserted++;
-
-                order.setAssignedQuantity(assigned + assignToOrder);
-                order.setStatus(ProductionOrderStatus.PLANNED.getCode());
-                productionOrderMapper.updateById(order);
-                left -= assignToOrder;
             }
         }
 
@@ -187,7 +222,7 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
 
         Map<Long, Integer> rollbackQtyByOrder = rollbackItems.stream()
                 .filter(item -> item.getOrderId() != null)
-                .collect(Collectors.groupingBy(ProductionPlanItem::getOrderId, Collectors.summingInt(item -> Optional.ofNullable(item.getAssignQty()).orElse(0))));
+                .collect(Collectors.groupingBy(ProductionPlanItem::getOrderId, Collectors.summingInt(item -> Optional.ofNullable(item.getOrderDemandQty()).orElse(0))));
         if (!rollbackQtyByOrder.isEmpty()) {
             List<ProductionOrder> rollbackOrders = productionOrderMapper.selectBatchIds(rollbackQtyByOrder.keySet());
             Date nowDate = new Date();
@@ -271,6 +306,8 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         parsed.assignQty = assignQty;
         parsed.orderDemandQty = assignQty;
         parsed.safetyDemandQty = 0;
+        validateDemandBreakdown(parsed.assignQty, parsed.orderDemandQty, parsed.safetyDemandQty,
+                "event_title=" + event.getTitle());
         parsed.startDate = Date.from(start.atZone(ZoneId.systemDefault()).toInstant());
         parsed.endDate = Date.from(end.atZone(ZoneId.systemDefault()).toInstant());
         return parsed;
@@ -298,9 +335,24 @@ public class ProductionPlanServiceImpl implements ProductionPlanService {
         parsed.assignQty = quantity;
         parsed.orderDemandQty = Optional.ofNullable(event.getOrderDemandQty()).orElse(quantity);
         parsed.safetyDemandQty = Optional.ofNullable(event.getSafetyDemandQty()).orElse(0);
+        validateDemandBreakdown(parsed.assignQty, parsed.orderDemandQty, parsed.safetyDemandQty,
+                "event_id=" + event.getId() + ",event_title=" + event.getTitle());
         parsed.startDate = Date.from(start.atZone(ZoneId.systemDefault()).toInstant());
         parsed.endDate = Date.from(end.atZone(ZoneId.systemDefault()).toInstant());
         return parsed;
+    }
+
+    private void validateDemandBreakdown(int assignQty, int orderDemandQty, int safetyDemandQty, String context) {
+        if (orderDemandQty < 0 || safetyDemandQty < 0) {
+            log.error("invalid demand qty: order_demand_qty={}, safety_demand_qty={}, assign_qty={}, context={}",
+                    orderDemandQty, safetyDemandQty, assignQty, context);
+            throw new MyException("计划明细数量非法：需求字段不能为负数");
+        }
+        if (assignQty != orderDemandQty + safetyDemandQty) {
+            log.error("demand mismatch: assign_qty={}, order_demand_qty={}, safety_demand_qty={}, context={}",
+                    assignQty, orderDemandQty, safetyDemandQty, context);
+            throw new MyException("计划明细数量非法：assign_qty 与需求拆分不一致");
+        }
     }
 
     private Long resolveLineId(String lineName) {
