@@ -120,15 +120,11 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
         if (totalFreeQty < quantity) {
             List<OrderSchedulingEvaluationDTO.PreemptCandidateDTO> candidates = buildPreemptCandidates(matches, now);
             dto.setPreemptCandidates(candidates);
-            int releasableQty = candidates.stream()
-                    .map(OrderSchedulingEvaluationDTO.PreemptCandidateDTO::getReleasableCapacityQty)
-                    .filter(Objects::nonNull)
-                    .mapToInt(Integer::intValue)
-                    .sum();
             int gapQty = quantity - totalFreeQty;
-            if (releasableQty >= gapQty && !candidates.isEmpty()) {
+            int requiredCount = calcRequiredPreemptLineCount(gapQty, candidates);
+            if (requiredCount > 0) {
                 dto.setStage(OrderSchedulingEvaluationDTO.Stage.PREEMPT_REQUIRED);
-                dto.setRequiredPreemptLineCount(calcRequiredPreemptLineCount(gapQty, candidates));
+                dto.setRequiredPreemptLineCount(requiredCount);
             } else {
                 dto.setStage(OrderSchedulingEvaluationDTO.Stage.DELAY_REQUIRED);
             }
@@ -393,9 +389,24 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
     }
 
     private int calcRequiredPreemptLineCount(int gapQty, List<OrderSchedulingEvaluationDTO.PreemptCandidateDTO> candidates) {
+        if (gapQty <= 0) {
+            return 0;
+        }
+        if (candidates == null || candidates.isEmpty()) {
+            return 0;
+        }
+        List<OrderSchedulingEvaluationDTO.PreemptCandidateDTO> sortedCandidates = candidates.stream()
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(OrderSchedulingEvaluationDTO.PreemptCandidateDTO::getReleasableCapacityQty,
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(OrderSchedulingEvaluationDTO.PreemptCandidateDTO::getImpactDelayMinutes,
+                                Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(OrderSchedulingEvaluationDTO.PreemptCandidateDTO::getLineId,
+                                Comparator.nullsLast(Long::compareTo)))
+                .collect(Collectors.toList());
         int remaining = Math.max(gapQty, 0);
         int used = 0;
-        for (OrderSchedulingEvaluationDTO.PreemptCandidateDTO candidate : candidates) {
+        for (OrderSchedulingEvaluationDTO.PreemptCandidateDTO candidate : sortedCandidates) {
             if (remaining <= 0) {
                 break;
             }
@@ -405,6 +416,9 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
             }
             remaining -= qty;
             used++;
+        }
+        if (remaining > 0) {
+            return 0;
         }
         return Math.max(used, 0);
     }
