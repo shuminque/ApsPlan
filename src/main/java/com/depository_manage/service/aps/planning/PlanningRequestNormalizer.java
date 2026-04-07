@@ -142,11 +142,7 @@ public class PlanningRequestNormalizer {
     }
 
     private String normalizeMode(String planMode) {
-        if (planMode == null || planMode.trim().isEmpty()) {
-            return "AUTO";
-        }
-        String normalized = planMode.trim().toUpperCase();
-        return "INSERT".equals(normalized) ? "INSERT" : "AUTO";
+        return "AUTO";
     }
 
     private String normalizeObjective(String objective) {

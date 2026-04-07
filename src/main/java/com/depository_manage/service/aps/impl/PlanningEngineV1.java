@@ -139,7 +139,6 @@ public class PlanningEngineV1 implements PlanningEngine {
                                   Clock clock,
                                   ZoneId zoneId) {
         List<DemandItem> result = new ArrayList<DemandItem>();
-        boolean insertMode = "INSERT".equals(planMode) && !insertOrderIdSet.isEmpty();
         for (Map.Entry<String, List<ProductionOrder>> entry : orderByKey.entrySet()) {
             List<ProductionOrder> groupOrders = entry.getValue();
             if (groupOrders.isEmpty()) {
@@ -185,10 +184,9 @@ public class PlanningEngineV1 implements PlanningEngine {
                 ProductionOrder order = seed.order;
                 LocalDateTime orderStartAt = resolveDemandStartAt(order.getId(), orderStartTimes, defaultStartAt);
                 int priority = parseOrderPriority(order.getPriority());
-                boolean locked = insertMode && order.getId() != null && insertOrderIdSet.contains(order.getId());
                 result.add(new DemandItem(order.getId(), order.getCustomer(), order.getOuterInnerRing(), order.getModel(), order.getCraft(), required,
                         currentInventory, orderCount, orderDemandQuantity, safetyTargetQty, order.getDeliveryDate(),
-                        Math.max(priority, locked ? 2 : priority), locked, orderStartAt, LocalDate.now(clock), zoneId));
+                        priority, false, orderStartAt, LocalDate.now(clock), zoneId));
             }
 
             if (safetyRequired > 0) {
@@ -398,10 +396,10 @@ public class PlanningEngineV1 implements PlanningEngine {
             return 0;
         }
         String normalized = priority.trim();
-        if ("插单".equals(normalized)) {
-            return 2;
-        }
         if ("加急".equals(normalized)) {
+            return 1;
+        }
+        if ("插单".equals(normalized)) {
             return 1;
         }
         if ("普通".equals(normalized)) {
