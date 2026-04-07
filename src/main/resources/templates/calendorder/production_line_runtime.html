@@ -58,9 +58,8 @@
                         <div class="col-md-6">
                             <label class="form-label">状态</label>
                             <select id="formStatus" class="form-select" required>
-                                <option value="1">运行中</option>
-                                <option value="0">停机</option>
-                                <option value="2">换型中</option>
+                                <option value="0">待机</option>
+                                <option value="1">生产中</option>
                             </select>
                         </div>
                         <div class="col-md-6">
@@ -115,9 +114,8 @@
     }
     function fromInputDatetime(v) { return v ? v.replace('T', ' ') + ':00' : null; }
     function statusText(status) {
-        if (Number(status) === 1) return '<span class="layui-badge layui-bg-green">运行中</span>';
-        if (Number(status) === 2) return '<span class="layui-badge layui-bg-orange">换型中</span>';
-        return '<span class="layui-badge">停机</span>';
+        if (Number(status) === 1) return '<span class="layui-badge layui-bg-green">生产中</span>';
+        return '<span class="layui-badge">待机</span>';
     }
 
     function renderTable() {

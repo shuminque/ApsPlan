@@ -1,6 +1,6 @@
 -- 产线运行态历史数据补齐迁移脚本
 -- 目标：按 production_line 自动补齐 production_line_runtime，且每条产线仅保留一条 runtime 记录
--- 业务口径：status = 1 表示“空闲可生产”
+-- 业务口径：status = 1 表示“生产中”
 
 START TRANSACTION;
 

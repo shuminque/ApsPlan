@@ -7,6 +7,7 @@
 1. `aps_production_order_status_migration.sql`
 2. `aps_plan_shift_schedule_cleanup_migration.sql`
 3. `aps_production_line_runtime_backfill_migration.sql`
+4. `aps_production_line_runtime_status_cleanup_migration.sql`
 
 > 建议在业务低峰期执行，执行前先备份数据库。
 
@@ -16,7 +17,7 @@
 
 - 自动按 `production_line` 补齐缺失的 `production_line_runtime`；
 - 默认值统一为：
-    - `status = 1`（空闲可生产）
+    - `status = 1`（生产中）
     - `current_model = null`
     - `current_capacity = null`（系统将回退到型号配置产能）
     - `changeover_start_time = null`
@@ -24,7 +25,18 @@
 - 清理同一产线的重复 runtime 记录；
 - 增加唯一约束 `uk_production_line_runtime_line_id (line_id)`，确保一条产线只有一条 runtime。
 
-## 3. 执行后核验（可选）
+## 3. 运行态状态口径收敛（production_line_runtime）
+
+`aps_production_line_runtime_status_cleanup_migration.sql` 用于统一状态枚举，口径固定为：
+
+- `status = 0`：待机
+- `status = 1`：生产中
+
+对于历史数据中存在的 `status = 2`（旧口径“换型中”），迁移脚本默认回写为 `status = 0`（待机）。
+
+> 如需其他回写策略，请先由业务确认后再执行 SQL。
+
+## 4. 执行后核验（可选）
 
 ```sql
 -- 核验是否仍有重复
