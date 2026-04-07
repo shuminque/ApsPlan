@@ -75,6 +75,36 @@ class FulfillabilityEvaluatorTest {
         assertEquals(1, assessment.getRequiredInsertLineCount());
     }
 
+    @Test
+    void shouldEvaluateGapByDemandGroupDeadlineInsteadOfSummedDemand() {
+        LocalDate today = LocalDate.now();
+        List<DemandItem> demands = Arrays.asList(
+                newDemand(120, false, today.plusDays(1)),
+                newDemand(100, false, today.plusDays(3))
+        );
+        Map<String, List<LineCapacity>> lineCapByModel = new HashMap<String, List<LineCapacity>>();
+        lineCapByModel.put("6205", Collections.singletonList(
+                LineCapacity.of(1L, "L1", "6205", new BigDecimal("10"), 1, "车加工")
+        ));
+        Map<Long, PlanningSnapshot.LineRuntimeView> runtime = Collections.singletonMap(1L,
+                new PlanningSnapshot.LineRuntimeView(0, null, new BigDecimal("10"), null, null));
+
+        FulfillabilityAssessment assessment = evaluator.evaluate(
+                demands,
+                today,
+                today.plusDays(5),
+                shiftHoursMap(new BigDecimal("8"), 6),
+                lineCapByModel,
+                runtime
+        );
+
+        assertTrue(assessment.isCanFulfillByIdleLines());
+        assertEquals(160, assessment.getIdleCapacityBeforeDeadline());
+        assertEquals(0, assessment.getRequiredInsertQuantity());
+        assertEquals(0, assessment.getRequiredInsertLineCount());
+        assertEquals(today.plusDays(1).toString(), assessment.getInsertDeadline());
+    }
+
     private Map<LocalDate, BigDecimal> shiftHoursMap(BigDecimal hours, int days) {
         Map<LocalDate, BigDecimal> map = new HashMap<LocalDate, BigDecimal>();
         for (int i = 0; i < days; i++) {
