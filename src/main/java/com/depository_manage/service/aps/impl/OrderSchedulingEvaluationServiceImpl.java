@@ -127,6 +127,10 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
                 dto.setRequiredPreemptLineCount(requiredCount);
             } else {
                 dto.setStage(OrderSchedulingEvaluationDTO.Stage.DELAY_REQUIRED);
+                DelayAssessment delayAssessment = assessDelayAndRecommendLines(matches, quantity, now, deliveryDate);
+                dto.setPredictedFinishTime(delayAssessment.predictedFinishTime == null ? null : delayAssessment.predictedFinishTime.toString());
+                dto.setDelayDays(delayAssessment.delayDays);
+                dto.setRecommendedLines(delayAssessment.recommendedLines);
             }
             return dto;
         }
@@ -423,6 +427,177 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
         return Math.max(used, 0);
     }
 
+    private DelayAssessment assessDelayAndRecommendLines(List<LineMatch> matches,
+                                                         Integer quantity,
+                                                         LocalDateTime now,
+                                                         LocalDate deliveryDate) {
+        if (matches == null || matches.isEmpty() || quantity == null || quantity <= 0) {
+            return new DelayAssessment(null, 0, new ArrayList<>());
+        }
+        Set<Long> lineIds = matches.stream()
+                .map(LineMatch::lineId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        List<ProductionPlanItem> futurePlans = lineIds.isEmpty() ? new ArrayList<>() : productionPlanItemMapper.selectList(
+                new LambdaQueryWrapper<ProductionPlanItem>()
+                        .in(ProductionPlanItem::getLineId, lineIds)
+                        .ge(ProductionPlanItem::getEndDate, toDate(now))
+        );
+        Map<Long, List<ProductionPlanItem>> plansByLine = futurePlans.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> item.getLineId() != null)
+                .collect(Collectors.groupingBy(ProductionPlanItem::getLineId));
+
+        List<LineQueueCandidate> queueCandidates = new ArrayList<>();
+        for (LineMatch match : matches) {
+            if (match.capacityPerHour == null || match.capacityPerHour.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            LocalDateTime earliestStart = computeEarliestQueueStart(now, plansByLine.get(match.lineId));
+            queueCandidates.add(new LineQueueCandidate(match.lineId, match.lineName, match.capacityPerHour, earliestStart));
+        }
+        if (queueCandidates.isEmpty()) {
+            return new DelayAssessment(null, 0, new ArrayList<>());
+        }
+
+        LocalDateTime predictedFinish = solveEarliestJointFinish(queueCandidates, quantity);
+        Map<Long, Integer> allocation = allocateByFinishTime(queueCandidates, predictedFinish, quantity);
+        List<OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO> recommendedLines = queueCandidates.stream()
+                .filter(line -> allocation.getOrDefault(line.lineId, 0) > 0)
+                .map(line -> {
+                    int qty = allocation.getOrDefault(line.lineId, 0);
+                    LocalDateTime lineFinish = estimateFinish(line.earliestStart, line.capacityPerHour, qty);
+                    OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO dto = new OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO();
+                    dto.setLineId(line.lineId);
+                    dto.setLineName(line.lineName);
+                    dto.setEarliestStartTime(line.earliestStart.toString());
+                    dto.setEarliestFinishTime(lineFinish == null ? null : lineFinish.toString());
+                    dto.setRecommendedQty(qty);
+                    return dto;
+                })
+                .sorted(Comparator.comparing(OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO::getEarliestFinishTime,
+                                Comparator.nullsLast(String::compareTo))
+                        .thenComparing(OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO::getLineId, Comparator.nullsLast(Long::compareTo)))
+                .collect(Collectors.toList());
+        int delayDays = 0;
+        if (predictedFinish != null && deliveryDate != null && predictedFinish.toLocalDate().isAfter(deliveryDate)) {
+            delayDays = (int) ChronoUnit.DAYS.between(deliveryDate, predictedFinish.toLocalDate());
+        }
+        return new DelayAssessment(predictedFinish, Math.max(delayDays, 0), recommendedLines);
+    }
+
+    private LocalDateTime computeEarliestQueueStart(LocalDateTime now, List<ProductionPlanItem> items) {
+        if (items == null || items.isEmpty()) {
+            return now;
+        }
+        List<TimeRange> ranges = items.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> item.getStartDate() != null && item.getEndDate() != null)
+                .map(item -> new TimeRange(toLocalDateTime(item.getStartDate()), toLocalDateTime(item.getEndDate())))
+                .filter(range -> range.end.isAfter(now))
+                .sorted(Comparator.comparing(TimeRange::start))
+                .collect(Collectors.toList());
+        LocalDateTime cursor = now;
+        boolean moved;
+        do {
+            moved = false;
+            for (TimeRange range : ranges) {
+                if (!range.end.isAfter(cursor)) {
+                    continue;
+                }
+                if (!range.start.isAfter(cursor)) {
+                    cursor = range.end;
+                    moved = true;
+                }
+            }
+        } while (moved);
+        return cursor;
+    }
+
+    private LocalDateTime solveEarliestJointFinish(List<LineQueueCandidate> lines, int totalQty) {
+        LocalDateTime lower = lines.stream()
+                .map(LineQueueCandidate::earliestStart)
+                .min(LocalDateTime::compareTo)
+                .orElse(LocalDateTime.now(clock));
+        LocalDateTime upper = lower.plusHours(1);
+        while (producibleQtyUntil(lines, upper) < totalQty) {
+            upper = upper.plusHours(12);
+        }
+        while (ChronoUnit.MINUTES.between(lower, upper) > 1) {
+            long halfMinutes = ChronoUnit.MINUTES.between(lower, upper) / 2;
+            LocalDateTime mid = lower.plusMinutes(halfMinutes);
+            if (producibleQtyUntil(lines, mid) >= totalQty) {
+                upper = mid;
+            } else {
+                lower = mid;
+            }
+        }
+        return upper;
+    }
+
+    private int producibleQtyUntil(List<LineQueueCandidate> lines, LocalDateTime until) {
+        int total = 0;
+        for (LineQueueCandidate line : lines) {
+            if (!until.isAfter(line.earliestStart)) {
+                continue;
+            }
+            long minutes = ChronoUnit.MINUTES.between(line.earliestStart, until);
+            int qty = BigDecimal.valueOf(minutes)
+                    .multiply(line.capacityPerHour)
+                    .divide(BigDecimal.valueOf(60), 0, RoundingMode.FLOOR)
+                    .intValue();
+            total += Math.max(qty, 0);
+        }
+        return total;
+    }
+
+    private Map<Long, Integer> allocateByFinishTime(List<LineQueueCandidate> lines, LocalDateTime finishAt, int totalQty) {
+        Map<Long, Integer> allocation = new HashMap<>();
+        int assigned = 0;
+        for (LineQueueCandidate line : lines) {
+            if (!finishAt.isAfter(line.earliestStart)) {
+                allocation.put(line.lineId, 0);
+                continue;
+            }
+            long minutes = ChronoUnit.MINUTES.between(line.earliestStart, finishAt);
+            int qty = BigDecimal.valueOf(minutes)
+                    .multiply(line.capacityPerHour)
+                    .divide(BigDecimal.valueOf(60), 0, RoundingMode.FLOOR)
+                    .intValue();
+            qty = Math.max(qty, 0);
+            allocation.put(line.lineId, qty);
+            assigned += qty;
+        }
+        int overflow = assigned - Math.max(totalQty, 0);
+        if (overflow <= 0) {
+            return allocation;
+        }
+        List<LineQueueCandidate> sorted = new ArrayList<>(lines);
+        sorted.sort(Comparator.comparing(LineQueueCandidate::earliestStart).reversed()
+                .thenComparing(LineQueueCandidate::lineId, Comparator.nullsLast(Long::compareTo)));
+        for (LineQueueCandidate line : sorted) {
+            if (overflow <= 0) {
+                break;
+            }
+            int current = allocation.getOrDefault(line.lineId, 0);
+            int reduce = Math.min(current, overflow);
+            allocation.put(line.lineId, current - reduce);
+            overflow -= reduce;
+        }
+        return allocation;
+    }
+
+    private LocalDateTime estimateFinish(LocalDateTime start, BigDecimal capacityPerHour, int qty) {
+        if (start == null || capacityPerHour == null || capacityPerHour.compareTo(BigDecimal.ZERO) <= 0 || qty <= 0) {
+            return start;
+        }
+        long minutes = BigDecimal.valueOf(qty)
+                .multiply(BigDecimal.valueOf(60))
+                .divide(capacityPerHour, 0, RoundingMode.CEILING)
+                .longValue();
+        return start.plusMinutes(minutes);
+    }
+
     private TimeRange overlap(LocalDateTime rangeStart,
                               LocalDateTime rangeEnd,
                               LocalDateTime windowStart,
@@ -474,5 +649,13 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
     }
 
     private record TimeRange(LocalDateTime start, LocalDateTime end) {
+    }
+
+    private record LineQueueCandidate(Long lineId, String lineName, BigDecimal capacityPerHour, LocalDateTime earliestStart) {
+    }
+
+    private record DelayAssessment(LocalDateTime predictedFinishTime,
+                                   int delayDays,
+                                   List<OrderSchedulingEvaluationDTO.DelayRecommendationLineDTO> recommendedLines) {
     }
 }

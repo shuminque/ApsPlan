@@ -194,6 +194,10 @@ class OrderSchedulingEvaluationServiceImplTest {
 
         assertEquals(OrderSchedulingEvaluationDTO.Stage.DELAY_REQUIRED, dto.getStage());
         assertEquals(0, dto.getRequiredPreemptLineCount());
+        assertEquals("2026-01-02T17:40", dto.getPredictedFinishTime());
+        assertEquals(1, dto.getDelayDays());
+        assertEquals(1, dto.getRecommendedLines().size());
+        assertEquals(1300, dto.getRecommendedLines().get(0).getRecommendedQty());
     }
 
     private ProductionLine line(Long id, String name, String craft, int status) {
