@@ -33,6 +33,9 @@ public class OrderSchedulingEvaluationDTO {
     @JsonProperty("delay_days")
     private Integer delayDays = 0;
 
+    @JsonProperty("delay_minutes")
+    private Integer delayMinutes = 0;
+
     @JsonProperty("predicted_finish_time")
     private String predictedFinishTime;
 
@@ -59,6 +62,12 @@ public class OrderSchedulingEvaluationDTO {
 
         @JsonProperty("releasable_capacity_qty")
         private Integer releasableCapacityQty = 0;
+
+        /**
+         * 前端展示字段：可插队数量（与 releasable_capacity_qty 保持一致）
+         */
+        @JsonProperty("preemptable_qty")
+        private Integer preemptableQty = 0;
 
         @JsonProperty("impact_delay_minutes")
         private Integer impactDelayMinutes = 0;

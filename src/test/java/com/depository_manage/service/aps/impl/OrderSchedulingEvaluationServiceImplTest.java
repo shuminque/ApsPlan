@@ -131,6 +131,7 @@ class OrderSchedulingEvaluationServiceImplTest {
         assertEquals(1, dto.getPreemptCandidates().size());
         assertEquals(480, dto.getPreemptCandidates().get(0).getEstimatedOutput());
         assertEquals(320, dto.getPreemptCandidates().get(0).getReleasableCapacityQty());
+        assertEquals(320, dto.getPreemptCandidates().get(0).getPreemptableQty());
         assertEquals(320, dto.getPreemptCandidates().get(0).getImpactDelayMinutes());
     }
 
@@ -196,6 +197,7 @@ class OrderSchedulingEvaluationServiceImplTest {
         assertEquals(0, dto.getRequiredPreemptLineCount());
         assertEquals("2026-01-02T17:40", dto.getPredictedFinishTime());
         assertEquals(1, dto.getDelayDays());
+        assertEquals(1060, dto.getDelayMinutes());
         assertEquals(1, dto.getRecommendedLines().size());
         assertEquals(1300, dto.getRecommendedLines().get(0).getRecommendedQty());
     }
