@@ -167,7 +167,7 @@ class ProductionPlanningFixedClockTest {
         line.setId(lineId);
         line.setLineName(lineName);
         line.setCraft(craft);
-        line.setStatus(1);
+        line.setStatus(0);
         return line;
     }
 }

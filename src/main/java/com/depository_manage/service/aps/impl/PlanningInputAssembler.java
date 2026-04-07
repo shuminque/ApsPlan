@@ -259,7 +259,7 @@ class PlanningInputAssembler {
                 continue;
             }
             ProductionLine productionLine = lineById.get(cfg.getLineId());
-            if (productionLine != null && productionLine.getStatus() != null && productionLine.getStatus() == 0) {
+            if (!isStandbyLine(productionLine)) {
                 continue;
             }
             if (!scopedLineIds.isEmpty() && !scopedLineIds.contains(cfg.getLineId())) {
@@ -352,6 +352,10 @@ class PlanningInputAssembler {
 
     private boolean isLineStopped(PlanningSnapshot.LineRuntimeView runtimeView) {
         return runtimeView != null && runtimeView.getStatus() != null && runtimeView.getStatus() == RuntimeStatus.IDLE;
+    }
+
+    private boolean isStandbyLine(ProductionLine productionLine) {
+        return productionLine != null && productionLine.getStatus() != null && productionLine.getStatus() == 0;
     }
 
     private BigDecimal nonNegative(BigDecimal value) {

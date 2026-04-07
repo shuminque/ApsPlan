@@ -139,6 +139,27 @@ class ProductionPlanningServiceImplRegressionTest {
     }
 
     @Test
+    void shouldUseOnlyStandbyLinesForAutoPlanningCapacityPool() {
+        LocalDate today = LocalDate.now();
+        when(modelConfigMapper.selectPageList(isNull(), isNull(), anyLong(), anyLong())).thenReturn(Arrays.asList(
+                newModelConfig(1L, "6205", "10"),
+                newModelConfig(2L, "6205", "10")
+        ));
+        when(productionLineMapper.selectPageList(isNull(), anyLong(), anyLong())).thenReturn(Arrays.asList(
+                newLine(1L, "L-standby", CraftMappingUtil.PIPE_CRAFT, 0),
+                newLine(2L, "L-running", CraftMappingUtil.PIPE_CRAFT, 1)
+        ));
+        when(productionOrderService.list(any())).thenReturn(Collections.singletonList(
+                newOrder(1001L, "C1", "LA", "6205", 80, "普通", today.plusDays(2), CraftMappingUtil.PIPE_CRAFT)
+        ));
+
+        PlanPreviewResponseDTO response = service.generatePlanPreview(today.toString(), today.plusDays(2).toString());
+
+        assertFalse(response.getEvents().isEmpty());
+        assertTrue(response.getEvents().stream().allMatch(e -> Long.valueOf(1L).equals(e.getLineId())));
+    }
+
+    @Test
     void shouldFallbackToDefaultShiftHoursWhenNoShiftCalendar() {
         LocalDate today = LocalDate.now();
         when(productionOrderService.list(any())).thenReturn(Collections.singletonList(
@@ -218,11 +239,15 @@ class ProductionPlanningServiceImplRegressionTest {
     }
 
     private ProductionLine newLine(Long lineId, String lineName, String craft) {
+        return newLine(lineId, lineName, craft, 0);
+    }
+
+    private ProductionLine newLine(Long lineId, String lineName, String craft, int status) {
         ProductionLine line = new ProductionLine();
         line.setId(lineId);
         line.setLineName(lineName);
         line.setCraft(craft);
-        line.setStatus(1);
+        line.setStatus(status);
         return line;
     }
 }
