@@ -39,6 +39,24 @@
         ORDER BY r.id DESC
     </select>
 
+    <insert id="insertRuntime" parameterType="com.depository_manage.entity.aps.ProductionLineRuntime" useGeneratedKeys="true"
+            keyProperty="id">
+        INSERT INTO production_line_runtime (line_id,
+                                             current_model,
+                                             current_capacity,
+                                             status,
+                                             changeover_start_time,
+                                             changeover_end_time,
+                                             update_time)
+        VALUES (#{lineId},
+                #{currentModel},
+                #{currentCapacity},
+                #{status},
+                #{changeoverStartTime},
+                #{changeoverEndTime},
+                NOW())
+    </insert>
+
     <update id="updateRuntime" parameterType="com.depository_manage.entity.aps.ProductionLineRuntime">
         UPDATE production_line_runtime
         SET line_id = #{lineId},
