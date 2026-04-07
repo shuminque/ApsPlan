@@ -393,7 +393,10 @@
         fetch('/api/shift/plan/commit', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(events)
+            body: JSON.stringify({
+                selectedEvents: events,
+                selectedInsertLineIds: Array.isArray(selectedInsertLineIdsForCommit) ? selectedInsertLineIdsForCommit : []
+            })
         })
             .then(async res => {
                 const responseText = await res.text();
