@@ -203,10 +203,13 @@
                 previewPlanData = data || {events: [], orders: [], dailyOutputs: []};
                 selectedInsertLineIdsForCommit = [];
                 insertSelectionConfirmedForPreview = false;
-                openPlanPreviewDialog(previewPlanData);
                 if (isAutoInsertTriggered(previewPlanData)) {
-                    openAutoInsertTriggerDialog(previewPlanData);
+                    openAutoInsertTriggerDialog(previewPlanData, function () {
+                        openPlanPreviewDialog(previewPlanData);
+                    });
+                    return;
                 }
+                openPlanPreviewDialog(previewPlanData);
             })
             .catch(() => layer.msg('自动排产预览失败'));
     }
@@ -341,7 +344,7 @@
         onReadyToCommit();
     }
 
-    function openAutoInsertTriggerDialog(data, onConfirmThen) {
+    function openAutoInsertTriggerDialog(data, onConfirmThen, onCancelThen) {
         const insertSuggestion = data && data.insertSuggestion ? data.insertSuggestion : {};
         const requiredInsertLineCount = Number((data && data.requiredInsertLineCount) || insertSuggestion.requiredInsertLineCount || 0);
         const candidateLines = Array.isArray(insertSuggestion.candidateLines) ? insertSuggestion.candidateLines : [];
@@ -353,9 +356,12 @@
         }
         layer.msg('检测到插单需求，请先确认插单产线');
         openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, function () {
-            insertSelectionConfirmedForPreview = true;
             if (typeof onConfirmThen === 'function') {
                 onConfirmThen();
+            }
+        }, function () {
+            if (typeof onCancelThen === 'function') {
+                onCancelThen();
             }
         }, {
             requiredInsertQuantity: requiredInsertQuantity,
@@ -363,7 +369,7 @@
         });
     }
 
-    function openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onConfirm, extraInfo) {
+    function openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onConfirm, onCancel, extraInfo) {
         const defaultSelectedIndex = Math.max(requiredInsertLineCount, 0);
         const totalReleasableCapacity = candidateLines.reduce(function (sum, line) {
             const capacity = Number(line && line.releasableCapacity);
@@ -446,6 +452,13 @@
                 insertSelectionConfirmedForPreview = true;
                 layer.close(index);
                 onConfirm();
+            },
+            btn2: function(index) {
+                selectedInsertLineIdsForCommit = [];
+                insertSelectionConfirmedForPreview = false;
+                if (typeof onCancel === 'function') {
+                    onCancel();
+                }
             }
         });
     }
