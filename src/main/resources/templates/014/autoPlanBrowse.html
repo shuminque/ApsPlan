@@ -22,10 +22,10 @@
                 <a id="retryAutoPreviewLink"
                    href="javascript:void(0);"
                    style="display:none;color:#1E9FFF;text-decoration:underline;"
-                   onclick="retryAutoPlanPreview()">自动加载失败，点击重试</a>
+                   onclick="retryAutoPlanPreview()">自动加载失败，重新加载待排订单</a>
                 <!--                <button class="layui-btn layui-btn-primary" onclick="window.location.href='/calendar'">返回生产日历</button>-->
             </div>
-            <!--            <div style="margin-top:8px;color:#666;">先浏览待排订单并设置每组订单开始时间，再点击“排产”。</div>-->
+            <!--            <div style="margin-top:8px;color:#666;">已自动加载待排订单，请确认开始时间后继续排产。</div>-->
         </div>
     </div>
 </div>
@@ -130,7 +130,7 @@
             btn: ['排产', '关闭'],
             content: `
                 <div style="padding: 12px; max-height: 650px; overflow: auto;">
-                    <div style="margin-bottom: 8px; color: #666;">请为每组订单设置开始时间，再点击“排产”。</div>
+                    <div style="margin-bottom: 8px; color: #666;">已自动加载待排订单，请确认开始时间后继续排产。</div>
                     <div style="margin-bottom: 8px; font-weight: 700;">待排产订单汇总</div>
                     <table class="layui-table">
                         <thead>
