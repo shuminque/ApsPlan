@@ -297,7 +297,7 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
                 .collect(Collectors.toMap(LineMatch::lineId,
                         lineMatch -> lineMatch.capacityPerHour == null ? BigDecimal.ZERO : lineMatch.capacityPerHour,
                         (a, b) -> a));
-        List<com.depository_manage.entity.aps.ProductionLineRuntime> runningLines = productionLineRuntimeMapper.selectList(null).stream()
+        List<com.depository_manage.entity.aps.ProductionLineRuntime> runningLines = productionLineRuntimeMapper.selectList(null,null).stream()
                 .filter(Objects::nonNull)
                 .filter(runtime -> runtime.getStatus() != null && runtime.getStatus() == 1)
                 .collect(Collectors.toList());

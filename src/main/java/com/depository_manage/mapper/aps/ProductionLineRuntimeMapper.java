@@ -10,6 +10,9 @@ import java.util.List;
 public interface ProductionLineRuntimeMapper {
 
     List<ProductionLineRuntime> selectList(@Param("lineId") Long lineId, @Param("status") Integer status);
+    default List<ProductionLineRuntime> selectList(Long lineId) {
+        return selectList(lineId, null);
+    }
 
     int insertRuntime(ProductionLineRuntime runtime);
 

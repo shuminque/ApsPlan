@@ -315,7 +315,7 @@ class PlanningInputAssembler {
         if (productionLineRuntimeService == null) {
             return Collections.emptyMap();
         }
-        List<ProductionLineRuntime> runtimeList = productionLineRuntimeService.list(null);
+        List<ProductionLineRuntime> runtimeList = productionLineRuntimeService.list(null,null);
         if (runtimeList == null || runtimeList.isEmpty()) {
             return Collections.emptyMap();
         }

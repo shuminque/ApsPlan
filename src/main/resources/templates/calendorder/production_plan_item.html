@@ -57,7 +57,7 @@
             where:{lineId:$('#lineId').val()||null,model:$('#model').val(),customer:$('#customer').val(),startTime:$('#startTime').val(),endTime:$('#endTime').val()},
             request:{pageName:'page',limitName:'size'},page:true,limit:20,
             parseData:res=>{ cache=(res&&res.data&&res.data.records)||[]; return {code:0,msg:'',count:res.data.total,data:cache};},
-            cols:[[ {field:'id',title:'ID',width:80},{field:'planBatchNo',title:'批次号'},{field:'lineName',title:'产线'},{field:'customer',title:'客户'},{field:'model',title:'型号'},
+            cols:[ [ {field:'id',title:'ID',width:80},{field:'planBatchNo',title:'批次号'},{field:'lineName',title:'产线'},{field:'customer',title:'客户'},{field:'model',title:'型号'},
                 {field:'assignQty',title:'总量'},{field:'orderDemandQty',title:'订单量'},{field:'safetyDemandQty',title:'安全库存量'},
                 {field:'startDate',title:'开始',templet:d=>f(d.startDate)},{field:'endDate',title:'结束',templet:d=>f(d.endDate)},{title:'操作',toolbar:'#rowBar',width:150} ]]});
     }
