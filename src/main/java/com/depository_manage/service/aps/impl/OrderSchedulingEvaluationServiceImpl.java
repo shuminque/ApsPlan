@@ -322,6 +322,7 @@ public class OrderSchedulingEvaluationServiceImpl implements OrderSchedulingEval
                 .collect(Collectors.toMap(ProductionPlanItem::getLineId, item -> item, (left, right) -> {
                     Date leftStart = left.getStartDate();
                     Date rightStart = right.getStartDate();
+
                     if (leftStart == null) {
                         return right;
                     }
