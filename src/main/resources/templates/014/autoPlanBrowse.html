@@ -38,37 +38,6 @@
     let selectedInsertLineIdsForCommit = [];
     let insertSelectionConfirmedForPreview = false;
     let autoPreviewTriggered = false;
-    let activeBrowseDialogIndex = null;
-    let activePreviewDialogIndex = null;
-    let activeInsertDialogIndex = null;
-    let autoPlanCommitInFlight = false;
-    let autoPlanPreviewInFlight = false;
-
-    function safeCloseLayer(index) {
-        if (index === null || index === undefined) return null;
-        try {
-            layer.close(index);
-        } catch (e) {
-            // ignore
-        }
-        return null;
-    }
-
-    function clearInsertSelectionState() {
-        selectedInsertLineIdsForCommit = [];
-        insertSelectionConfirmedForPreview = false;
-    }
-
-    function resetAutoPlanTransientState() {
-        previewPlanData = null;
-        planBrowseData = null;
-        clearInsertSelectionState();
-        autoPlanCommitInFlight = false;
-        autoPlanPreviewInFlight = false;
-        activeInsertDialogIndex = safeCloseLayer(activeInsertDialogIndex);
-        activePreviewDialogIndex = safeCloseLayer(activePreviewDialogIndex);
-        activeBrowseDialogIndex = safeCloseLayer(activeBrowseDialogIndex);
-    }
 
     function toDateValue(date) {
         const year = date.getFullYear();
@@ -132,26 +101,7 @@
             });
     }
 
-    function buildOrderStartTimesFromData(data) {
-        const orders = (data && data.orders) || [];
-        const range = getCurrentRange();
-        const orderStartTimes = {};
-        orders.forEach(item => {
-            const key = buildPlanOrderKey(item);
-            const start = planOrderStartMap[key] || range.start;
-            const orderIds = Array.isArray(item.orderIds) ? item.orderIds : [];
-            orderIds.forEach(orderId => {
-                if (orderId !== null && orderId !== undefined && orderId !== '') {
-                    orderStartTimes[String(orderId)] = start;
-                }
-            });
-        });
-        return orderStartTimes;
-    }
-
-    function openPlanBrowseDialog(data, options) {
-        const opts = options || {};
-        const autoProceed = !!opts.autoProceed;
+    function openPlanBrowseDialog(data) {
         const orders = data.orders || [];
         const orderRows = orders.map(item => {
             const key = buildPlanOrderKey(item);
@@ -172,8 +122,7 @@
             `;
         }).join('');
 
-        activeBrowseDialogIndex = safeCloseLayer(activeBrowseDialogIndex);
-        activeBrowseDialogIndex = layer.open({
+        layer.open({
             type: 1,
             title: '自动排产 - 浏览分解',
             area: ['100%', '80%'],
@@ -225,25 +174,9 @@
                     return;
                 }
                 layer.close(index);
-                activeBrowseDialogIndex = null;
                 requestAutoPlanPreviewByOrderStart(orderStartTimes);
-            },
-            cancel: function() {
-                activeBrowseDialogIndex = null;
             }
         });
-        if (autoProceed) {
-            if (!orders.length) {
-                layer.msg('当前没有可排产订单，自动关闭浏览窗口');
-                window.setTimeout(function () {
-                    activeBrowseDialogIndex = safeCloseLayer(activeBrowseDialogIndex);
-                }, 800);
-                return;
-            }
-            const orderStartTimes = buildOrderStartTimesFromData(data);
-            activeBrowseDialogIndex = safeCloseLayer(activeBrowseDialogIndex);
-            requestAutoPlanPreviewByOrderStart(orderStartTimes);
-        }
     }
 
     function toggleRetryEntry(visible) {
@@ -255,9 +188,6 @@
     function previewAutoPlan(options) {
         const opts = options || {};
         const force = !!opts.force;
-        if (force) {
-            resetAutoPlanTransientState();
-        }
         if (autoPreviewTriggered && !force) return;
         if (!force) {
             autoPreviewTriggered = true;
@@ -265,10 +195,9 @@
         requestAutoPlanBrowseData()
             .then(data => {
                 toggleRetryEntry(false);
-                openPlanBrowseDialog(data, {autoProceed: true});
+                openPlanBrowseDialog(data);
             })
             .catch(() => {
-                resetAutoPlanTransientState();
                 layer.msg('自动排产浏览数据加载失败');
                 toggleRetryEntry(true);
             });
@@ -279,8 +208,6 @@
     }
 
     function requestAutoPlanPreviewByOrderStart(orderStartTimes) {
-        if (autoPlanPreviewInFlight) return;
-        autoPlanPreviewInFlight = true;
         const range = getCurrentRange();
         const startList = Object.values(orderStartTimes || {}).filter(Boolean).sort();
         const fallbackStart = startList.length ? startList[0] : range.start;
@@ -299,9 +226,9 @@
                 return res.json();
             })
             .then(data => {
-                autoPlanPreviewInFlight = false;
                 previewPlanData = data || {events: [], orders: [], dailyOutputs: []};
-                clearInsertSelectionState();
+                selectedInsertLineIdsForCommit = [];
+                insertSelectionConfirmedForPreview = false;
                 if (isAutoInsertTriggered(previewPlanData)) {
                     openAutoInsertTriggerDialog(previewPlanData, function () {
                         openPlanPreviewDialog(previewPlanData);
@@ -310,12 +237,7 @@
                 }
                 openPlanPreviewDialog(previewPlanData);
             })
-            .catch(() => {
-                autoPlanPreviewInFlight = false;
-                previewPlanData = null;
-                clearInsertSelectionState();
-                layer.msg('自动排产预览失败');
-            });
+            .catch(() => layer.msg('自动排产预览失败'));
     }
 
     function isAutoInsertTriggered(data) {
@@ -387,8 +309,7 @@
             `;
         }).join('');
 
-        activePreviewDialogIndex = safeCloseLayer(activePreviewDialogIndex);
-        activePreviewDialogIndex = layer.open({
+        layer.open({
             type: 1,
             title: '自动排产结果预览',
             area: ['100%', '80%'],
@@ -424,12 +345,8 @@
                         commitAutoPlan();
                         layer.close(confirmIndex);
                         layer.close(index);
-                        activePreviewDialogIndex = null;
                     });
                 });
-            },
-            cancel: function() {
-                activePreviewDialogIndex = null;
             }
         });
     }
@@ -512,8 +429,7 @@
             `;
         }).join('');
 
-        activeInsertDialogIndex = safeCloseLayer(activeInsertDialogIndex);
-        activeInsertDialogIndex = layer.open({
+        layer.open({
             type: 1,
             title: '插单推荐产线',
             area: ['760px', '520px'],
@@ -561,33 +477,24 @@
                 selectedInsertLineIdsForCommit = selectedIds;
                 insertSelectionConfirmedForPreview = true;
                 layer.close(index);
-                activeInsertDialogIndex = null;
                 onConfirm();
             },
             btn2: function(index) {
-                clearInsertSelectionState();
-                activeInsertDialogIndex = null;
+                selectedInsertLineIdsForCommit = [];
+                insertSelectionConfirmedForPreview = false;
                 if (typeof onCancel === 'function') {
                     onCancel();
                 }
-            },
-            cancel: function() {
-                activeInsertDialogIndex = null;
             }
         });
     }
 
     function commitAutoPlan() {
-        if (autoPlanCommitInFlight) {
-            layer.msg('正在写入排产，请勿重复提交');
-            return;
-        }
         const events = (previewPlanData && previewPlanData.events) || [];
         if (!events.length) {
             layer.msg('当前没有可写入的预览数据');
             return;
         }
-        autoPlanCommitInFlight = true;
         fetch('/api/shift/plan/commit', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -602,17 +509,15 @@
                 return Number(responseText);
             })
             .then(inserted => {
-                autoPlanCommitInFlight = false;
                 if (inserted > 0) {
                     previewPlanData = null;
-                    clearInsertSelectionState();
+                    selectedInsertLineIdsForCommit = [];
                     layer.msg('自动排产已写入班次排班');
                     return;
                 }
                 layer.msg('未写入任何排产明细，请检查订单匹配条件或预览数据');
             })
             .catch(err => {
-                autoPlanCommitInFlight = false;
                 let message = '写入排产失败';
                 if (err && err.message) {
                     try {
