@@ -35,6 +35,9 @@
             <if test="lineId != null">
                 AND r.line_id = #{lineId}
             </if>
+            <if test="status != null">
+                AND r.status = #{status}
+            </if>
         </where>
         ORDER BY r.id DESC
     </select>

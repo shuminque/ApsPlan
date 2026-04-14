@@ -19,7 +19,15 @@
                     <option value="">全部产线</option>
                 </select>
             </div>
-            <div class="col-md-8 d-flex gap-2">
+            <div class="col-md-4">
+                <label class="form-label">状态</label>
+                <select id="status" class="form-select">
+                    <option value="">全部状态</option>
+                    <option value="0">待机</option>
+                    <option value="1">生产中</option>
+                </select>
+            </div>
+            <div class="col-md-4 d-flex gap-2">
                 <button class="btn btn-primary" id="btnSearch">查询</button>
                 <button class="btn btn-outline-secondary" id="btnReset">重置</button>
             </div>
@@ -150,8 +158,9 @@
     }
 
     function loadList() {
+        const status = $('#status').val();
         $.ajax({
-            url: '/api/runtime/list', method: 'GET', data: { lineId: $('#lineId').val() || null },
+            url: '/api/runtime/list', method: 'GET', data: { lineId: $('#lineId').val() || null, status: status === '' ? null : Number(status) },
             success: function (res) {
                 if (!res || res.code !== 200) return alert(res ? res.msg : '加载失败');
                 records = res.data || [];
@@ -187,7 +196,7 @@
         loadLineOptions().then(loadList);
         layTable.on('tool(runtimeTable)', function (obj) { if (obj.event === 'edit') openEdit(obj.data.id); });
         $('#btnSearch').on('click', loadList);
-        $('#btnReset').on('click', function () { $('#lineId').val(''); loadList(); });
+        $('#btnReset').on('click', function () { $('#lineId').val(''); $('#status').val(''); loadList(); });
         $('#btnSave').on('click', save);
     });
 </script>

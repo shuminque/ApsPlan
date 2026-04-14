@@ -15,8 +15,8 @@ public class ProductionLineRuntimeServiceImpl implements ProductionLineRuntimeSe
     private ProductionLineRuntimeMapper productionLineRuntimeMapper;
 
     @Override
-    public List<ProductionLineRuntime> list(Long lineId) {
-        return productionLineRuntimeMapper.selectList(lineId);
+    public List<ProductionLineRuntime> list(Long lineId, Integer status) {
+        return productionLineRuntimeMapper.selectList(lineId, status);
     }
 
     @Override
