@@ -16,8 +16,9 @@ public class ProductionLineRuntimeController {
     private ProductionLineRuntimeService productionLineRuntimeService;
 
     @GetMapping("/list")
-    public Result<List<ProductionLineRuntime>> list(@RequestParam(required = false) Long lineId) {
-        return Result.success(productionLineRuntimeService.list(lineId));
+    public Result<List<ProductionLineRuntime>> list(@RequestParam(required = false) Long lineId,
+                                                    @RequestParam(required = false) Integer status) {
+        return Result.success(productionLineRuntimeService.list(lineId, status));
     }
 
     @PutMapping("/update")

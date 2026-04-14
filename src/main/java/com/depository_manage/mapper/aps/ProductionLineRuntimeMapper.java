@@ -9,7 +9,7 @@ import java.util.List;
 @Mapper
 public interface ProductionLineRuntimeMapper {
 
-    List<ProductionLineRuntime> selectList(@Param("lineId") Long lineId);
+    List<ProductionLineRuntime> selectList(@Param("lineId") Long lineId, @Param("status") Integer status);
 
     int insertRuntime(ProductionLineRuntime runtime);
 

@@ -6,7 +6,7 @@ import java.util.List;
 
 public interface ProductionLineRuntimeService {
 
-    List<ProductionLineRuntime> list(Long lineId);
+    List<ProductionLineRuntime> list(Long lineId, Integer status);
 
     boolean update(ProductionLineRuntime runtime);
 }
