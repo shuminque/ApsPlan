@@ -4,6 +4,8 @@ import com.depository_manage.entity.aps.ProductionOrder;
 import com.depository_manage.entity.aps.SafetyStock;
 import com.depository_manage.service.aps.planning.NormalizedPlanningRequest;
 import com.depository_manage.utils.CraftMappingUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -30,6 +32,7 @@ public class PlanningEngineV1 implements PlanningEngine {
 
     private static final String OBJECTIVE_MIN_LINE = "min_line";
     private static final BigDecimal DAILY_TARGET_BUFFER = new BigDecimal("1.05");
+    private static final Logger log = LoggerFactory.getLogger(PlanningEngineV1.class);
     private final FulfillabilityEvaluator fulfillabilityEvaluator = new FulfillabilityEvaluator();
 
     @Override
@@ -396,20 +399,14 @@ public class PlanningEngineV1 implements PlanningEngine {
             return 0;
         }
         String normalized = priority.trim();
-        if ("加急".equals(normalized)) {
-            return 1;
-        }
-        if ("插单".equals(normalized)) {
-            return 1;
-        }
-        if ("普通".equals(normalized)) {
+        if ("0".equals(normalized) || "普通".equals(normalized)) {
             return 0;
         }
-        try {
-            return Integer.parseInt(normalized);
-        } catch (NumberFormatException ignore) {
-            return 0;
+        if ("1".equals(normalized) || "加急".equals(normalized)) {
+            return 1;
         }
+        log.warn("invalid order priority '{}', fallback to normal(0)", normalized);
+        return 0;
     }
 
     private int remainingOrderQuantity(ProductionOrder order) {
