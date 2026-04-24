@@ -63,7 +63,8 @@ public class ShiftCalendarController {
                 request.getLineIds(),
                 request.getFreezeHours(),
                 request.getOrderStartTimes(),
-                request.getObjective()));
+                request.getObjective(),
+                request.getSelectedInsertLineIds()));
         PREVIEW_CACHE.put(session.getId(), new PreviewSessionState(
                 preview.getEvents(),
                 preview.getInsertSuggestion(),
@@ -229,6 +230,7 @@ public class ShiftCalendarController {
         private Integer freezeHours;
         private Map<String, String> orderStartTimes;
         private String objective;
+        private List<Long> selectedInsertLineIds;
 
         public String getStart() {
             return start;
@@ -300,6 +302,14 @@ public class ShiftCalendarController {
 
         public void setObjective(String objective) {
             this.objective = objective;
+        }
+
+        public List<Long> getSelectedInsertLineIds() {
+            return selectedInsertLineIds;
+        }
+
+        public void setSelectedInsertLineIds(List<Long> selectedInsertLineIds) {
+            this.selectedInsertLineIds = selectedInsertLineIds;
         }
 
     }
