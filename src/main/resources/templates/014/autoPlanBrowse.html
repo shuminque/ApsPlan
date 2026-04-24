@@ -236,10 +236,14 @@
                 selectedInsertLineIdsForPreview = selectedIds.slice();
                 insertSelectionConfirmedForPreview = selectedIds.length > 0;
                 if (isAutoInsertTriggered(previewPlanData)) {
-                    openAutoInsertTriggerDialog(previewPlanData, function () {
-                        openPlanPreviewDialog(previewPlanData);
-                    });
-                    return;
+                    const insertSuggestion = previewPlanData && previewPlanData.insertSuggestion ? previewPlanData.insertSuggestion : {};
+                    const requiredInsertLineCount = Number((previewPlanData && previewPlanData.requiredInsertLineCount) || insertSuggestion.requiredInsertLineCount || 0);
+                    if (selectedIds.length < requiredInsertLineCount) {
+                        openAutoInsertTriggerDialog(previewPlanData, function (confirmedLineIds) {
+                            requestAutoPlanPreviewByOrderStart(orderStartTimesForPreview, confirmedLineIds);
+                        });
+                        return;
+                    }
                 }
                 openPlanPreviewDialog(previewPlanData);
             })
@@ -392,9 +396,9 @@
             return;
         }
         layer.msg('检测到插单需求，请先确认插单产线');
-        openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, function () {
+        openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, function (selectedLineIds) {
             if (typeof onConfirmThen === 'function') {
-                onConfirmThen();
+                onConfirmThen(selectedLineIds);
             }
         }, function () {
             if (typeof onCancelThen === 'function') {
@@ -483,7 +487,9 @@
                 selectedInsertLineIdsForCommit = selectedIds;
                 insertSelectionConfirmedForPreview = true;
                 selectedInsertLineIdsForPreview = selectedIds.slice();
-                requestAutoPlanPreviewByOrderStart(orderStartTimesForPreview, selectedIds);
+                if (typeof onConfirm === 'function') {
+                    onConfirm(selectedIds);
+                }
                 layer.close(index);
             },
             btn2: function(index) {
