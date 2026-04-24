@@ -38,6 +38,8 @@
     let selectedInsertLineIdsForCommit = [];
     let insertSelectionConfirmedForPreview = false;
     let autoPreviewTriggered = false;
+    let selectedInsertLineIdsForPreview = [];
+    let orderStartTimesForPreview = {};
 
     function toDateValue(date) {
         const year = date.getFullYear();
@@ -174,6 +176,7 @@
                     return;
                 }
                 layer.close(index);
+                orderStartTimesForPreview = Object.assign({}, orderStartTimes);
                 requestAutoPlanPreviewByOrderStart(orderStartTimes);
             }
         });
@@ -207,10 +210,11 @@
         previewAutoPlan({force: true});
     }
 
-    function requestAutoPlanPreviewByOrderStart(orderStartTimes) {
+    function requestAutoPlanPreviewByOrderStart(orderStartTimes, selectedInsertLineIds) {
         const range = getCurrentRange();
         const startList = Object.values(orderStartTimes || {}).filter(Boolean).sort();
         const fallbackStart = startList.length ? startList[0] : range.start;
+        const selectedIds = Array.isArray(selectedInsertLineIds) ? selectedInsertLineIds : [];
 
         fetch('/api/shift/plan/preview', {
             method: 'POST',
@@ -218,7 +222,8 @@
             body: JSON.stringify({
                 start: fallbackStart,
                 end: range.end,
-                orderStartTimes: orderStartTimes
+                orderStartTimes: orderStartTimes,
+                selectedInsertLineIds: selectedIds
             })
         })
             .then(res => {
@@ -227,8 +232,9 @@
             })
             .then(data => {
                 previewPlanData = data || {events: [], orders: [], dailyOutputs: []};
-                selectedInsertLineIdsForCommit = [];
-                insertSelectionConfirmedForPreview = false;
+                selectedInsertLineIdsForCommit = selectedIds.slice();
+                selectedInsertLineIdsForPreview = selectedIds.slice();
+                insertSelectionConfirmedForPreview = selectedIds.length > 0;
                 if (isAutoInsertTriggered(previewPlanData)) {
                     openAutoInsertTriggerDialog(previewPlanData, function () {
                         openPlanPreviewDialog(previewPlanData);
@@ -309,6 +315,9 @@
             `;
         }).join('');
 
+        const selectedLineHint = Array.isArray(selectedInsertLineIdsForPreview) && selectedInsertLineIdsForPreview.length
+            ? '预览结果（已应用选线）'
+            : '预览结果（未应用选线）';
         layer.open({
             type: 1,
             title: '自动排产结果预览',
@@ -318,6 +327,7 @@
             content: `
                 <div style="padding: 12px; max-height: 650px; overflow: auto;">
                     <div style="margin-bottom: 8px; color: #666;">计划起止：${planRangeText || '-'}</div>
+                    <div style="margin-bottom: 8px; color: #666;">${selectedLineHint}；“写入排产”后才会提交生效。</div>
                     <div style="margin-bottom: 8px; font-weight: 700;">待排产订单汇总</div>
                     <table class="layui-table">
                         <thead>
@@ -366,6 +376,7 @@
             return;
         }
         selectedInsertLineIdsForCommit = [];
+        selectedInsertLineIdsForPreview = [];
         insertSelectionConfirmedForPreview = false;
         onReadyToCommit();
     }
@@ -463,19 +474,21 @@
             yes: function(index) {
                 const checkedBoxes = Array.from(document.querySelectorAll('.insert-line-checkbox:checked'));
                 const selectedIds = checkedBoxes
-                    .map(item => item.getAttribute('data-line-id') || '')
-                    .filter(Boolean);
+                    .map(item => Number(item.getAttribute('data-line-id')))
+                    .filter(id => Number.isFinite(id) && id > 0);
                 if (selectedIds.length < requiredInsertLineCount) {
                     layer.msg(`至少需要选择 ${requiredInsertLineCount} 条产线后才能写入排产`);
                     return;
                 }
                 selectedInsertLineIdsForCommit = selectedIds;
                 insertSelectionConfirmedForPreview = true;
+                selectedInsertLineIdsForPreview = selectedIds.slice();
+                requestAutoPlanPreviewByOrderStart(orderStartTimesForPreview, selectedIds);
                 layer.close(index);
-                onConfirm();
             },
             btn2: function(index) {
                 selectedInsertLineIdsForCommit = [];
+                selectedInsertLineIdsForPreview = [];
                 insertSelectionConfirmedForPreview = false;
                 if (typeof onCancel === 'function') {
                     onCancel();

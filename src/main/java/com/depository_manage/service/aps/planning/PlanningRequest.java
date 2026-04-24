@@ -19,6 +19,7 @@ public class PlanningRequest {
     private final Integer freezeHours;
     private final Map<String, String> orderStartTimes;
     private final String objective;
+    private final List<Long> selectedInsertLineIds;
 
     public PlanningRequest(String startDate,
                            String endDate,
@@ -28,7 +29,8 @@ public class PlanningRequest {
                            List<Long> lineIds,
                            Integer freezeHours,
                            Map<String, String> orderStartTimes,
-                           String objective) {
+                           String objective,
+                           List<Long> selectedInsertLineIds) {
         this.startDate = startDate;
         this.endDate = endDate;
         this.planMode = planMode;
@@ -38,6 +40,7 @@ public class PlanningRequest {
         this.freezeHours = freezeHours;
         this.orderStartTimes = orderStartTimes;
         this.objective = objective;
+        this.selectedInsertLineIds = selectedInsertLineIds;
     }
 
     public static PlanningRequest fromLegacyParameters(String startDate,
@@ -62,7 +65,7 @@ public class PlanningRequest {
             }
         }
         return new PlanningRequest(startDate, endDate, planMode, insertOrderIds, lineScope,
-                lineIds, freezeHours, serializedOrderStartTimes, objective);
+                lineIds, freezeHours, serializedOrderStartTimes, objective, Collections.emptyList());
     }
 
     public String getStartDate() {
@@ -99,5 +102,9 @@ public class PlanningRequest {
 
     public String getObjective() {
         return objective;
+    }
+
+    public List<Long> getSelectedInsertLineIds() {
+        return selectedInsertLineIds;
     }
 }

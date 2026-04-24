@@ -30,7 +30,7 @@ public class PlanningRequestNormalizer {
             return new NormalizedPlanningRequest(requestStart, requestStart, endExclusive,
                     requestStartAt, requestStartAt, normalizeMode(request.getPlanMode()),
                     normalizeObjective(request.getObjective()), Collections.emptySet(),
-                    Collections.emptySet(), 0, Collections.emptyMap());
+                    Collections.emptySet(), 0, Collections.emptyMap(), Collections.emptySet());
         }
 
         LocalDate today = LocalDate.now(clock);
@@ -66,7 +66,8 @@ public class PlanningRequestNormalizer {
                 normalizeLongSet(request.getInsertOrderIds()),
                 normalizeLineScope(request.getLineScope(), request.getLineIds()),
                 freezeWindowHours,
-                parseOrderStartTimes(request.getOrderStartTimes())
+                parseOrderStartTimes(request.getOrderStartTimes()),
+                normalizeLongSet(request.getSelectedInsertLineIds())
         );
     }
 

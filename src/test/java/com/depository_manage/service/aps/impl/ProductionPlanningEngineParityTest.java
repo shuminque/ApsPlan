@@ -92,7 +92,7 @@ class ProductionPlanningEngineParityTest {
         ));
 
         PlanningRequest req = new PlanningRequest(today.toString(), today.plusDays(2).toString(), "AUTO",
-                Collections.emptyList(), "ALL", Collections.emptyList(), 0, Collections.emptyMap(), "min_line");
+                Collections.emptyList(), "ALL", Collections.emptyList(), 0, Collections.emptyMap(), "min_line", Collections.emptyList());
         NormalizedPlanningRequest normalized = new PlanningRequestNormalizer().normalize(req, Clock.systemUTC());
         PlanningContext context = (PlanningContext) ReflectionTestUtils.invokeMethod(service, "createPlanningContext", normalized);
 

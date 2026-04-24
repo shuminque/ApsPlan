@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -89,7 +91,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     @Override
     public PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate) {
         return generatePlanPreview(new PlanningRequest(startDate, endDate, "AUTO", Collections.emptyList(), "ALL",
-                Collections.emptyList(), null, Collections.emptyMap(), OBJECTIVE_MIN_LINE));
+                Collections.emptyList(), null, Collections.emptyMap(), OBJECTIVE_MIN_LINE, Collections.emptyList()));
     }
 
     @Override
@@ -149,9 +151,64 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
         PlanningResult.Metrics metrics = planningResultMapper.calculateMetrics(primaryResult.getDemands(), endExclusive);
         PlanningResult resultWithMetrics = new PlanningResult(primaryResult.getSlices(), primaryResult.getDemands(),
                 primaryResult.getActualStart(), primaryResult.getActualEnd(), metrics, primaryResult.getDiagnostics());
-        return planningResultMapper.toPlanPreviewResponse(resultWithMetrics,
+        PlanPreviewResponseDTO response = planningResultMapper.toPlanPreviewResponse(resultWithMetrics,
                 normalizedRequest.getEffectiveStartAt(), context.getSnapshot().getShiftHoursByDay(),
                 context.getSnapshot(), normalizedRequest.getEndExclusive());
+        applyPreviewInsertAdjustments(response.getEvents(), normalizedRequest.getSelectedInsertLineIds());
+        return response;
+    }
+
+    private void applyPreviewInsertAdjustments(List<CalendarEventDTO> events, Set<Long> selectedLines) {
+        if (events == null || events.isEmpty() || selectedLines == null || selectedLines.isEmpty()) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now(clock);
+        Map<Long, List<CalendarEventDTO>> eventsByLine = events.stream()
+                .filter(event -> event != null && event.getLineId() != null && selectedLines.contains(event.getLineId()))
+                .collect(Collectors.groupingBy(CalendarEventDTO::getLineId));
+        for (List<CalendarEventDTO> lineEvents : eventsByLine.values()) {
+            lineEvents.sort(Comparator.comparing(this::parseEventStart));
+            LocalDateTime firstStart = parseEventStart(lineEvents.get(0));
+            LocalDateTime cursor = firstStart != null && firstStart.isAfter(now) ? firstStart : now;
+            for (CalendarEventDTO event : lineEvents) {
+                LocalDateTime start = parseEventStart(event);
+                LocalDateTime end = parseEventEnd(event);
+                Duration duration = start == null || end == null
+                        ? Duration.ofMinutes(1)
+                        : Duration.between(start, end);
+                if (duration.isNegative() || duration.isZero()) {
+                    duration = Duration.ofMinutes(1);
+                }
+                event.setStart(DATE_TIME_FMT.format(cursor));
+                cursor = cursor.plus(duration);
+                event.setEnd(DATE_TIME_FMT.format(cursor));
+            }
+        }
+    }
+
+    private LocalDateTime parseEventStart(CalendarEventDTO event) {
+        return parseEventTime(event == null ? null : event.getStart());
+    }
+
+    private LocalDateTime parseEventEnd(CalendarEventDTO event) {
+        return parseEventTime(event == null ? null : event.getEnd());
+    }
+
+    private LocalDateTime parseEventTime(String raw) {
+        if (raw == null || raw.trim().isEmpty()) {
+            return null;
+        }
+        String value = raw.trim();
+        if (value.length() == 10) {
+            return LocalDate.parse(value).atStartOfDay();
+        }
+        if (value.length() == 16) {
+            return LocalDateTime.parse(value + ":00", DATE_TIME_FMT);
+        }
+        if (value.length() >= 19) {
+            return LocalDateTime.parse(value.substring(0, 19), DATE_TIME_FMT);
+        }
+        return null;
     }
 
     private PlanningResult runPrimaryEngine(PlanningContext context) {

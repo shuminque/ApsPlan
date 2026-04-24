@@ -18,6 +18,7 @@ public class NormalizedPlanningRequest {
     private final Set<Long> scopedLineIds;
     private final int freezeWindowHours;
     private final Map<Long, LocalDateTime> orderStartTimes;
+    private final Set<Long> selectedInsertLineIds;
 
     public NormalizedPlanningRequest(LocalDate requestStart,
                                      LocalDate start,
@@ -29,7 +30,8 @@ public class NormalizedPlanningRequest {
                                      Set<Long> insertOrderIds,
                                      Set<Long> scopedLineIds,
                                      int freezeWindowHours,
-                                     Map<Long, LocalDateTime> orderStartTimes) {
+                                     Map<Long, LocalDateTime> orderStartTimes,
+                                     Set<Long> selectedInsertLineIds) {
         this.requestStart = requestStart;
         this.start = start;
         this.endExclusive = endExclusive;
@@ -41,6 +43,7 @@ public class NormalizedPlanningRequest {
         this.scopedLineIds = scopedLineIds;
         this.freezeWindowHours = freezeWindowHours;
         this.orderStartTimes = orderStartTimes;
+        this.selectedInsertLineIds = selectedInsertLineIds;
     }
 
     public LocalDate getRequestStart() {
@@ -85,6 +88,10 @@ public class NormalizedPlanningRequest {
 
     public Map<Long, LocalDateTime> getOrderStartTimes() {
         return orderStartTimes;
+    }
+
+    public Set<Long> getSelectedInsertLineIds() {
+        return selectedInsertLineIds;
     }
 
     public boolean isValid() {
