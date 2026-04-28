@@ -3,6 +3,7 @@ package com.depository_manage.service.aps.impl;
 import com.depository_manage.entity.aps.ProductionLine;
 import com.depository_manage.entity.aps.ProductionLineModelConfig;
 import com.depository_manage.entity.aps.ProductionOrder;
+import com.depository_manage.entity.aps.ProductionPlanItem;
 import com.depository_manage.entity.aps.ProductionLineRuntime;
 import com.depository_manage.entity.aps.SafetyStock;
 
@@ -25,6 +26,8 @@ public class PlanningSnapshot {
     private final Map<String, List<LineCapacity>> lineCapByModel;
     private final Map<LineDayKey, Integer> remainingCapacityByLineDay;
     private final Map<Long, LineRuntimeView> runtimeViewByLineId;
+    private final List<ProductionPlanItem> committedPlanItems;
+    private final Map<Long, LocalDate> deliveryDateByOrderId;
 
     public PlanningSnapshot(List<ProductionOrder> openOrders,
                             List<SafetyStock> safetyStocks,
@@ -36,7 +39,9 @@ public class PlanningSnapshot {
                             List<ProductionLine> productionLines,
                             Map<String, List<LineCapacity>> lineCapByModel,
                             Map<LineDayKey, Integer> remainingCapacityByLineDay,
-                            Map<Long, LineRuntimeView> runtimeViewByLineId) {
+                            Map<Long, LineRuntimeView> runtimeViewByLineId,
+                            List<ProductionPlanItem> committedPlanItems,
+                            Map<Long, LocalDate> deliveryDateByOrderId) {
         this.openOrders = openOrders;
         this.safetyStocks = safetyStocks;
         this.orderByKey = orderByKey;
@@ -48,6 +53,8 @@ public class PlanningSnapshot {
         this.lineCapByModel = lineCapByModel;
         this.remainingCapacityByLineDay = remainingCapacityByLineDay;
         this.runtimeViewByLineId = runtimeViewByLineId;
+        this.committedPlanItems = committedPlanItems;
+        this.deliveryDateByOrderId = deliveryDateByOrderId;
     }
 
     public List<ProductionOrder> getOpenOrders() {
@@ -92,6 +99,14 @@ public class PlanningSnapshot {
 
     public Map<Long, LineRuntimeView> getRuntimeViewByLineId() {
         return runtimeViewByLineId;
+    }
+
+    public List<ProductionPlanItem> getCommittedPlanItems() {
+        return committedPlanItems;
+    }
+
+    public Map<Long, LocalDate> getDeliveryDateByOrderId() {
+        return deliveryDateByOrderId;
     }
 
     public static class LineRuntimeView {

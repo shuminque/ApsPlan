@@ -5,12 +5,14 @@ import com.depository_manage.entity.aps.ProductionLine;
 import com.depository_manage.entity.aps.ProductionLineModelConfig;
 import com.depository_manage.entity.aps.ProductionOrder;
 import com.depository_manage.entity.aps.ProductionOrderStatus;
+import com.depository_manage.entity.aps.ProductionPlanItem;
 import com.depository_manage.entity.aps.ProductionLineRuntime;
 import com.depository_manage.entity.aps.RuntimeStatus;
 import com.depository_manage.entity.aps.SafetyStock;
 import com.depository_manage.entity.aps.ShiftSchedule;
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
+import com.depository_manage.mapper.aps.ProductionPlanItemMapper;
 import com.depository_manage.service.aps.ProductionLineRuntimeService;
 import com.depository_manage.service.BearingRecordService;
 import com.depository_manage.service.aps.ProductionOrderService;
@@ -48,6 +50,7 @@ class PlanningInputAssembler {
     private final ProductionLineMapper productionLineMapper;
     private final ProductionLineRuntimeService productionLineRuntimeService;
     private final BearingRecordService bearingRecordService;
+    private final ProductionPlanItemMapper productionPlanItemMapper;
     private final ZoneId zoneId;
 
     PlanningInputAssembler(ProductionOrderService productionOrderService,
@@ -57,6 +60,7 @@ class PlanningInputAssembler {
                            ProductionLineMapper productionLineMapper,
                            ProductionLineRuntimeService productionLineRuntimeService,
                            BearingRecordService bearingRecordService,
+                           ProductionPlanItemMapper productionPlanItemMapper,
                            ZoneId zoneId) {
         this.productionOrderService = productionOrderService;
         this.safetyStockService = safetyStockService;
@@ -65,6 +69,7 @@ class PlanningInputAssembler {
         this.productionLineMapper = productionLineMapper;
         this.productionLineRuntimeService = productionLineRuntimeService;
         this.bearingRecordService = bearingRecordService;
+        this.productionPlanItemMapper = productionPlanItemMapper;
         this.zoneId = zoneId;
     }
 
@@ -77,7 +82,7 @@ class PlanningInputAssembler {
             return new PlanningSnapshot(Collections.emptyList(), Collections.emptyList(), Collections.emptyMap(),
                     Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(),
                     Collections.emptyList(), Collections.emptyList(), Collections.emptyMap(), Collections.emptyMap(),
-                    Collections.emptyMap());
+                    Collections.emptyMap(), Collections.emptyList(), Collections.emptyMap());
         }
 
         List<SafetyStock> safetyStocks = safetyStockService.list();
@@ -105,10 +110,40 @@ class PlanningInputAssembler {
                 normalizedRequest.getScopedLineIds());
         Map<LineDayKey, Integer> remainingCapacityByLineDay = buildRemainingCapacityByLineDay(
                 start, planningCapacityEndExclusive, shiftHoursByDay, lineCapByModel, runtimeViewByLineId);
+        List<ProductionPlanItem> committedPlanItems = loadCommittedPlanItems(start, effectiveStartAt);
+        Map<Long, LocalDate> deliveryDateByOrderId = buildDeliveryDateByOrderId(committedPlanItems);
 
         return new PlanningSnapshot(openOrders, safetyStocks, orderByKey, safetyStockByKey, currentInventoryByKey,
                 shiftHoursByDay, lineModelConfigs, productionLines, lineCapByModel, remainingCapacityByLineDay,
-                runtimeViewByLineId);
+                runtimeViewByLineId, committedPlanItems, deliveryDateByOrderId);
+    }
+
+    private List<ProductionPlanItem> loadCommittedPlanItems(LocalDate start, LocalDateTime effectiveStartAt) {
+        LocalDateTime queryStart = effectiveStartAt == null ? start.atStartOfDay() : effectiveStartAt;
+        return productionPlanItemMapper.selectList(new LambdaQueryWrapper<ProductionPlanItem>()
+                .isNotNull(ProductionPlanItem::getLineId)
+                .isNotNull(ProductionPlanItem::getStartDate)
+                .isNotNull(ProductionPlanItem::getEndDate)
+                .ge(ProductionPlanItem::getEndDate, Date.from(queryStart.atZone(zoneId).toInstant())));
+    }
+
+    private Map<Long, LocalDate> buildDeliveryDateByOrderId(List<ProductionPlanItem> committedPlanItems) {
+        if (committedPlanItems == null || committedPlanItems.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<Long> orderIds = committedPlanItems.stream()
+                .map(ProductionPlanItem::getOrderId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (orderIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return productionOrderService.listByIds(orderIds).stream()
+                .filter(Objects::nonNull)
+                .filter(order -> order.getId() != null && order.getDeliveryDate() != null)
+                .collect(Collectors.toMap(ProductionOrder::getId,
+                        order -> toLocalDateTime(order.getDeliveryDate()).toLocalDate(),
+                        (a, b) -> a));
     }
 
     private List<String> resolveOrderStatusFilters(String mode) {

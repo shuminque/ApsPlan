@@ -1,6 +1,7 @@
 package com.depository_manage.service.aps.impl;
 
 import com.depository_manage.entity.aps.RuntimeStatus;
+import com.depository_manage.entity.aps.ProductionPlanItem;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.PlanPreviewDailyDTO;
 import com.depository_manage.pojo.shift.PlanPreviewOrderDTO;
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -31,6 +33,7 @@ class PlanningResultMapper {
     private static final int MANUAL_INSERT_LINE_REQUIRED = -1;
     private static final String MANUAL_INSERT_LINE_HINT = "需人工指定插单线";
     private static final String NO_ELIGIBLE_RUNNING_LINES = "NO_ELIGIBLE_RUNNING_LINES";
+    private static final String EXCLUDED_DUE_TO_ORIGINAL_DELAY = "EXCLUDED_DUE_TO_ORIGINAL_DELAY";
 
     private final DateTimeFormatter dateTimeFormatter;
     private final String planColor;
@@ -190,7 +193,14 @@ class PlanningResultMapper {
         }
 
         Map<Long, Integer> releasableByLine = new HashMap<>();
+        int requiredInsertQuantity = assessment == null ? 0 : Math.max(assessment.getRequiredInsertQuantity(), 0);
+        LocalDateTime simulationStart = planStart.atStartOfDay();
+        Map<Long, List<ProductionPlanItem>> committedByLine = snapshot.getCommittedPlanItems().stream()
+                .filter(Objects::nonNull)
+                .filter(item -> item.getLineId() != null)
+                .collect(Collectors.groupingBy(ProductionPlanItem::getLineId));
         for (Map.Entry<Long, BigDecimal> entry : baseCapacityPerHourByLine.entrySet()) {
+            Long lineId = entry.getKey();
             PlanningSnapshot.LineRuntimeView runtimeView = snapshot.getRuntimeViewByLineId().get(entry.getKey());
             if (!hasStatus(runtimeView, RuntimeStatus.RUNNING)) {
                 continue;
@@ -203,9 +213,81 @@ class PlanningResultMapper {
                 lineCapacity += capacityPerHour.multiply(hours).setScale(0, RoundingMode.FLOOR).intValue();
                 cursor = cursor.plusDays(1);
             }
-            releasableByLine.put(entry.getKey(), Math.max(lineCapacity, 0));
+            int netReleasableCapacity = Math.max(lineCapacity, 0);
+            if (netReleasableCapacity <= 0) {
+                continue;
+            }
+            int simulatedInsertQty = requiredInsertQuantity <= 0
+                    ? netReleasableCapacity
+                    : Math.min(requiredInsertQuantity, netReleasableCapacity);
+            if (willCauseOriginalOrderDelay(committedByLine.get(lineId), snapshot.getDeliveryDateByOrderId(),
+                    simulationStart, capacityPerHour, simulatedInsertQty)) {
+                log.info("exclude candidate line due to original-order delay. lineId={}, reason={}", lineId, EXCLUDED_DUE_TO_ORIGINAL_DELAY);
+                continue;
+            }
+            releasableByLine.put(lineId, netReleasableCapacity);
         }
         return releasableByLine;
+    }
+
+    private boolean willCauseOriginalOrderDelay(List<ProductionPlanItem> committedItems,
+                                                Map<Long, LocalDate> deliveryDateByOrderId,
+                                                LocalDateTime insertStart,
+                                                BigDecimal capacityPerHour,
+                                                int insertQuantity) {
+        if (committedItems == null || committedItems.isEmpty() || deliveryDateByOrderId == null || deliveryDateByOrderId.isEmpty()) {
+            return false;
+        }
+        if (insertStart == null || capacityPerHour == null || capacityPerHour.compareTo(BigDecimal.ZERO) <= 0 || insertQuantity <= 0) {
+            return false;
+        }
+        long insertMinutes = BigDecimal.valueOf(insertQuantity)
+                .multiply(BigDecimal.valueOf(60))
+                .divide(capacityPerHour, 0, RoundingMode.CEILING)
+                .longValue();
+        if (insertMinutes <= 0) {
+            return false;
+        }
+        LocalDateTime cursor = insertStart.plusMinutes(insertMinutes);
+        List<ProductionPlanItem> sortedItems = committedItems.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> item.getStartDate() != null && item.getEndDate() != null)
+                .sorted(Comparator.comparing(ProductionPlanItem::getStartDate))
+                .collect(Collectors.toList());
+        for (ProductionPlanItem item : sortedItems) {
+            LocalDateTime originalStart = toLocalDateTime(item.getStartDate());
+            LocalDateTime originalEnd = toLocalDateTime(item.getEndDate());
+            if (!originalEnd.isAfter(insertStart)) {
+                continue;
+            }
+            Duration duration = Duration.between(originalStart, originalEnd);
+            if (duration.isNegative() || duration.isZero()) {
+                continue;
+            }
+            LocalDateTime shiftedStart = originalStart.isAfter(cursor) ? originalStart : cursor;
+            LocalDateTime shiftedEnd = shiftedStart.plus(duration);
+            cursor = shiftedEnd;
+
+            Long orderId = item.getOrderId();
+            LocalDate deliveryDate = orderId == null ? null : deliveryDateByOrderId.get(orderId);
+            if (deliveryDate == null) {
+                continue;
+            }
+            LocalDateTime deliveryDeadline = deliveryDate.plusDays(1).atStartOfDay();
+            boolean wasOnTime = !originalEnd.isAfter(deliveryDeadline);
+            boolean becomesDelayed = shiftedEnd.isAfter(deliveryDeadline);
+            if (wasOnTime && becomesDelayed) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private LocalDateTime toLocalDateTime(java.util.Date value) {
+        if (value == null) {
+            return null;
+        }
+        return LocalDateTime.ofInstant(value.toInstant(), java.time.ZoneId.systemDefault());
     }
 
     private List<LineCapacity> findMatchingCapacities(String model, Map<String, List<LineCapacity>> lineCapByModel) {
