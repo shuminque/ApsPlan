@@ -2,6 +2,7 @@ package com.depository_manage.service.aps.impl;
 
 import com.depository_manage.mapper.aps.ProductionLineMapper;
 import com.depository_manage.mapper.aps.ProductionLineModelConfigMapper;
+import com.depository_manage.mapper.aps.ProductionPlanItemMapper;
 import com.depository_manage.pojo.shift.CalendarEventDTO;
 import com.depository_manage.pojo.shift.PlanPreviewResponseDTO;
 import com.depository_manage.service.BearingRecordService;
@@ -68,6 +69,8 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     private ProductionLineRuntimeService productionLineRuntimeService;
     @Resource
     private BearingRecordService bearingRecordService;
+    @Resource
+    private ProductionPlanItemMapper productionPlanItemMapper;
 
     @Autowired(required = false)
     public void setClock(Clock clock) {
@@ -128,6 +131,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
                 productionLineMapper,
                 productionLineRuntimeService,
                 bearingRecordService,
+                productionPlanItemMapper,
                 zoneId
         );
         PlanningSnapshot snapshot = inputAssembler.assemble(normalizedRequest);

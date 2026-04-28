@@ -65,6 +65,7 @@ public class ShiftCalendarController {
                 request.getOrderStartTimes(),
                 request.getObjective(),
                 request.getSelectedInsertLineIds()));
+        preview.setInsertSuggestion(normalizeInsertSuggestion(preview.getInsertSuggestion()));
         PREVIEW_CACHE.put(session.getId(), new PreviewSessionState(
                 preview.getEvents(),
                 preview.getInsertSuggestion(),
@@ -79,9 +80,17 @@ public class ShiftCalendarController {
         if (previewState == null) {
             throw new MyException("请先执行预览后再查询插队候选线");
         }
-        return previewState.insertSuggestion == null
-                ? new PlanPreviewResponseDTO.InsertSuggestionDTO()
-                : previewState.insertSuggestion;
+        return normalizeInsertSuggestion(previewState.insertSuggestion);
+    }
+
+    private PlanPreviewResponseDTO.InsertSuggestionDTO normalizeInsertSuggestion(PlanPreviewResponseDTO.InsertSuggestionDTO suggestion) {
+        if (suggestion == null) {
+            return new PlanPreviewResponseDTO.InsertSuggestionDTO();
+        }
+        if (suggestion.getCandidateLines() == null) {
+            suggestion.setCandidateLines(new ArrayList<>());
+        }
+        return suggestion;
     }
 
     /**
