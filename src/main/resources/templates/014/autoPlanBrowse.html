@@ -37,6 +37,7 @@
     let planOrderStartMap = {};
     let selectedInsertLineIdsForCommit = [];
     let insertSelectionConfirmedForPreview = false;
+    let insertDelayConfirmedForPreview = false;
     let autoPreviewTriggered = false;
     let selectedInsertLineIdsForPreview = [];
     let orderStartTimesForPreview = {};
@@ -235,6 +236,7 @@
                 selectedInsertLineIdsForCommit = selectedIds.slice();
                 selectedInsertLineIdsForPreview = selectedIds.slice();
                 insertSelectionConfirmedForPreview = selectedIds.length > 0;
+                insertDelayConfirmedForPreview = !isInsertDelayRequired(previewPlanData);
                 if (isAutoInsertTriggered(previewPlanData)) {
                     const insertSuggestion = previewPlanData && previewPlanData.insertSuggestion ? previewPlanData.insertSuggestion : {};
                     const requiredInsertLineCount = Number((previewPlanData && previewPlanData.requiredInsertLineCount) || insertSuggestion.requiredInsertLineCount || 0);
@@ -252,6 +254,10 @@
 
     function isAutoInsertTriggered(data) {
         return !!(data && data.autoInsertTriggered);
+    }
+
+    function isInsertDelayRequired(data) {
+        return !!(data && data.insertDelayRequired);
     }
 
     function formatMetricValue(value) {
@@ -368,10 +374,26 @@
     function handleCommitWithInsertSuggestion(data, onReadyToCommit) {
         const insertSuggestion = data && data.insertSuggestion ? data.insertSuggestion : {};
         const requiredInsertLineCount = Number((data && data.requiredInsertLineCount) || insertSuggestion.requiredInsertLineCount || 0);
+        const insertDelayRequired = isInsertDelayRequired(data);
+        const insertShortageQuantity = Number((data && data.insertShortageQuantity) || 0);
+        const suggestedDelayedDays = Number((data && data.suggestedDelayedDays) || 0);
         if (isAutoInsertTriggered(data)) {
             if (insertSelectionConfirmedForPreview
                 && Array.isArray(selectedInsertLineIdsForCommit)
                 && selectedInsertLineIdsForCommit.length >= requiredInsertLineCount) {
+                if (insertDelayRequired && !insertDelayConfirmedForPreview) {
+                    const delayedDaysText = suggestedDelayedDays > 0 ? `（建议延期 ${suggestedDelayedDays} 天）` : '';
+                    layer.confirm(
+                        `推荐总产线仍不足，插单交货期需要延迟。当前缺口数量：${insertShortageQuantity} 件${delayedDaysText}。是否确认延期后继续写入？`,
+                        {icon: 0, title: '延期确认', btn: ['确认延期并继续', '取消']},
+                        function (confirmIndex) {
+                            insertDelayConfirmedForPreview = true;
+                            layer.close(confirmIndex);
+                            onReadyToCommit();
+                        }
+                    );
+                    return;
+                }
                 onReadyToCommit();
                 return;
             }
@@ -382,6 +404,7 @@
         selectedInsertLineIdsForCommit = [];
         selectedInsertLineIdsForPreview = [];
         insertSelectionConfirmedForPreview = false;
+        insertDelayConfirmedForPreview = false;
         onReadyToCommit();
     }
 
@@ -390,10 +413,18 @@
         const requiredInsertLineCount = Number((data && data.requiredInsertLineCount) || insertSuggestion.requiredInsertLineCount || 0);
         const candidateLines = Array.isArray(insertSuggestion.candidateLines) ? insertSuggestion.candidateLines : [];
         const requiredInsertQuantity = Number((data && data.requiredInsertQuantity) || 0);
+        const insertShortageQuantity = Number((data && data.insertShortageQuantity) || 0);
         const insertDeadline = (data && data.insertDeadline) ? String(data.insertDeadline) : '-';
+        const insertDelayRequired = isInsertDelayRequired(data);
         if (!candidateLines.length) {
             layer.msg('已触发插单，但暂无推荐产线，请人工处理后再提交');
             return;
+        }
+        if (insertDelayRequired) {
+            layer.alert(`推荐总产线仍不足，插单交货期需要延迟。当前缺口数量：${insertShortageQuantity} 件。`, {
+                icon: 0,
+                title: '延期提示'
+            });
         }
         layer.msg('检测到插单需求，请先确认插单产线');
         openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, function (selectedLineIds) {
@@ -406,7 +437,9 @@
             }
         }, {
             requiredInsertQuantity: requiredInsertQuantity,
-            insertDeadline: insertDeadline
+            insertDeadline: insertDeadline,
+            insertDelayRequired: insertDelayRequired,
+            insertShortageQuantity: insertShortageQuantity
         });
     }
 
@@ -418,6 +451,8 @@
         }, 0);
         const requiredInsertQuantity = Number((extraInfo && extraInfo.requiredInsertQuantity) || 0);
         const insertDeadline = (extraInfo && extraInfo.insertDeadline) ? String(extraInfo.insertDeadline) : '-';
+        const insertDelayRequired = !!(extraInfo && extraInfo.insertDelayRequired);
+        const insertShortageQuantity = Number((extraInfo && extraInfo.insertShortageQuantity) || 0);
         const riskTagDescriptions = {
             LOW: '可用风险低，可优先用于插单',
             LINE_STOPPED: '产线停机，预计无法释放产能',
@@ -459,6 +494,9 @@
                         <div>系统建议最少插单线数量：<b>${requiredInsertLineCount}</b></div>
                         <div>对应交期：<b>${insertDeadline}</b></div>
                         <div>候选线总可释放产能：<b>${totalReleasableCapacity}</b></div>
+                        ${insertDelayRequired
+                ? `<div style="color:#d9534f;font-weight:700;">推荐总产线仍不足，插单交货期需要延迟（数量缺口：${insertShortageQuantity}）</div>`
+                : ''}
                     </div>
 
                     <table class="layui-table">
@@ -487,6 +525,7 @@
                 selectedInsertLineIdsForCommit = selectedIds;
                 insertSelectionConfirmedForPreview = true;
                 selectedInsertLineIdsForPreview = selectedIds.slice();
+                insertDelayConfirmedForPreview = false;
                 if (typeof onConfirm === 'function') {
                     onConfirm(selectedIds);
                 }
@@ -496,6 +535,7 @@
                 selectedInsertLineIdsForCommit = [];
                 selectedInsertLineIdsForPreview = [];
                 insertSelectionConfirmedForPreview = false;
+                insertDelayConfirmedForPreview = false;
                 if (typeof onCancel === 'function') {
                     onCancel();
                 }
@@ -514,7 +554,8 @@
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 selectedEvents: events,
-                selectedInsertLineIds: Array.isArray(selectedInsertLineIdsForCommit) ? selectedInsertLineIdsForCommit : []
+                selectedInsertLineIds: Array.isArray(selectedInsertLineIdsForCommit) ? selectedInsertLineIdsForCommit : [],
+                insertDelayConfirmed: !!insertDelayConfirmedForPreview
             })
         })
             .then(async res => {
@@ -526,6 +567,7 @@
                 if (inserted > 0) {
                     previewPlanData = null;
                     selectedInsertLineIdsForCommit = [];
+                    insertDelayConfirmedForPreview = false;
                     layer.msg('自动排产已写入班次排班');
                     return;
                 }
