@@ -76,11 +76,12 @@ class PlanningResultMapper {
         response.setRequiredInsertLineCount(requiredInsertLineCount);
         response.setRequiredInsertLineHint(manualLineSelectionRequired ? MANUAL_INSERT_LINE_HINT : null);
         response.setInsertDeadline(assessment == null ? null : assessment.getInsertDeadline());
-        response.setInsertSuggestion(buildInsertSuggestion(snapshot, endExclusive, autoInsertTriggered, assessment));
+        response.setInsertSuggestion(buildInsertSuggestion(response, snapshot, endExclusive, autoInsertTriggered, assessment));
         return response;
     }
 
-    private PlanPreviewResponseDTO.InsertSuggestionDTO buildInsertSuggestion(PlanningSnapshot snapshot,
+    private PlanPreviewResponseDTO.InsertSuggestionDTO buildInsertSuggestion(PlanPreviewResponseDTO response,
+                                                                             PlanningSnapshot snapshot,
                                                                              LocalDate endExclusive,
                                                                              boolean autoInsertTriggered,
                                                                              FulfillabilityAssessment assessment) {
@@ -129,6 +130,21 @@ class PlanningResultMapper {
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList()));
         suggestion.setCandidateLines(candidates);
+        int totalCandidateCapacity = candidates.stream()
+                .map(PlanPreviewResponseDTO.CandidateLineDTO::getReleasableCapacity)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+        if (requiredInsertQuantity > totalCandidateCapacity) {
+            response.setInsertDelayRequired(true);
+            response.setInsertShortageQuantity(requiredInsertQuantity - totalCandidateCapacity);
+            Integer delayedDays = response.getDelayedDays();
+            response.setSuggestedDelayedDays(delayedDays != null && delayedDays > 0 ? delayedDays : null);
+        } else {
+            response.setInsertDelayRequired(false);
+            response.setInsertShortageQuantity(0);
+            response.setSuggestedDelayedDays(null);
+        }
         if (requiredInsertQuantity > 0 && candidates.isEmpty()) {
             suggestion.setDiagnosticTag(NO_ELIGIBLE_RUNNING_LINES);
         }

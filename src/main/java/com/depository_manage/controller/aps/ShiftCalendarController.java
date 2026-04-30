@@ -69,6 +69,8 @@ public class ShiftCalendarController {
         PREVIEW_CACHE.put(session.getId(), new PreviewSessionState(
                 preview.getEvents(),
                 preview.getInsertSuggestion(),
+                Boolean.TRUE.equals(preview.getInsertDelayRequired()),
+                preview.getInsertShortageQuantity() == null ? 0 : Math.max(preview.getInsertShortageQuantity(), 0),
                 LocalDateTime.now(),
                 resolveOperator(session)));
         return preview;
@@ -127,6 +129,7 @@ public class ShiftCalendarController {
         if (toCommit == null || toCommit.isEmpty()) {
             toCommit = previewState == null ? new ArrayList<>() : previewState.events;
         }
+        validateInsertDelayConfirmation(request, previewState);
         validateSelectedInsertLines(request.getSelectedInsertLineIds(), previewState);
         if (previewState != null && request.getSelectedInsertLineIds() != null && !request.getSelectedInsertLineIds().isEmpty()) {
             log.info("insert-line-selection audit operator={}, selectedInsertLineIds={}, selectedAt={}, previewGeneratedAt={}, previewGeneratedBy={}",
@@ -142,6 +145,16 @@ public class ShiftCalendarController {
         int committed = productionPlanService.commitPlan(toCommit, selectedInsertLineIdSet);
         PREVIEW_CACHE.remove(session.getId());
         return committed;
+    }
+
+    private void validateInsertDelayConfirmation(CommitPlanRequest request, PreviewSessionState previewState) {
+        if (previewState == null || !previewState.insertDelayRequired) {
+            return;
+        }
+        if (request != null && Boolean.TRUE.equals(request.getInsertDelayConfirmed())) {
+            return;
+        }
+        throw new MyException("推荐总产线仍不足（缺口 " + previewState.insertShortageQuantity + " 件），请先确认“延期交付”后再写入排产");
     }
 
     @DeleteMapping("/plan/preview")
@@ -326,6 +339,7 @@ public class ShiftCalendarController {
     public static class CommitPlanRequest {
         private List<CalendarEventDTO> selectedEvents;
         private List<Long> selectedInsertLineIds;
+        private Boolean insertDelayConfirmed;
 
         public List<CalendarEventDTO> getSelectedEvents() {
             return selectedEvents;
@@ -342,20 +356,34 @@ public class ShiftCalendarController {
         public void setSelectedInsertLineIds(List<Long> selectedInsertLineIds) {
             this.selectedInsertLineIds = selectedInsertLineIds;
         }
+
+        public Boolean getInsertDelayConfirmed() {
+            return insertDelayConfirmed;
+        }
+
+        public void setInsertDelayConfirmed(Boolean insertDelayConfirmed) {
+            this.insertDelayConfirmed = insertDelayConfirmed;
+        }
     }
 
     private static class PreviewSessionState {
         private final List<CalendarEventDTO> events;
         private final PlanPreviewResponseDTO.InsertSuggestionDTO insertSuggestion;
+        private final boolean insertDelayRequired;
+        private final int insertShortageQuantity;
         private final LocalDateTime generatedAt;
         private final String generatedBy;
 
         private PreviewSessionState(List<CalendarEventDTO> events,
                                     PlanPreviewResponseDTO.InsertSuggestionDTO insertSuggestion,
+                                    boolean insertDelayRequired,
+                                    int insertShortageQuantity,
                                     LocalDateTime generatedAt,
                                     String generatedBy) {
             this.events = events;
             this.insertSuggestion = insertSuggestion;
+            this.insertDelayRequired = insertDelayRequired;
+            this.insertShortageQuantity = insertShortageQuantity;
             this.generatedAt = generatedAt;
             this.generatedBy = generatedBy;
         }
