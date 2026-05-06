@@ -106,7 +106,7 @@ class PlanningResultMapper {
         Map<Long, String> lineNameById = snapshot.getProductionLines().stream()
                 .filter(line -> line.getId() != null)
                 .collect(Collectors.toMap(line -> line.getId(), line -> Optional.ofNullable(line.getLineName()).orElse(""), (a, b) -> a));
-        Map<Long, ReleasableCapacityDetail> releasableByLine = calculateReleasableCapacityByLine(snapshot, assessment, capacityEndExclusive);
+        Map<Long, ReleasableCapacityDetail> releasableByLine = calculateReleasableCapacityByLine(snapshot, assessment, capacityEndExclusive, insertDeadlineDate);
 
         List<PlanPreviewResponseDTO.CandidateLineDTO> candidates = new ArrayList<>();
         for (Long lineId : eligibleLineIds) {
@@ -189,7 +189,8 @@ class PlanningResultMapper {
         if (insertDeadlineDate == null) {
             return endExclusive;
         }
-        LocalDate deadlineExclusive = insertDeadlineDate.plusDays(1);
+        // 口径B：工时统计截止到交期日 00:00，交期当天起班不计入
+        LocalDate deadlineExclusive = insertDeadlineDate;
         return deadlineExclusive.isBefore(endExclusive) ? deadlineExclusive : endExclusive;
     }
 
@@ -243,7 +244,8 @@ class PlanningResultMapper {
 
     private Map<Long, ReleasableCapacityDetail> calculateReleasableCapacityByLine(PlanningSnapshot snapshot,
                                                                  FulfillabilityAssessment assessment,
-                                                                 LocalDate capacityEndExclusive) {
+                                                                 LocalDate capacityEndExclusive,
+                                                                 LocalDate insertDeadlineDate) {
         if (snapshot == null || capacityEndExclusive == null) {
             return Collections.emptyMap();
         }
@@ -294,6 +296,11 @@ class PlanningResultMapper {
                 lineCapacity += capacityPerHour.multiply(hours).setScale(0, RoundingMode.FLOOR).intValue();
                 cursor = cursor.plusDays(1);
             }
+            BigDecimal overnightCarryHours = resolveDeadlineOvernightCarryHours(snapshot.getShiftHoursByDay(), insertDeadlineDate);
+            if (overnightCarryHours.compareTo(BigDecimal.ZERO) > 0) {
+                totalShiftHours = totalShiftHours.add(overnightCarryHours);
+                lineCapacity += capacityPerHour.multiply(overnightCarryHours).setScale(0, RoundingMode.FLOOR).intValue();
+            }
             int netReleasableCapacity = Math.max(lineCapacity, 0);
             if (netReleasableCapacity <= 0) {
                 continue;
@@ -311,6 +318,23 @@ class PlanningResultMapper {
         return releasableByLine;
     }
 
+
+
+    private BigDecimal resolveDeadlineOvernightCarryHours(Map<LocalDate, BigDecimal> shiftHoursByDay,
+                                                          LocalDate insertDeadlineDate) {
+        if (shiftHoursByDay == null || shiftHoursByDay.isEmpty() || insertDeadlineDate == null) {
+            return BigDecimal.ZERO;
+        }
+        LocalDate dayBeforeDeadline = insertDeadlineDate.minusDays(1);
+        BigDecimal dayBeforeHours = shiftHoursByDay.getOrDefault(dayBeforeDeadline, BigDecimal.ZERO).max(BigDecimal.ZERO);
+        BigDecimal baselineDailyHours = shiftHoursByDay.values().stream()
+                .filter(Objects::nonNull)
+                .map(hours -> hours.max(BigDecimal.ZERO))
+                .max(BigDecimal::compareTo)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal carry = baselineDailyHours.subtract(dayBeforeHours);
+        return carry.compareTo(BigDecimal.ZERO) > 0 ? carry : BigDecimal.ZERO;
+    }
     private boolean willCauseOriginalOrderDelay(List<ProductionPlanItem> committedItems,
                                                 Map<Long, LocalDate> deliveryDateByOrderId,
                                                 LocalDateTime insertStart,

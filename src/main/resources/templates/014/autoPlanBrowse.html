@@ -483,7 +483,8 @@
                 releasableCapacityFormula: line && line.releasableCapacityFormula,
                 normalizedReleasableCapacity: validCapacity,
                 cumulativeCapacity: nextSum,
-                totalShiftHoursAccumulationTrace: hourAccumulationTrace
+                totalShiftHoursAccumulationTrace: hourAccumulationTrace,
+                accumulationTraceNote: '前端按18小时/天拆分的示意轨迹（非后端按日期逐天累加结果）' 
             });
             return nextSum;
         }, 0);
@@ -508,16 +509,16 @@
         });
         console.table(capacityComputationTrace);
         console.log('totalShiftHours 说明', {
-            meaning: '截止到交期前的可排班总工时（小时），由后端基于班次日历累计得到',
+            meaning: '截止到交期前的可排班总工时（小时），由后端基于班次日历按日期区间裁剪后累计得到',
             deadlineDate: insertDeadline,
             deadlineDaysFromToday: deadlineDaysFromToday,
             standardShiftHoursPerDay: STANDARD_SHIFT_HOURS_PER_DAY,
-            perLineHourToDayFormula: '天数 = ceil(totalShiftHours / 18)',
+            perLineHourToDayFormula: '示意天数 = ceil(totalShiftHours / 18)（仅用于展示）',
             perLineCapacityFormula: '总产能 = floor(effectiveCapacityPerHour × totalShiftHours)',
             perLineDailyCapacityFormula: '日产能 = floor(effectiveCapacityPerHour × 18)'
         });
         capacityComputationTrace.forEach(function (traceItem) {
-            console.log('totalShiftHours 累加过程', {
+            console.log('totalShiftHours 累加过程（前端示意）', {
                 lineId: traceItem.lineId,
                 lineName: traceItem.lineName,
                 totalShiftHours: traceItem.totalShiftHours,
