@@ -438,6 +438,7 @@
         }, {
             requiredInsertQuantity: requiredInsertQuantity,
             insertDeadline: insertDeadline,
+            insertDeadlineRemainingDays: Number((data && data.insertDeadlineRemainingDays) || 0),
             insertDelayRequired: insertDelayRequired,
             insertShortageQuantity: insertShortageQuantity
         });
@@ -445,6 +446,7 @@
 
     function openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onConfirm, onCancel, extraInfo) {
         const defaultSelectedIndex = Math.max(requiredInsertLineCount, 0);
+        const deadlineRemainingDays = Number((extraInfo && extraInfo.insertDeadlineRemainingDays) || 0);
         const capacityComputationTrace = [];
         const totalReleasableCapacity = candidateLines.reduce(function (sum, line, idx) {
             const capacity = Number(line && line.releasableCapacity);
@@ -453,7 +455,7 @@
             const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
             const validEffectiveCapacityPerHour = Number.isFinite(effectiveCapacityPerHour) ? effectiveCapacityPerHour : 0;
             const dailyCapacity = Math.floor(validEffectiveCapacityPerHour * 24);
-            const dayCount = validShiftHours > 0 ? Number((validShiftHours / 24).toFixed(2)) : 0;
+            const shiftEquivalentDays = validShiftHours > 0 ? Number((validShiftHours / 24).toFixed(2)) : 0;
             const validCapacity = Number.isFinite(capacity) ? capacity : 0;
             const nextSum = sum + validCapacity;
             capacityComputationTrace.push({
@@ -466,7 +468,8 @@
                 effectiveCapacityPerHour: line && line.effectiveCapacityPerHour,
                 totalShiftHours: line && line.totalShiftHours,
                 dailyCapacity: dailyCapacity,
-                dayCount: dayCount,
+                deadlineRemainingDays: deadlineRemainingDays,
+                shiftEquivalentDays: shiftEquivalentDays,
                 releasableCapacityFormula: line && line.releasableCapacityFormula,
                 normalizedReleasableCapacity: validCapacity,
                 cumulativeCapacity: nextSum
@@ -489,6 +492,7 @@
             requiredInsertLineCount: requiredInsertLineCount,
             candidateLineCount: candidateLines.length,
             insertDeadline: insertDeadline,
+            insertDeadlineRemainingDays: deadlineRemainingDays,
             insertDelayRequired: insertDelayRequired,
             backendShortageQuantity: insertShortageQuantity
         });
@@ -497,7 +501,8 @@
             meaning: '截止到交期前的可排班总工时（小时），由后端基于班次日历累计得到',
             deadlineDate: insertDeadline,
             deadlineDaysFromToday: deadlineDaysFromToday,
-            perLineHourToDayFormula: '天数 = totalShiftHours / 24',
+            calendarDayMeaning: '界面“天数”为计划开始到交期（含交期）自然日',
+            shiftEquivalentDayMeaning: 'shiftEquivalentDays 为班次小时折算天数（totalShiftHours / 24）',
             perLineCapacityFormula: '总产能 = floor(effectiveCapacityPerHour × totalShiftHours)',
             perLineDailyCapacityFormula: '日产能 = floor(effectiveCapacityPerHour × 24)'
         });
@@ -527,7 +532,8 @@
             const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
             const totalShiftHours = Number(line && line.totalShiftHours);
             const dailyCapacity = Number.isFinite(effectiveCapacityPerHour) ? Math.floor(effectiveCapacityPerHour * 24) : '-';
-            const dayCount = Number.isFinite(totalShiftHours) ? (totalShiftHours / 24).toFixed(2) : '-';
+            const shiftEquivalentDays = Number.isFinite(totalShiftHours) ? (totalShiftHours / 24).toFixed(2) : '-';
+            const dayCount = deadlineRemainingDays > 0 ? deadlineRemainingDays : '-';
             return `
                 <tr>
                     <td><input type="checkbox" class="layui-form-checkbox insert-line-checkbox" data-line-id="${escapeHtml(lineId)}" ${checked}></td>
@@ -556,6 +562,7 @@
                         <div>缺口数量：<b>${requiredInsertQuantity}</b></div>
                         <div>系统建议最少插单线数量：<b>${requiredInsertLineCount}</b></div>
                         <div>对应交期：<b>${insertDeadline}</b></div>
+                        <div>距交期剩余天数（含交期）：<b>${deadlineRemainingDays > 0 ? deadlineRemainingDays : '-'}</b></div>
                         <div>候选线总产能：<b>${totalReleasableCapacity}</b></div>
                         ${insertDelayRequired
                 ? `<div style="color:#d9534f;font-weight:700;">推荐总产线仍不足，插单交货期需要延迟（数量缺口：${insertShortageQuantity}）</div>`

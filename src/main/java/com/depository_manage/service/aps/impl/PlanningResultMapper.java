@@ -76,8 +76,26 @@ class PlanningResultMapper {
         response.setRequiredInsertLineCount(requiredInsertLineCount);
         response.setRequiredInsertLineHint(manualLineSelectionRequired ? MANUAL_INSERT_LINE_HINT : null);
         response.setInsertDeadline(assessment == null ? null : assessment.getInsertDeadline());
+        response.setInsertDeadlineRemainingDays(resolveInsertDeadlineRemainingDays(snapshot, endExclusive, assessment));
         response.setInsertSuggestion(buildInsertSuggestion(response, snapshot, endExclusive, autoInsertTriggered, assessment));
         return response;
+    }
+
+    private int resolveInsertDeadlineRemainingDays(PlanningSnapshot snapshot,
+                                                   LocalDate endExclusive,
+                                                   FulfillabilityAssessment assessment) {
+        if (snapshot == null || endExclusive == null || assessment == null || assessment.getInsertDeadline() == null) {
+            return 0;
+        }
+        LocalDate planStart = snapshot.getShiftHoursByDay().keySet().stream().min(LocalDate::compareTo).orElse(null);
+        if (planStart == null) {
+            return 0;
+        }
+        LocalDate deadline = endExclusive.minusDays(1);
+        if (deadline.isBefore(planStart)) {
+            return 0;
+        }
+        return (int) ChronoUnit.DAYS.between(planStart, deadline) + 1;
     }
 
     private PlanPreviewResponseDTO.InsertSuggestionDTO buildInsertSuggestion(PlanPreviewResponseDTO response,

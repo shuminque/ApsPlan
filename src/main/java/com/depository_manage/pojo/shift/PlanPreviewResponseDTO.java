@@ -22,6 +22,7 @@ public class PlanPreviewResponseDTO {
     private Integer requiredInsertLineCount = 0;
     private String requiredInsertLineHint;
     private String insertDeadline;
+    private Integer insertDeadlineRemainingDays = 0;
     private Boolean insertDelayRequired = false;
     private Integer insertShortageQuantity = 0;
     private Integer suggestedDelayedDays;
