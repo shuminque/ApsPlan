@@ -448,6 +448,12 @@
         const capacityComputationTrace = [];
         const totalReleasableCapacity = candidateLines.reduce(function (sum, line, idx) {
             const capacity = Number(line && line.releasableCapacity);
+            const totalShiftHours = Number(line && line.totalShiftHours);
+            const validShiftHours = Number.isFinite(totalShiftHours) ? totalShiftHours : 0;
+            const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
+            const validEffectiveCapacityPerHour = Number.isFinite(effectiveCapacityPerHour) ? effectiveCapacityPerHour : 0;
+            const dailyCapacity = Math.floor(validEffectiveCapacityPerHour * 24);
+            const dayCount = validShiftHours > 0 ? Number((validShiftHours / 24).toFixed(2)) : 0;
             const validCapacity = Number.isFinite(capacity) ? capacity : 0;
             const nextSum = sum + validCapacity;
             capacityComputationTrace.push({
@@ -459,6 +465,8 @@
                 runtimeCapacityPerHour: line && line.runtimeCapacityPerHour,
                 effectiveCapacityPerHour: line && line.effectiveCapacityPerHour,
                 totalShiftHours: line && line.totalShiftHours,
+                dailyCapacity: dailyCapacity,
+                dayCount: dayCount,
                 releasableCapacityFormula: line && line.releasableCapacityFormula,
                 normalizedReleasableCapacity: validCapacity,
                 cumulativeCapacity: nextSum
@@ -470,6 +478,11 @@
         const insertDelayRequired = !!(extraInfo && extraInfo.insertDelayRequired);
         const insertShortageQuantity = Number((extraInfo && extraInfo.insertShortageQuantity) || 0);
         const shortageQuantity = Math.max(requiredInsertQuantity - totalReleasableCapacity, 0);
+        const today = new Date();
+        const deadlineDate = insertDeadline !== '-' ? new Date(insertDeadline + 'T00:00:00') : null;
+        const deadlineDaysFromToday = deadlineDate && !Number.isNaN(deadlineDate.getTime())
+            ? Math.ceil((deadlineDate.getTime() - today.setHours(0, 0, 0, 0)) / (24 * 60 * 60 * 1000))
+            : null;
         console.group('[插单推荐产线] 缺口与产能计算过程');
         console.log('输入参数', {
             requiredInsertQuantity: requiredInsertQuantity,
@@ -480,6 +493,14 @@
             backendShortageQuantity: insertShortageQuantity
         });
         console.table(capacityComputationTrace);
+        console.log('totalShiftHours 说明', {
+            meaning: '截止到交期前的可排班总工时（小时），由后端基于班次日历累计得到',
+            deadlineDate: insertDeadline,
+            deadlineDaysFromToday: deadlineDaysFromToday,
+            perLineHourToDayFormula: '天数 = totalShiftHours / 24',
+            perLineCapacityFormula: '总产能 = floor(effectiveCapacityPerHour × totalShiftHours)',
+            perLineDailyCapacityFormula: '日产能 = floor(effectiveCapacityPerHour × 24)'
+        });
         console.log('汇总结果', {
             totalReleasableCapacity: totalReleasableCapacity,
             computedShortageQuantity: shortageQuantity,
@@ -502,12 +523,18 @@
         const rows = candidateLines.map(function (line, idx) {
             const lineId = line.lineId === null || line.lineId === undefined ? '' : String(line.lineId);
             const checked = idx < defaultSelectedIndex ? 'checked' : '';
-            const releasableCapacity = line.releasableCapacity === null || line.releasableCapacity === undefined ? '-' : line.releasableCapacity;
+            const totalCapacity = line.releasableCapacity === null || line.releasableCapacity === undefined ? '-' : line.releasableCapacity;
+            const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
+            const totalShiftHours = Number(line && line.totalShiftHours);
+            const dailyCapacity = Number.isFinite(effectiveCapacityPerHour) ? Math.floor(effectiveCapacityPerHour * 24) : '-';
+            const dayCount = Number.isFinite(totalShiftHours) ? (totalShiftHours / 24).toFixed(2) : '-';
             return `
                 <tr>
                     <td><input type="checkbox" class="layui-form-checkbox insert-line-checkbox" data-line-id="${escapeHtml(lineId)}" ${checked}></td>
                     <td>${line.lineName || '-'}</td>
-                    <td>${releasableCapacity}</td>
+                    <td>${totalCapacity}</td>
+                    <td>${dailyCapacity}</td>
+                    <td>${dayCount}</td>
                     <td>${line.currentModel || '-'}</td>
                     <td>${idx < defaultSelectedIndex ? '推荐' : ''}</td>
                 </tr>
@@ -517,7 +544,7 @@
         layer.open({
             type: 1,
             title: '插单推荐产线',
-            area: ['760px', '520px'],
+            area: ['920px', '520px'],
             maxmin: true,
             btn: ['确定', '取消'],
             content: `
@@ -529,7 +556,7 @@
                         <div>缺口数量：<b>${requiredInsertQuantity}</b></div>
                         <div>系统建议最少插单线数量：<b>${requiredInsertLineCount}</b></div>
                         <div>对应交期：<b>${insertDeadline}</b></div>
-                        <div>候选线总可释放产能：<b>${totalReleasableCapacity}</b></div>
+                        <div>候选线总产能：<b>${totalReleasableCapacity}</b></div>
                         ${insertDelayRequired
                 ? `<div style="color:#d9534f;font-weight:700;">推荐总产线仍不足，插单交货期需要延迟（数量缺口：${insertShortageQuantity}）</div>`
                 : ''}
@@ -540,7 +567,9 @@
                             <tr>
                                 <th style="width:80px;">选择</th>
                                 <th>产线</th>
-                                <th>产能</th>
+                                <th>总产能</th>
+                                <th>日产能</th>
+                                <th>天数</th>
                                 <th>当前生产型号</th>
                                 <th>是否推荐</th>
                             </tr>
