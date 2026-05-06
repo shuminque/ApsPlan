@@ -60,5 +60,8 @@ public class PlanPreviewResponseDTO {
         private String releasableCapacityFormula;
         private String releasableCapacityFormulaRaw;
         private String releasableCapacityFormulaWithinDeadline;
+        private Boolean deadlineCheckPassed = true;
+        private String delayRiskReason;
+        private BigDecimal occupiedHoursBeforeDeadline = BigDecimal.ZERO;
     }
 }
