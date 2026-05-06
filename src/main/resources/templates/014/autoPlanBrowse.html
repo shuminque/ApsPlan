@@ -456,8 +456,9 @@
             const dailyCapacity = Math.floor(validEffectiveCapacityPerHour * 24);
             const backendWindowDays = Number(line && line.dayCountWithinDeadline);
             const totalShiftHoursWithinDeadline = Number(line && line.totalShiftHoursWithinDeadline);
-            const fallbackDayCount = Number.isFinite(totalShiftHoursWithinDeadline) ? Number((totalShiftHoursWithinDeadline / 24).toFixed(2)) : 0;
-            const dayCount = Number.isFinite(backendWindowDays) ? backendWindowDays : fallbackDayCount;
+            const dayCount = Number.isFinite(backendWindowDays)
+                ? backendWindowDays
+                : (Number.isFinite(totalShiftHoursWithinDeadline) ? Number((totalShiftHoursWithinDeadline / 24).toFixed(2)) : 0);
             const validCapacity = Number.isFinite(capacity) ? capacity : 0;
             const nextSum = sum + validCapacity;
             capacityComputationTrace.push({
@@ -471,6 +472,7 @@
                 runtimeCapacityPerHour: line && line.runtimeCapacityPerHour,
                 effectiveCapacityPerHour: line && line.effectiveCapacityPerHour,
                 totalShiftHours: line && line.totalShiftHours,
+                totalShiftHoursDisplay: line && line.totalShiftHoursWithinDeadline,
                 totalShiftHoursRaw: line && line.totalShiftHoursRaw,
                 totalShiftHoursWithinDeadline: line && line.totalShiftHoursWithinDeadline,
                 windowStartDate: line && line.windowStartDate,
@@ -509,13 +511,13 @@
         });
         console.table(capacityComputationTrace);
         console.log('totalShiftHours 说明', {
-            meaning: '截止到交期前的可排班总工时（小时），由后端基于班次日历累计得到',
+            meaning: '截止到交期前（从服务端今天或计划开始日取较晚者起算）的可排班总工时（小时）',
             computationSource: 'backend',
             deadlineDate: insertDeadline,
             serverTimeZone: serverTimeZone,
             deadlineDaysFromPlanStart: Number.isFinite(deadlineDaysFromPlanStart) ? deadlineDaysFromPlanStart : null,
             deadlineDaysFromTodayServer: Number.isFinite(deadlineDaysFromTodayServer) ? deadlineDaysFromTodayServer : null,
-            perLineHourToDayFormula: '天数 = totalShiftHours / 24',
+            perLineHourToDayFormula: '天数 = totalShiftHoursWithinDeadline / 24',
             perLineCapacityFormula: '总产能(交期内) = floor(effectiveCapacityPerHour × totalShiftHoursWithinDeadline)',
             perLineDailyCapacityFormula: '日产能 = floor(effectiveCapacityPerHour × 24)'
         });

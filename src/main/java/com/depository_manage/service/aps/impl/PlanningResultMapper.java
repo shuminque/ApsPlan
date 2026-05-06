@@ -319,8 +319,11 @@ class PlanningResultMapper {
         if (snapshot == null || endExclusive == null) {
             return Collections.emptyMap();
         }
-        LocalDate planStart = snapshot.getShiftHoursByDay().keySet().stream().min(LocalDate::compareTo).orElse(endExclusive);
+        LocalDate calendarStart = snapshot.getShiftHoursByDay().keySet().stream().min(LocalDate::compareTo).orElse(endExclusive);
         LocalDate deadline = endExclusive.minusDays(1);
+        ZoneId serverZoneId = ZoneId.systemDefault();
+        LocalDate serverToday = LocalDate.now(serverZoneId);
+        LocalDate planStart = calendarStart.isAfter(serverToday) ? calendarStart : serverToday;
         if (deadline.isBefore(planStart)) {
             return Collections.emptyMap();
         }
