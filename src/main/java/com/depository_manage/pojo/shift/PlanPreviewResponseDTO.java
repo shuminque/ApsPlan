@@ -41,5 +41,10 @@ public class PlanPreviewResponseDTO {
         private String currentModel;
         private Integer releasableCapacity = 0;
         private String riskTag;
+        private BigDecimal baseCapacityPerHour = BigDecimal.ZERO;
+        private BigDecimal runtimeCapacityPerHour = BigDecimal.ZERO;
+        private BigDecimal effectiveCapacityPerHour = BigDecimal.ZERO;
+        private BigDecimal totalShiftHours = BigDecimal.ZERO;
+        private String releasableCapacityFormula;
     }
 }

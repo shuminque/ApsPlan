@@ -103,11 +103,12 @@ class PlanningResultMapper {
         Map<Long, String> lineNameById = snapshot.getProductionLines().stream()
                 .filter(line -> line.getId() != null)
                 .collect(Collectors.toMap(line -> line.getId(), line -> Optional.ofNullable(line.getLineName()).orElse(""), (a, b) -> a));
-        Map<Long, Integer> releasableByLine = calculateReleasableCapacityByLine(snapshot, assessment, endExclusive);
+        Map<Long, ReleasableCapacityDetail> releasableByLine = calculateReleasableCapacityByLine(snapshot, assessment, endExclusive);
 
         List<PlanPreviewResponseDTO.CandidateLineDTO> candidates = new ArrayList<>();
         for (Long lineId : eligibleLineIds) {
-            Integer releasableCapacity = releasableByLine.get(lineId);
+            ReleasableCapacityDetail capacityDetail = releasableByLine.get(lineId);
+            Integer releasableCapacity = capacityDetail == null ? null : capacityDetail.netReleasableCapacity;
             if (releasableCapacity == null || releasableCapacity <= 0) {
                 continue;
             }
@@ -118,6 +119,16 @@ class PlanningResultMapper {
             PlanningSnapshot.LineRuntimeView runtimeView = snapshot.getRuntimeViewByLineId().get(lineId);
             candidate.setCurrentModel(runtimeView == null ? null : runtimeView.getCurrentModel());
             candidate.setRiskTag(resolveRiskTag(runtimeView, releasableCapacity));
+            if (capacityDetail != null) {
+                candidate.setBaseCapacityPerHour(capacityDetail.baseCapacityPerHour);
+                candidate.setRuntimeCapacityPerHour(capacityDetail.runtimeCapacityPerHour);
+                candidate.setEffectiveCapacityPerHour(capacityDetail.effectiveCapacityPerHour);
+                candidate.setTotalShiftHours(capacityDetail.totalShiftHours);
+                candidate.setReleasableCapacityFormula(String.format(Locale.ROOT, "floor(%s × %s) = %d",
+                        capacityDetail.effectiveCapacityPerHour.stripTrailingZeros().toPlainString(),
+                        capacityDetail.totalShiftHours.stripTrailingZeros().toPlainString(),
+                        capacityDetail.netReleasableCapacity));
+            }
             candidates.add(candidate);
         }
         candidates.sort(Comparator.comparing(PlanPreviewResponseDTO.CandidateLineDTO::getReleasableCapacity,
@@ -182,7 +193,27 @@ class PlanningResultMapper {
         return lineCount;
     }
 
-    private Map<Long, Integer> calculateReleasableCapacityByLine(PlanningSnapshot snapshot,
+    private static class ReleasableCapacityDetail {
+        private final int netReleasableCapacity;
+        private final BigDecimal baseCapacityPerHour;
+        private final BigDecimal runtimeCapacityPerHour;
+        private final BigDecimal effectiveCapacityPerHour;
+        private final BigDecimal totalShiftHours;
+
+        private ReleasableCapacityDetail(int netReleasableCapacity,
+                                        BigDecimal baseCapacityPerHour,
+                                        BigDecimal runtimeCapacityPerHour,
+                                        BigDecimal effectiveCapacityPerHour,
+                                        BigDecimal totalShiftHours) {
+            this.netReleasableCapacity = netReleasableCapacity;
+            this.baseCapacityPerHour = baseCapacityPerHour;
+            this.runtimeCapacityPerHour = runtimeCapacityPerHour;
+            this.effectiveCapacityPerHour = effectiveCapacityPerHour;
+            this.totalShiftHours = totalShiftHours;
+        }
+    }
+
+    private Map<Long, ReleasableCapacityDetail> calculateReleasableCapacityByLine(PlanningSnapshot snapshot,
                                                                  FulfillabilityAssessment assessment,
                                                                  LocalDate endExclusive) {
         if (snapshot == null || endExclusive == null) {
@@ -208,7 +239,7 @@ class PlanningResultMapper {
             baseCapacityPerHourByLine.merge(capacity.lineId, normalized, BigDecimal::max);
         }
 
-        Map<Long, Integer> releasableByLine = new HashMap<>();
+        Map<Long, ReleasableCapacityDetail> releasableByLine = new HashMap<>();
         int requiredInsertQuantity = assessment == null ? 0 : Math.max(assessment.getRequiredInsertQuantity(), 0);
         LocalDateTime simulationStart = planStart.atStartOfDay();
         Map<Long, List<ProductionPlanItem>> committedByLine = snapshot.getCommittedPlanItems().stream()
@@ -221,11 +252,17 @@ class PlanningResultMapper {
             if (!hasStatus(runtimeView, RuntimeStatus.RUNNING)) {
                 continue;
             }
-            BigDecimal capacityPerHour = resolveCapacityPerHour(runtimeView, entry.getValue());
+            BigDecimal baseCapacityPerHour = entry.getValue() == null ? BigDecimal.ZERO : entry.getValue().max(BigDecimal.ZERO);
+            BigDecimal runtimeCapacityPerHour = runtimeView == null || runtimeView.getCurrentCapacity() == null
+                    ? BigDecimal.ZERO
+                    : runtimeView.getCurrentCapacity().max(BigDecimal.ZERO);
+            BigDecimal capacityPerHour = resolveCapacityPerHour(runtimeView, baseCapacityPerHour);
             int lineCapacity = 0;
+            BigDecimal totalShiftHours = BigDecimal.ZERO;
             LocalDate cursor = planStart;
             while (!cursor.isAfter(deadline)) {
                 BigDecimal hours = snapshot.getShiftHoursByDay().getOrDefault(cursor, BigDecimal.ZERO).max(BigDecimal.ZERO);
+                totalShiftHours = totalShiftHours.add(hours);
                 lineCapacity += capacityPerHour.multiply(hours).setScale(0, RoundingMode.FLOOR).intValue();
                 cursor = cursor.plusDays(1);
             }
@@ -241,7 +278,7 @@ class PlanningResultMapper {
                 log.info("exclude candidate line due to original-order delay. lineId={}, reason={}", lineId, EXCLUDED_DUE_TO_ORIGINAL_DELAY);
                 continue;
             }
-            releasableByLine.put(lineId, netReleasableCapacity);
+            releasableByLine.put(lineId, new ReleasableCapacityDetail(netReleasableCapacity, baseCapacityPerHour, runtimeCapacityPerHour, capacityPerHour, totalShiftHours));
         }
         return releasableByLine;
     }

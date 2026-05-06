@@ -445,14 +445,50 @@
 
     function openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onConfirm, onCancel, extraInfo) {
         const defaultSelectedIndex = Math.max(requiredInsertLineCount, 0);
-        const totalReleasableCapacity = candidateLines.reduce(function (sum, line) {
+        const capacityComputationTrace = [];
+        const totalReleasableCapacity = candidateLines.reduce(function (sum, line, idx) {
             const capacity = Number(line && line.releasableCapacity);
-            return Number.isFinite(capacity) ? sum + capacity : sum;
+            const validCapacity = Number.isFinite(capacity) ? capacity : 0;
+            const nextSum = sum + validCapacity;
+            capacityComputationTrace.push({
+                step: idx + 1,
+                lineId: line && line.lineId,
+                lineName: line && line.lineName,
+                rawReleasableCapacity: line && line.releasableCapacity,
+                baseCapacityPerHour: line && line.baseCapacityPerHour,
+                runtimeCapacityPerHour: line && line.runtimeCapacityPerHour,
+                effectiveCapacityPerHour: line && line.effectiveCapacityPerHour,
+                totalShiftHours: line && line.totalShiftHours,
+                releasableCapacityFormula: line && line.releasableCapacityFormula,
+                normalizedReleasableCapacity: validCapacity,
+                cumulativeCapacity: nextSum
+            });
+            return nextSum;
         }, 0);
         const requiredInsertQuantity = Number((extraInfo && extraInfo.requiredInsertQuantity) || 0);
         const insertDeadline = (extraInfo && extraInfo.insertDeadline) ? String(extraInfo.insertDeadline) : '-';
         const insertDelayRequired = !!(extraInfo && extraInfo.insertDelayRequired);
         const insertShortageQuantity = Number((extraInfo && extraInfo.insertShortageQuantity) || 0);
+        const shortageQuantity = Math.max(requiredInsertQuantity - totalReleasableCapacity, 0);
+        console.group('[插单推荐产线] 缺口与产能计算过程');
+        console.log('输入参数', {
+            requiredInsertQuantity: requiredInsertQuantity,
+            requiredInsertLineCount: requiredInsertLineCount,
+            candidateLineCount: candidateLines.length,
+            insertDeadline: insertDeadline,
+            insertDelayRequired: insertDelayRequired,
+            backendShortageQuantity: insertShortageQuantity
+        });
+        console.table(capacityComputationTrace);
+        console.log('汇总结果', {
+            totalReleasableCapacity: totalReleasableCapacity,
+            computedShortageQuantity: shortageQuantity,
+            shortageComputationFormula: requiredInsertQuantity + ' - ' + totalReleasableCapacity + ' = ' + shortageQuantity,
+            backendShortageQuantity: insertShortageQuantity,
+            shortageGapWithBackend: shortageQuantity - insertShortageQuantity
+        });
+        console.groupEnd();
+
         const riskTagDescriptions = {
             LOW: '可用风险低，可优先用于插单',
             LINE_STOPPED: '产线停机，预计无法释放产能',
