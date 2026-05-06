@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -75,9 +76,34 @@ class PlanningResultMapper {
         response.setRequiredInsertQuantity(requiredInsertQuantity);
         response.setRequiredInsertLineCount(requiredInsertLineCount);
         response.setRequiredInsertLineHint(manualLineSelectionRequired ? MANUAL_INSERT_LINE_HINT : null);
-        response.setInsertDeadline(assessment == null ? null : assessment.getInsertDeadline());
+        populateDeadlineMeta(response, assessment);
         response.setInsertSuggestion(buildInsertSuggestion(response, snapshot, endExclusive, autoInsertTriggered, assessment));
         return response;
+    }
+
+    private void populateDeadlineMeta(PlanPreviewResponseDTO response, FulfillabilityAssessment assessment) {
+        String insertDeadline = assessment == null ? null : assessment.getInsertDeadline();
+        response.setInsertDeadline(insertDeadline);
+        ZoneId serverZoneId = ZoneId.systemDefault();
+        response.setServerTimeZone(serverZoneId.getId());
+        if (insertDeadline == null || insertDeadline.trim().isEmpty()) {
+            return;
+        }
+        try {
+            LocalDate deadline = LocalDate.parse(insertDeadline.trim());
+            LocalDate planStart = null;
+            String planStartText = response.getPlanStart();
+            if (planStartText != null && !planStartText.trim().isEmpty()) {
+                planStart = LocalDateTime.parse(planStartText, dateTimeFormatter).toLocalDate();
+            }
+            if (planStart != null) {
+                response.setDeadlineDaysFromPlanStart((int) ChronoUnit.DAYS.between(planStart, deadline));
+            }
+            LocalDate serverToday = LocalDate.now(serverZoneId);
+            response.setDeadlineDaysFromTodayServer((int) ChronoUnit.DAYS.between(serverToday, deadline));
+        } catch (Exception ex) {
+            log.warn("failed to parse insertDeadline={}, timezone={}", insertDeadline, serverZoneId.getId(), ex);
+        }
     }
 
     private PlanPreviewResponseDTO.InsertSuggestionDTO buildInsertSuggestion(PlanPreviewResponseDTO response,
