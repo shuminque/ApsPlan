@@ -136,7 +136,7 @@ class PlanningResultMapper {
             ReleasableCapacityDetail capacityDetail = releasableByLine.get(lineId);
             Integer releasableCapacity = capacityDetail == null ? null : capacityDetail.netReleasableCapacity;
             if (releasableCapacity == null || releasableCapacity <= 0) {
-                continue;
+                releasableCapacity = 0;
             }
             PlanPreviewResponseDTO.CandidateLineDTO candidate = new PlanPreviewResponseDTO.CandidateLineDTO();
             candidate.setLineId(lineId);
@@ -165,20 +165,29 @@ class PlanningResultMapper {
                         capacityDetail.netReleasableCapacity));
                 candidate.setReleasableCapacityFormulaRaw(capacityDetail.releasableCapacityFormulaRaw);
                 candidate.setReleasableCapacityFormulaWithinDeadline(capacityDetail.releasableCapacityFormulaWithinDeadline);
+                candidate.setDeadlineCheckPassed(capacityDetail.deadlineCheckPassed);
+                candidate.setDelayRiskReason(capacityDetail.delayRiskReason);
+                candidate.setOccupiedHoursBeforeDeadline(capacityDetail.occupiedHoursBeforeDeadline);
             }
             candidates.add(candidate);
         }
-        candidates.sort(Comparator.comparing(PlanPreviewResponseDTO.CandidateLineDTO::getCapacityWithinDeadline,
+        List<PlanPreviewResponseDTO.CandidateLineDTO> passedCandidates = candidates.stream()
+                .filter(c -> Boolean.TRUE.equals(c.getDeadlineCheckPassed()))
+                .filter(c -> c.getReleasableCapacity() != null && c.getReleasableCapacity() > 0)
+                .sorted(Comparator.comparing(PlanPreviewResponseDTO.CandidateLineDTO::getCapacityWithinDeadline,
                         Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(c -> Optional.ofNullable(c.getLineName()).orElse("")));
+                        .thenComparing(c -> Optional.ofNullable(c.getLineName()).orElse("")))
+                .collect(Collectors.toList());
         log.info("insert suggestion eligible/candidate lines: assessment.eligibleLineIds={}, candidateLines={}",
                 eligibleLineIds,
-                candidates.stream()
+                passedCandidates.stream()
                         .map(PlanPreviewResponseDTO.CandidateLineDTO::getLineId)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList()));
-        suggestion.setCandidateLines(candidates);
-        int totalCandidateCapacity = candidates.stream()
+        List<PlanPreviewResponseDTO.CandidateLineDTO> finalCandidates = new ArrayList<>(passedCandidates);
+        finalCandidates.addAll(candidates.stream().filter(c -> !Boolean.TRUE.equals(c.getDeadlineCheckPassed())).collect(Collectors.toList()));
+        suggestion.setCandidateLines(finalCandidates);
+        int totalCandidateCapacity = passedCandidates.stream()
                 .map(PlanPreviewResponseDTO.CandidateLineDTO::getReleasableCapacity)
                 .filter(Objects::nonNull)
                 .mapToInt(Integer::intValue)
@@ -193,11 +202,11 @@ class PlanningResultMapper {
             response.setInsertShortageQuantity(0);
             response.setSuggestedDelayedDays(null);
         }
-        if (requiredInsertQuantity > 0 && candidates.isEmpty()) {
+        if (requiredInsertQuantity > 0 && passedCandidates.isEmpty()) {
             suggestion.setDiagnosticTag(NO_ELIGIBLE_RUNNING_LINES);
         }
         if (!manualLineSelectionRequired) {
-            suggestion.setRequiredInsertLineCount(estimateRequiredLineCount(requiredInsertQuantity, candidates));
+            suggestion.setRequiredInsertLineCount(estimateRequiredLineCount(requiredInsertQuantity, passedCandidates));
         }
         return suggestion;
     }
@@ -247,6 +256,9 @@ class PlanningResultMapper {
         private final LocalDate windowStartDate;
         private final LocalDate windowEndDate;
         private final BigDecimal effectiveWindowDays;
+        private final boolean deadlineCheckPassed;
+        private final String delayRiskReason;
+        private final BigDecimal occupiedHoursBeforeDeadline;
 
         private ReleasableCapacityDetail(int netReleasableCapacity,
                                         BigDecimal baseCapacityPerHour,
@@ -263,7 +275,10 @@ class PlanningResultMapper {
                                         String releasableCapacityFormulaWithinDeadline,
                                         LocalDate windowStartDate,
                                         LocalDate windowEndDate,
-                                        BigDecimal effectiveWindowDays) {
+                                        BigDecimal effectiveWindowDays,
+                                        boolean deadlineCheckPassed,
+                                        String delayRiskReason,
+                                        BigDecimal occupiedHoursBeforeDeadline) {
             this.netReleasableCapacity = netReleasableCapacity;
             this.baseCapacityPerHour = baseCapacityPerHour;
             this.runtimeCapacityPerHour = runtimeCapacityPerHour;
@@ -280,6 +295,21 @@ class PlanningResultMapper {
             this.windowStartDate = windowStartDate;
             this.windowEndDate = windowEndDate;
             this.effectiveWindowDays = effectiveWindowDays;
+            this.deadlineCheckPassed = deadlineCheckPassed;
+            this.delayRiskReason = delayRiskReason;
+            this.occupiedHoursBeforeDeadline = occupiedHoursBeforeDeadline;
+        }
+    }
+
+    private static class DelaySimulationResult {
+        private final boolean causesDelay;
+        private final String reason;
+        private final BigDecimal occupiedHoursBeforeDeadline;
+
+        private DelaySimulationResult(boolean causesDelay, String reason, BigDecimal occupiedHoursBeforeDeadline) {
+            this.causesDelay = causesDelay;
+            this.reason = reason;
+            this.occupiedHoursBeforeDeadline = occupiedHoursBeforeDeadline;
         }
     }
 
@@ -311,7 +341,6 @@ class PlanningResultMapper {
 
         Map<Long, ReleasableCapacityDetail> releasableByLine = new HashMap<>();
         int requiredInsertQuantity = assessment == null ? 0 : Math.max(assessment.getRequiredInsertQuantity(), 0);
-        LocalDateTime simulationStart = planStart.atStartOfDay();
         Map<Long, List<ProductionPlanItem>> committedByLine = snapshot.getCommittedPlanItems().stream()
                 .filter(Objects::nonNull)
                 .filter(item -> item.getLineId() != null)
@@ -354,11 +383,9 @@ class PlanningResultMapper {
             int simulatedInsertQty = requiredInsertQuantity <= 0
                     ? netReleasableCapacity
                     : Math.min(requiredInsertQuantity, netReleasableCapacity);
-            if (willCauseOriginalOrderDelay(committedByLine.get(lineId), snapshot.getDeliveryDateByOrderId(),
-                    simulationStart, capacityPerHour, simulatedInsertQty)) {
-                log.info("exclude candidate line due to original-order delay. lineId={}, reason={}", lineId, EXCLUDED_DUE_TO_ORIGINAL_DELAY);
-                continue;
-            }
+            DelaySimulationResult delaySimulation = willCauseOriginalOrderDelay(committedByLine.get(lineId),
+                    snapshot.getDeliveryDateByOrderId(), planStart, deadline, snapshot.getShiftHoursByDay(),
+                    capacityPerHour, simulatedInsertQty);
             releasableByLine.put(lineId, new ReleasableCapacityDetail(
                     netReleasableCapacity,
                     baseCapacityPerHour,
@@ -381,29 +408,47 @@ class PlanningResultMapper {
                             netReleasableCapacity),
                     planStart,
                     deadline,
-                    effectiveWindowDays.setScale(2, RoundingMode.HALF_UP)));
+                    effectiveWindowDays.setScale(2, RoundingMode.HALF_UP),
+                    !delaySimulation.causesDelay,
+                    delaySimulation.reason,
+                    delaySimulation.occupiedHoursBeforeDeadline));
         }
         return releasableByLine;
     }
 
-    private boolean willCauseOriginalOrderDelay(List<ProductionPlanItem> committedItems,
-                                                Map<Long, LocalDate> deliveryDateByOrderId,
-                                                LocalDateTime insertStart,
-                                                BigDecimal capacityPerHour,
-                                                int insertQuantity) {
+    private DelaySimulationResult willCauseOriginalOrderDelay(List<ProductionPlanItem> committedItems,
+                                                              Map<Long, LocalDate> deliveryDateByOrderId,
+                                                              LocalDate planStart,
+                                                              LocalDate deadline,
+                                                              Map<LocalDate, BigDecimal> shiftHoursByDay,
+                                                              BigDecimal capacityPerHour,
+                                                              int insertQuantity) {
         if (committedItems == null || committedItems.isEmpty() || deliveryDateByOrderId == null || deliveryDateByOrderId.isEmpty()) {
-            return false;
+            return new DelaySimulationResult(false, null, BigDecimal.ZERO);
         }
-        if (insertStart == null || capacityPerHour == null || capacityPerHour.compareTo(BigDecimal.ZERO) <= 0 || insertQuantity <= 0) {
-            return false;
+        if (planStart == null || deadline == null || shiftHoursByDay == null || shiftHoursByDay.isEmpty()
+                || capacityPerHour == null || capacityPerHour.compareTo(BigDecimal.ZERO) <= 0 || insertQuantity <= 0) {
+            return new DelaySimulationResult(false, null, BigDecimal.ZERO);
         }
-        long insertMinutes = BigDecimal.valueOf(insertQuantity)
-                .multiply(BigDecimal.valueOf(60))
-                .divide(capacityPerHour, 0, RoundingMode.CEILING)
-                .longValue();
-        if (insertMinutes <= 0) {
-            return false;
+        BigDecimal remainingQty = BigDecimal.valueOf(insertQuantity);
+        BigDecimal occupiedHoursBeforeDeadline = BigDecimal.ZERO;
+        LocalDate bucketCursor = planStart;
+        while (!bucketCursor.isAfter(deadline) && remainingQty.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal dayHours = shiftHoursByDay.getOrDefault(bucketCursor, BigDecimal.ZERO).max(BigDecimal.ZERO);
+            if (dayHours.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal dayCapacity = capacityPerHour.multiply(dayHours);
+                BigDecimal occupiedQty = remainingQty.min(dayCapacity);
+                BigDecimal occupiedHours = occupiedQty.divide(capacityPerHour, 4, RoundingMode.HALF_UP);
+                occupiedHoursBeforeDeadline = occupiedHoursBeforeDeadline.add(occupiedHours);
+                remainingQty = remainingQty.subtract(occupiedQty);
+            }
+            bucketCursor = bucketCursor.plusDays(1);
         }
+        if (remainingQty.compareTo(BigDecimal.ZERO) > 0) {
+            return new DelaySimulationResult(true, "INSUFFICIENT_SHIFT_HOURS_BEFORE_DEADLINE", occupiedHoursBeforeDeadline);
+        }
+        LocalDateTime insertStart = planStart.atStartOfDay();
+        long insertMinutes = occupiedHoursBeforeDeadline.multiply(BigDecimal.valueOf(60)).setScale(0, RoundingMode.CEILING).longValue();
         LocalDateTime cursor = insertStart.plusMinutes(insertMinutes);
         List<ProductionPlanItem> sortedItems = committedItems.stream()
                 .filter(Objects::nonNull)
@@ -433,10 +478,10 @@ class PlanningResultMapper {
             boolean wasOnTime = !originalEnd.isAfter(deliveryDeadline);
             boolean becomesDelayed = shiftedEnd.isAfter(deliveryDeadline);
             if (wasOnTime && becomesDelayed) {
-                return true;
+                return new DelaySimulationResult(true, EXCLUDED_DUE_TO_ORIGINAL_DELAY, occupiedHoursBeforeDeadline);
             }
         }
-        return false;
+        return new DelaySimulationResult(false, null, occupiedHoursBeforeDeadline);
     }
 
     private LocalDateTime toLocalDateTime(java.util.Date value) {
