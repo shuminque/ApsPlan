@@ -444,6 +444,7 @@
     }
 
     function openInsertLineRecommendationDialog(candidateLines, requiredInsertLineCount, onConfirm, onCancel, extraInfo) {
+        const STANDARD_SHIFT_HOURS_PER_DAY = 18;
         const defaultSelectedIndex = Math.max(requiredInsertLineCount, 0);
         const capacityComputationTrace = [];
         const totalReleasableCapacity = candidateLines.reduce(function (sum, line, idx) {
@@ -452,10 +453,22 @@
             const validShiftHours = Number.isFinite(totalShiftHours) ? totalShiftHours : 0;
             const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
             const validEffectiveCapacityPerHour = Number.isFinite(effectiveCapacityPerHour) ? effectiveCapacityPerHour : 0;
-            const dailyCapacity = Math.floor(validEffectiveCapacityPerHour * 24);
-            const dayCount = validShiftHours > 0 ? Number((validShiftHours / 24).toFixed(2)) : 0;
+            const dailyCapacity = Math.floor(validEffectiveCapacityPerHour * STANDARD_SHIFT_HOURS_PER_DAY);
+            const dayCount = validShiftHours > 0 ? Math.ceil(validShiftHours / STANDARD_SHIFT_HOURS_PER_DAY) : 0;
             const validCapacity = Number.isFinite(capacity) ? capacity : 0;
             const nextSum = sum + validCapacity;
+            const hourAccumulationTrace = [];
+            let accumulatedHours = 0;
+            for (let dayIndex = 1; dayIndex <= dayCount; dayIndex += 1) {
+                const remainingHours = Math.max(validShiftHours - accumulatedHours, 0);
+                const dayHours = Math.min(STANDARD_SHIFT_HOURS_PER_DAY, remainingHours);
+                accumulatedHours += dayHours;
+                hourAccumulationTrace.push({
+                    day: dayIndex,
+                    dayHours: dayHours,
+                    accumulatedHours: accumulatedHours
+                });
+            }
             capacityComputationTrace.push({
                 step: idx + 1,
                 lineId: line && line.lineId,
@@ -469,7 +482,8 @@
                 dayCount: dayCount,
                 releasableCapacityFormula: line && line.releasableCapacityFormula,
                 normalizedReleasableCapacity: validCapacity,
-                cumulativeCapacity: nextSum
+                cumulativeCapacity: nextSum,
+                totalShiftHoursAccumulationTrace: hourAccumulationTrace
             });
             return nextSum;
         }, 0);
@@ -497,9 +511,18 @@
             meaning: '截止到交期前的可排班总工时（小时），由后端基于班次日历累计得到',
             deadlineDate: insertDeadline,
             deadlineDaysFromToday: deadlineDaysFromToday,
-            perLineHourToDayFormula: '天数 = totalShiftHours / 24',
+            standardShiftHoursPerDay: STANDARD_SHIFT_HOURS_PER_DAY,
+            perLineHourToDayFormula: '天数 = ceil(totalShiftHours / 18)',
             perLineCapacityFormula: '总产能 = floor(effectiveCapacityPerHour × totalShiftHours)',
-            perLineDailyCapacityFormula: '日产能 = floor(effectiveCapacityPerHour × 24)'
+            perLineDailyCapacityFormula: '日产能 = floor(effectiveCapacityPerHour × 18)'
+        });
+        capacityComputationTrace.forEach(function (traceItem) {
+            console.log('totalShiftHours 累加过程', {
+                lineId: traceItem.lineId,
+                lineName: traceItem.lineName,
+                totalShiftHours: traceItem.totalShiftHours,
+                accumulationTrace: traceItem.totalShiftHoursAccumulationTrace
+            });
         });
         console.log('汇总结果', {
             totalReleasableCapacity: totalReleasableCapacity,
@@ -526,8 +549,8 @@
             const totalCapacity = line.releasableCapacity === null || line.releasableCapacity === undefined ? '-' : line.releasableCapacity;
             const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
             const totalShiftHours = Number(line && line.totalShiftHours);
-            const dailyCapacity = Number.isFinite(effectiveCapacityPerHour) ? Math.floor(effectiveCapacityPerHour * 24) : '-';
-            const dayCount = Number.isFinite(totalShiftHours) ? (totalShiftHours / 24).toFixed(2) : '-';
+            const dailyCapacity = Number.isFinite(effectiveCapacityPerHour) ? Math.floor(effectiveCapacityPerHour * STANDARD_SHIFT_HOURS_PER_DAY) : '-';
+            const dayCount = Number.isFinite(totalShiftHours) ? Math.ceil(totalShiftHours / STANDARD_SHIFT_HOURS_PER_DAY) : '-';
             return `
                 <tr>
                     <td><input type="checkbox" class="layui-form-checkbox insert-line-checkbox" data-line-id="${escapeHtml(lineId)}" ${checked}></td>
