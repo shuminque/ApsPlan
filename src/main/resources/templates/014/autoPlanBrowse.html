@@ -455,6 +455,11 @@
                 lineId: line && line.lineId,
                 lineName: line && line.lineName,
                 rawReleasableCapacity: line && line.releasableCapacity,
+                baseCapacityPerHour: line && line.baseCapacityPerHour,
+                runtimeCapacityPerHour: line && line.runtimeCapacityPerHour,
+                effectiveCapacityPerHour: line && line.effectiveCapacityPerHour,
+                totalShiftHours: line && line.totalShiftHours,
+                releasableCapacityFormula: line && line.releasableCapacityFormula,
                 normalizedReleasableCapacity: validCapacity,
                 cumulativeCapacity: nextSum
             });
