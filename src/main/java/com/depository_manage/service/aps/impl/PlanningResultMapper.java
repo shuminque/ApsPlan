@@ -128,11 +128,6 @@ class PlanningResultMapper {
                         capacityDetail.effectiveCapacityPerHour.stripTrailingZeros().toPlainString(),
                         capacityDetail.totalShiftHours.stripTrailingZeros().toPlainString(),
                         capacityDetail.netReleasableCapacity));
-                candidate.setCapacityWindowStartDate(capacityDetail.windowStart == null ? null : capacityDetail.windowStart.toString());
-                candidate.setCapacityWindowEndDate(capacityDetail.windowEnd == null ? null : capacityDetail.windowEnd.toString());
-                candidate.setCapacityWindowDays(capacityDetail.windowDays);
-                candidate.setAvgDailyCapacity(capacityDetail.avgDailyCapacity);
-                candidate.setShiftHoursBreakdown(capacityDetail.shiftHoursBreakdown);
             }
             candidates.add(candidate);
         }
@@ -204,32 +199,17 @@ class PlanningResultMapper {
         private final BigDecimal runtimeCapacityPerHour;
         private final BigDecimal effectiveCapacityPerHour;
         private final BigDecimal totalShiftHours;
-        private final LocalDate windowStart;
-        private final LocalDate windowEnd;
-        private final int windowDays;
-        private final BigDecimal avgDailyCapacity;
-        private final String shiftHoursBreakdown;
 
         private ReleasableCapacityDetail(int netReleasableCapacity,
                                         BigDecimal baseCapacityPerHour,
                                         BigDecimal runtimeCapacityPerHour,
                                         BigDecimal effectiveCapacityPerHour,
-                                        BigDecimal totalShiftHours,
-                                        LocalDate windowStart,
-                                        LocalDate windowEnd,
-                                        int windowDays,
-                                        BigDecimal avgDailyCapacity,
-                                        String shiftHoursBreakdown) {
+                                        BigDecimal totalShiftHours) {
             this.netReleasableCapacity = netReleasableCapacity;
             this.baseCapacityPerHour = baseCapacityPerHour;
             this.runtimeCapacityPerHour = runtimeCapacityPerHour;
             this.effectiveCapacityPerHour = effectiveCapacityPerHour;
             this.totalShiftHours = totalShiftHours;
-            this.windowStart = windowStart;
-            this.windowEnd = windowEnd;
-            this.windowDays = windowDays;
-            this.avgDailyCapacity = avgDailyCapacity;
-            this.shiftHoursBreakdown = shiftHoursBreakdown;
         }
     }
 
@@ -279,12 +259,10 @@ class PlanningResultMapper {
             BigDecimal capacityPerHour = resolveCapacityPerHour(runtimeView, baseCapacityPerHour);
             int lineCapacity = 0;
             BigDecimal totalShiftHours = BigDecimal.ZERO;
-            List<String> shiftHourParts = new ArrayList<>();
             LocalDate cursor = planStart;
             while (!cursor.isAfter(deadline)) {
                 BigDecimal hours = snapshot.getShiftHoursByDay().getOrDefault(cursor, BigDecimal.ZERO).max(BigDecimal.ZERO);
                 totalShiftHours = totalShiftHours.add(hours);
-                shiftHourParts.add(cursor + "=" + hours.stripTrailingZeros().toPlainString());
                 lineCapacity += capacityPerHour.multiply(hours).setScale(0, RoundingMode.FLOOR).intValue();
                 cursor = cursor.plusDays(1);
             }
@@ -300,12 +278,7 @@ class PlanningResultMapper {
                 log.info("exclude candidate line due to original-order delay. lineId={}, reason={}", lineId, EXCLUDED_DUE_TO_ORIGINAL_DELAY);
                 continue;
             }
-            int windowDays = (int) ChronoUnit.DAYS.between(planStart, deadline.plusDays(1));
-            BigDecimal avgDailyCapacity = windowDays <= 0
-                    ? BigDecimal.ZERO
-                    : BigDecimal.valueOf(netReleasableCapacity).divide(BigDecimal.valueOf(windowDays), 2, RoundingMode.HALF_UP);
-            releasableByLine.put(lineId, new ReleasableCapacityDetail(netReleasableCapacity, baseCapacityPerHour, runtimeCapacityPerHour, capacityPerHour, totalShiftHours,
-                    planStart, deadline, windowDays, avgDailyCapacity, String.join(", ", shiftHourParts)));
+            releasableByLine.put(lineId, new ReleasableCapacityDetail(netReleasableCapacity, baseCapacityPerHour, runtimeCapacityPerHour, capacityPerHour, totalShiftHours));
         }
         return releasableByLine;
     }

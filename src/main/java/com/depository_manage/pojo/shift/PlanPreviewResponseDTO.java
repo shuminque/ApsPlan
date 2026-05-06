@@ -46,10 +46,5 @@ public class PlanPreviewResponseDTO {
         private BigDecimal effectiveCapacityPerHour = BigDecimal.ZERO;
         private BigDecimal totalShiftHours = BigDecimal.ZERO;
         private String releasableCapacityFormula;
-        private String capacityWindowStartDate;
-        private String capacityWindowEndDate;
-        private Integer capacityWindowDays = 0;
-        private BigDecimal avgDailyCapacity = BigDecimal.ZERO;
-        private String shiftHoursBreakdown;
     }
 }
