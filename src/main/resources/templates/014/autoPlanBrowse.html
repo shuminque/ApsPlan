@@ -448,12 +448,13 @@
         const capacityComputationTrace = [];
         const totalReleasableCapacity = candidateLines.reduce(function (sum, line, idx) {
             const capacity = Number(line && line.releasableCapacity);
-            const totalShiftHours = Number(line && line.totalShiftHours);
-            const validShiftHours = Number.isFinite(totalShiftHours) ? totalShiftHours : 0;
             const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
             const validEffectiveCapacityPerHour = Number.isFinite(effectiveCapacityPerHour) ? effectiveCapacityPerHour : 0;
             const dailyCapacity = Math.floor(validEffectiveCapacityPerHour * 24);
-            const dayCount = validShiftHours > 0 ? Number((validShiftHours / 24).toFixed(2)) : 0;
+            const backendWindowDays = Number(line && line.effectiveWindowDays);
+            const totalShiftHours = Number(line && line.totalShiftHours);
+            const fallbackDayCount = Number.isFinite(totalShiftHours) ? Number((totalShiftHours / 24).toFixed(2)) : 0;
+            const dayCount = Number.isFinite(backendWindowDays) ? backendWindowDays : fallbackDayCount;
             const validCapacity = Number.isFinite(capacity) ? capacity : 0;
             const nextSum = sum + validCapacity;
             capacityComputationTrace.push({
@@ -465,6 +466,9 @@
                 runtimeCapacityPerHour: line && line.runtimeCapacityPerHour,
                 effectiveCapacityPerHour: line && line.effectiveCapacityPerHour,
                 totalShiftHours: line && line.totalShiftHours,
+                windowStartDate: line && line.windowStartDate,
+                windowEndDate: line && line.windowEndDate,
+                effectiveWindowDays: line && line.effectiveWindowDays,
                 dailyCapacity: dailyCapacity,
                 dayCount: dayCount,
                 releasableCapacityFormula: line && line.releasableCapacityFormula,
@@ -527,7 +531,15 @@
             const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
             const totalShiftHours = Number(line && line.totalShiftHours);
             const dailyCapacity = Number.isFinite(effectiveCapacityPerHour) ? Math.floor(effectiveCapacityPerHour * 24) : '-';
-            const dayCount = Number.isFinite(totalShiftHours) ? (totalShiftHours / 24).toFixed(2) : '-';
+            const backendWindowDays = Number(line && line.effectiveWindowDays);
+            const dayCount = Number.isFinite(backendWindowDays)
+                ? backendWindowDays.toFixed(2)
+                : (Number.isFinite(totalShiftHours) ? (totalShiftHours / 24).toFixed(2) : '-');
+            const windowStartDate = line && line.windowStartDate ? line.windowStartDate : '-';
+            const windowEndDate = line && line.windowEndDate ? line.windowEndDate : '-';
+            const windowDesc = (line && line.windowStartDate && line && line.windowEndDate)
+                ? `产能按 [${windowStartDate}, ${windowEndDate}] 班次日历累计`
+                : '产能按后端计算窗口班次日历累计';
             return `
                 <tr>
                     <td><input type="checkbox" class="layui-form-checkbox insert-line-checkbox" data-line-id="${escapeHtml(lineId)}" ${checked}></td>
@@ -536,6 +548,7 @@
                     <td>${dailyCapacity}</td>
                     <td>${dayCount}</td>
                     <td>${line.currentModel || '-'}</td>
+                    <td>${windowDesc}</td>
                     <td>${idx < defaultSelectedIndex ? '推荐' : ''}</td>
                 </tr>
             `;
@@ -571,6 +584,7 @@
                                 <th>日产能</th>
                                 <th>天数</th>
                                 <th>当前生产型号</th>
+                                <th>计算窗口说明</th>
                                 <th>是否推荐</th>
                             </tr>
                         </thead>

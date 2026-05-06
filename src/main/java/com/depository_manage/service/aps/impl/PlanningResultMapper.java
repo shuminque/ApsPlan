@@ -124,6 +124,9 @@ class PlanningResultMapper {
                 candidate.setRuntimeCapacityPerHour(capacityDetail.runtimeCapacityPerHour);
                 candidate.setEffectiveCapacityPerHour(capacityDetail.effectiveCapacityPerHour);
                 candidate.setTotalShiftHours(capacityDetail.totalShiftHours);
+                candidate.setWindowStartDate(capacityDetail.windowStartDate == null ? null : capacityDetail.windowStartDate.toString());
+                candidate.setWindowEndDate(capacityDetail.windowEndDate == null ? null : capacityDetail.windowEndDate.toString());
+                candidate.setEffectiveWindowDays(capacityDetail.effectiveWindowDays);
                 candidate.setReleasableCapacityFormula(String.format(Locale.ROOT, "floor(%s × %s) = %d",
                         capacityDetail.effectiveCapacityPerHour.stripTrailingZeros().toPlainString(),
                         capacityDetail.totalShiftHours.stripTrailingZeros().toPlainString(),
@@ -199,17 +202,26 @@ class PlanningResultMapper {
         private final BigDecimal runtimeCapacityPerHour;
         private final BigDecimal effectiveCapacityPerHour;
         private final BigDecimal totalShiftHours;
+        private final LocalDate windowStartDate;
+        private final LocalDate windowEndDate;
+        private final BigDecimal effectiveWindowDays;
 
         private ReleasableCapacityDetail(int netReleasableCapacity,
                                         BigDecimal baseCapacityPerHour,
                                         BigDecimal runtimeCapacityPerHour,
                                         BigDecimal effectiveCapacityPerHour,
-                                        BigDecimal totalShiftHours) {
+                                        BigDecimal totalShiftHours,
+                                        LocalDate windowStartDate,
+                                        LocalDate windowEndDate,
+                                        BigDecimal effectiveWindowDays) {
             this.netReleasableCapacity = netReleasableCapacity;
             this.baseCapacityPerHour = baseCapacityPerHour;
             this.runtimeCapacityPerHour = runtimeCapacityPerHour;
             this.effectiveCapacityPerHour = effectiveCapacityPerHour;
             this.totalShiftHours = totalShiftHours;
+            this.windowStartDate = windowStartDate;
+            this.windowEndDate = windowEndDate;
+            this.effectiveWindowDays = effectiveWindowDays;
         }
     }
 
@@ -259,10 +271,12 @@ class PlanningResultMapper {
             BigDecimal capacityPerHour = resolveCapacityPerHour(runtimeView, baseCapacityPerHour);
             int lineCapacity = 0;
             BigDecimal totalShiftHours = BigDecimal.ZERO;
+            BigDecimal effectiveWindowDays = BigDecimal.ZERO;
             LocalDate cursor = planStart;
             while (!cursor.isAfter(deadline)) {
                 BigDecimal hours = snapshot.getShiftHoursByDay().getOrDefault(cursor, BigDecimal.ZERO).max(BigDecimal.ZERO);
                 totalShiftHours = totalShiftHours.add(hours);
+                effectiveWindowDays = effectiveWindowDays.add(hours.divide(BigDecimal.valueOf(24), 4, RoundingMode.HALF_UP));
                 lineCapacity += capacityPerHour.multiply(hours).setScale(0, RoundingMode.FLOOR).intValue();
                 cursor = cursor.plusDays(1);
             }
@@ -278,7 +292,15 @@ class PlanningResultMapper {
                 log.info("exclude candidate line due to original-order delay. lineId={}, reason={}", lineId, EXCLUDED_DUE_TO_ORIGINAL_DELAY);
                 continue;
             }
-            releasableByLine.put(lineId, new ReleasableCapacityDetail(netReleasableCapacity, baseCapacityPerHour, runtimeCapacityPerHour, capacityPerHour, totalShiftHours));
+            releasableByLine.put(lineId, new ReleasableCapacityDetail(
+                    netReleasableCapacity,
+                    baseCapacityPerHour,
+                    runtimeCapacityPerHour,
+                    capacityPerHour,
+                    totalShiftHours,
+                    planStart,
+                    deadline,
+                    effectiveWindowDays.setScale(2, RoundingMode.HALF_UP)));
         }
         return releasableByLine;
     }
