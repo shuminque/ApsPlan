@@ -447,13 +447,13 @@
         const defaultSelectedIndex = Math.max(requiredInsertLineCount, 0);
         const capacityComputationTrace = [];
         const totalReleasableCapacity = candidateLines.reduce(function (sum, line, idx) {
-            const capacity = Number(line && line.releasableCapacity);
+            const capacity = Number(line && line.capacityWithinDeadline);
             const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
             const validEffectiveCapacityPerHour = Number.isFinite(effectiveCapacityPerHour) ? effectiveCapacityPerHour : 0;
             const dailyCapacity = Math.floor(validEffectiveCapacityPerHour * 24);
-            const backendWindowDays = Number(line && line.effectiveWindowDays);
-            const totalShiftHours = Number(line && line.totalShiftHours);
-            const fallbackDayCount = Number.isFinite(totalShiftHours) ? Number((totalShiftHours / 24).toFixed(2)) : 0;
+            const backendWindowDays = Number(line && line.dayCountWithinDeadline);
+            const totalShiftHoursWithinDeadline = Number(line && line.totalShiftHoursWithinDeadline);
+            const fallbackDayCount = Number.isFinite(totalShiftHoursWithinDeadline) ? Number((totalShiftHoursWithinDeadline / 24).toFixed(2)) : 0;
             const dayCount = Number.isFinite(backendWindowDays) ? backendWindowDays : fallbackDayCount;
             const validCapacity = Number.isFinite(capacity) ? capacity : 0;
             const nextSum = sum + validCapacity;
@@ -462,16 +462,24 @@
                 lineId: line && line.lineId,
                 lineName: line && line.lineName,
                 rawReleasableCapacity: line && line.releasableCapacity,
+                capacityRaw: line && line.capacityRaw,
+                capacityWithinDeadline: line && line.capacityWithinDeadline,
                 baseCapacityPerHour: line && line.baseCapacityPerHour,
                 runtimeCapacityPerHour: line && line.runtimeCapacityPerHour,
                 effectiveCapacityPerHour: line && line.effectiveCapacityPerHour,
                 totalShiftHours: line && line.totalShiftHours,
+                totalShiftHoursRaw: line && line.totalShiftHoursRaw,
+                totalShiftHoursWithinDeadline: line && line.totalShiftHoursWithinDeadline,
                 windowStartDate: line && line.windowStartDate,
                 windowEndDate: line && line.windowEndDate,
                 effectiveWindowDays: line && line.effectiveWindowDays,
+                dayCountRaw: line && line.dayCountRaw,
+                dayCountWithinDeadline: line && line.dayCountWithinDeadline,
                 dailyCapacity: dailyCapacity,
                 dayCount: dayCount,
                 releasableCapacityFormula: line && line.releasableCapacityFormula,
+                releasableCapacityFormulaRaw: line && line.releasableCapacityFormulaRaw,
+                releasableCapacityFormulaWithinDeadline: line && line.releasableCapacityFormulaWithinDeadline,
                 normalizedReleasableCapacity: validCapacity,
                 cumulativeCapacity: nextSum
             });
@@ -502,7 +510,7 @@
             deadlineDate: insertDeadline,
             deadlineDaysFromToday: deadlineDaysFromToday,
             perLineHourToDayFormula: '天数 = totalShiftHours / 24',
-            perLineCapacityFormula: '总产能 = floor(effectiveCapacityPerHour × totalShiftHours)',
+            perLineCapacityFormula: '总产能(交期内) = floor(effectiveCapacityPerHour × totalShiftHoursWithinDeadline)',
             perLineDailyCapacityFormula: '日产能 = floor(effectiveCapacityPerHour × 24)'
         });
         console.log('汇总结果', {
@@ -527,14 +535,14 @@
         const rows = candidateLines.map(function (line, idx) {
             const lineId = line.lineId === null || line.lineId === undefined ? '' : String(line.lineId);
             const checked = idx < defaultSelectedIndex ? 'checked' : '';
-            const totalCapacity = line.releasableCapacity === null || line.releasableCapacity === undefined ? '-' : line.releasableCapacity;
+            const totalCapacity = line.capacityWithinDeadline === null || line.capacityWithinDeadline === undefined ? '-' : line.capacityWithinDeadline;
             const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
-            const totalShiftHours = Number(line && line.totalShiftHours);
+            const totalShiftHoursWithinDeadline = Number(line && line.totalShiftHoursWithinDeadline);
             const dailyCapacity = Number.isFinite(effectiveCapacityPerHour) ? Math.floor(effectiveCapacityPerHour * 24) : '-';
-            const backendWindowDays = Number(line && line.effectiveWindowDays);
+            const backendWindowDays = Number(line && line.dayCountWithinDeadline);
             const dayCount = Number.isFinite(backendWindowDays)
                 ? backendWindowDays.toFixed(2)
-                : (Number.isFinite(totalShiftHours) ? (totalShiftHours / 24).toFixed(2) : '-');
+                : (Number.isFinite(totalShiftHoursWithinDeadline) ? (totalShiftHoursWithinDeadline / 24).toFixed(2) : '-');
             const windowStartDate = line && line.windowStartDate ? line.windowStartDate : '-';
             const windowEndDate = line && line.windowEndDate ? line.windowEndDate : '-';
             const windowDesc = (line && line.windowStartDate && line && line.windowEndDate)
@@ -580,9 +588,9 @@
                             <tr>
                                 <th style="width:80px;">选择</th>
                                 <th>产线</th>
-                                <th>总产能</th>
-                                <th>日产能</th>
-                                <th>天数</th>
+                                <th>总产能(交期内)</th>
+                                <th>日产能(理论24h)</th>
+                                <th>折算天数(交期内)</th>
                                 <th>当前生产型号</th>
                                 <th>计算窗口说明</th>
                                 <th>是否推荐</th>
