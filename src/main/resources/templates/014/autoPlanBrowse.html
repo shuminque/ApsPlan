@@ -438,6 +438,9 @@
         }, {
             requiredInsertQuantity: requiredInsertQuantity,
             insertDeadline: insertDeadline,
+            serverTimeZone: data && data.serverTimeZone,
+            deadlineDaysFromPlanStart: data && data.deadlineDaysFromPlanStart,
+            deadlineDaysFromTodayServer: data && data.deadlineDaysFromTodayServer,
             insertDelayRequired: insertDelayRequired,
             insertShortageQuantity: insertShortageQuantity
         });
@@ -487,14 +490,14 @@
         }, 0);
         const requiredInsertQuantity = Number((extraInfo && extraInfo.requiredInsertQuantity) || 0);
         const insertDeadline = (extraInfo && extraInfo.insertDeadline) ? String(extraInfo.insertDeadline) : '-';
+        const serverTimeZone = (extraInfo && extraInfo.serverTimeZone) ? String(extraInfo.serverTimeZone) : '-';
+        const deadlineDaysFromPlanStart = Number((extraInfo && extraInfo.deadlineDaysFromPlanStart));
+        const deadlineDaysFromTodayServer = Number((extraInfo && extraInfo.deadlineDaysFromTodayServer));
         const insertDelayRequired = !!(extraInfo && extraInfo.insertDelayRequired);
         const insertShortageQuantity = Number((extraInfo && extraInfo.insertShortageQuantity) || 0);
         const shortageQuantity = Math.max(requiredInsertQuantity - totalReleasableCapacity, 0);
-        const today = new Date();
-        const deadlineDate = insertDeadline !== '-' ? new Date(insertDeadline + 'T00:00:00') : null;
-        const deadlineDaysFromToday = deadlineDate && !Number.isNaN(deadlineDate.getTime())
-            ? Math.ceil((deadlineDate.getTime() - today.setHours(0, 0, 0, 0)) / (24 * 60 * 60 * 1000))
-            : null;
+        const hasDeadline = insertDeadline !== '-';
+        const isExpiredByServer = Number.isFinite(deadlineDaysFromTodayServer) && deadlineDaysFromTodayServer < 0;
         console.group('[插单推荐产线] 缺口与产能计算过程');
         console.log('输入参数', {
             requiredInsertQuantity: requiredInsertQuantity,
@@ -507,8 +510,11 @@
         console.table(capacityComputationTrace);
         console.log('totalShiftHours 说明', {
             meaning: '截止到交期前的可排班总工时（小时），由后端基于班次日历累计得到',
+            computationSource: 'backend',
             deadlineDate: insertDeadline,
-            deadlineDaysFromToday: deadlineDaysFromToday,
+            serverTimeZone: serverTimeZone,
+            deadlineDaysFromPlanStart: Number.isFinite(deadlineDaysFromPlanStart) ? deadlineDaysFromPlanStart : null,
+            deadlineDaysFromTodayServer: Number.isFinite(deadlineDaysFromTodayServer) ? deadlineDaysFromTodayServer : null,
             perLineHourToDayFormula: '天数 = totalShiftHours / 24',
             perLineCapacityFormula: '总产能(交期内) = floor(effectiveCapacityPerHour × totalShiftHoursWithinDeadline)',
             perLineDailyCapacityFormula: '日产能 = floor(effectiveCapacityPerHour × 24)'
@@ -543,6 +549,7 @@
             const dayCount = Number.isFinite(backendWindowDays)
                 ? backendWindowDays.toFixed(2)
                 : (Number.isFinite(totalShiftHoursWithinDeadline) ? (totalShiftHoursWithinDeadline / 24).toFixed(2) : '-');
+            const disableDerivedColumns = !hasDeadline || isExpiredByServer;
             const windowStartDate = line && line.windowStartDate ? line.windowStartDate : '-';
             const windowEndDate = line && line.windowEndDate ? line.windowEndDate : '-';
             const windowDesc = (line && line.windowStartDate && line && line.windowEndDate)
@@ -552,9 +559,9 @@
                 <tr>
                     <td><input type="checkbox" class="layui-form-checkbox insert-line-checkbox" data-line-id="${escapeHtml(lineId)}" ${checked}></td>
                     <td>${line.lineName || '-'}</td>
-                    <td>${totalCapacity}</td>
-                    <td>${dailyCapacity}</td>
-                    <td>${dayCount}</td>
+                    <td>${disableDerivedColumns ? '-' : totalCapacity}</td>
+                    <td>${disableDerivedColumns ? '-' : dailyCapacity}</td>
+                    <td>${disableDerivedColumns ? '-' : dayCount}</td>
                     <td>${line.currentModel || '-'}</td>
                     <td>${windowDesc}</td>
                     <td>${idx < defaultSelectedIndex ? '推荐' : ''}</td>
@@ -577,7 +584,13 @@
                         <div>缺口数量：<b>${requiredInsertQuantity}</b></div>
                         <div>系统建议最少插单线数量：<b>${requiredInsertLineCount}</b></div>
                         <div>对应交期：<b>${insertDeadline}</b></div>
+                        <div>服务端时区：<b>${serverTimeZone}</b></div>
+                        <div>距计划开始：<b>${Number.isFinite(deadlineDaysFromPlanStart) ? deadlineDaysFromPlanStart + ' 天' : '-'}</b></div>
+                        <div>距服务端今天：<b>${Number.isFinite(deadlineDaysFromTodayServer) ? deadlineDaysFromTodayServer + ' 天' : '-'}</b></div>
                         <div>候选线总产能：<b>${totalReleasableCapacity}</b></div>
+                        ${(!hasDeadline || isExpiredByServer)
+                ? `<div style="color:#d9534f;">交期为空或已过期，部分推导列已降级显示为 “-”。</div>`
+                : ''}
                         ${insertDelayRequired
                 ? `<div style="color:#d9534f;font-weight:700;">推荐总产线仍不足，插单交货期需要延迟（数量缺口：${insertShortageQuantity}）</div>`
                 : ''}

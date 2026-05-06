@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -66,6 +67,9 @@ public class ShiftCalendarController {
                 request.getObjective(),
                 request.getSelectedInsertLineIds()));
         preview.setInsertSuggestion(normalizeInsertSuggestion(preview.getInsertSuggestion()));
+        if (!org.springframework.util.StringUtils.hasText(preview.getServerTimeZone())) {
+            preview.setServerTimeZone(ZoneId.systemDefault().getId());
+        }
         PREVIEW_CACHE.put(session.getId(), new PreviewSessionState(
                 preview.getEvents(),
                 preview.getInsertSuggestion(),
