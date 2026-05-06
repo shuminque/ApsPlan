@@ -124,6 +124,12 @@ class PlanningResultMapper {
                 candidate.setRuntimeCapacityPerHour(capacityDetail.runtimeCapacityPerHour);
                 candidate.setEffectiveCapacityPerHour(capacityDetail.effectiveCapacityPerHour);
                 candidate.setTotalShiftHours(capacityDetail.totalShiftHours);
+                candidate.setTotalShiftHoursRaw(capacityDetail.totalShiftHoursRaw);
+                candidate.setDayCountRaw(capacityDetail.dayCountRaw);
+                candidate.setCapacityRaw(capacityDetail.capacityRaw);
+                candidate.setTotalShiftHoursWithinDeadline(capacityDetail.totalShiftHoursWithinDeadline);
+                candidate.setDayCountWithinDeadline(capacityDetail.dayCountWithinDeadline);
+                candidate.setCapacityWithinDeadline(capacityDetail.capacityWithinDeadline);
                 candidate.setWindowStartDate(capacityDetail.windowStartDate == null ? null : capacityDetail.windowStartDate.toString());
                 candidate.setWindowEndDate(capacityDetail.windowEndDate == null ? null : capacityDetail.windowEndDate.toString());
                 candidate.setEffectiveWindowDays(capacityDetail.effectiveWindowDays);
@@ -131,10 +137,12 @@ class PlanningResultMapper {
                         capacityDetail.effectiveCapacityPerHour.stripTrailingZeros().toPlainString(),
                         capacityDetail.totalShiftHours.stripTrailingZeros().toPlainString(),
                         capacityDetail.netReleasableCapacity));
+                candidate.setReleasableCapacityFormulaRaw(capacityDetail.releasableCapacityFormulaRaw);
+                candidate.setReleasableCapacityFormulaWithinDeadline(capacityDetail.releasableCapacityFormulaWithinDeadline);
             }
             candidates.add(candidate);
         }
-        candidates.sort(Comparator.comparing(PlanPreviewResponseDTO.CandidateLineDTO::getReleasableCapacity,
+        candidates.sort(Comparator.comparing(PlanPreviewResponseDTO.CandidateLineDTO::getCapacityWithinDeadline,
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(c -> Optional.ofNullable(c.getLineName()).orElse("")));
         log.info("insert suggestion eligible/candidate lines: assessment.eligibleLineIds={}, candidateLines={}",
@@ -202,6 +210,14 @@ class PlanningResultMapper {
         private final BigDecimal runtimeCapacityPerHour;
         private final BigDecimal effectiveCapacityPerHour;
         private final BigDecimal totalShiftHours;
+        private final BigDecimal totalShiftHoursRaw;
+        private final BigDecimal dayCountRaw;
+        private final int capacityRaw;
+        private final BigDecimal totalShiftHoursWithinDeadline;
+        private final BigDecimal dayCountWithinDeadline;
+        private final int capacityWithinDeadline;
+        private final String releasableCapacityFormulaRaw;
+        private final String releasableCapacityFormulaWithinDeadline;
         private final LocalDate windowStartDate;
         private final LocalDate windowEndDate;
         private final BigDecimal effectiveWindowDays;
@@ -211,6 +227,14 @@ class PlanningResultMapper {
                                         BigDecimal runtimeCapacityPerHour,
                                         BigDecimal effectiveCapacityPerHour,
                                         BigDecimal totalShiftHours,
+                                        BigDecimal totalShiftHoursRaw,
+                                        BigDecimal dayCountRaw,
+                                        int capacityRaw,
+                                        BigDecimal totalShiftHoursWithinDeadline,
+                                        BigDecimal dayCountWithinDeadline,
+                                        int capacityWithinDeadline,
+                                        String releasableCapacityFormulaRaw,
+                                        String releasableCapacityFormulaWithinDeadline,
                                         LocalDate windowStartDate,
                                         LocalDate windowEndDate,
                                         BigDecimal effectiveWindowDays) {
@@ -219,6 +243,14 @@ class PlanningResultMapper {
             this.runtimeCapacityPerHour = runtimeCapacityPerHour;
             this.effectiveCapacityPerHour = effectiveCapacityPerHour;
             this.totalShiftHours = totalShiftHours;
+            this.totalShiftHoursRaw = totalShiftHoursRaw;
+            this.dayCountRaw = dayCountRaw;
+            this.capacityRaw = capacityRaw;
+            this.totalShiftHoursWithinDeadline = totalShiftHoursWithinDeadline;
+            this.dayCountWithinDeadline = dayCountWithinDeadline;
+            this.capacityWithinDeadline = capacityWithinDeadline;
+            this.releasableCapacityFormulaRaw = releasableCapacityFormulaRaw;
+            this.releasableCapacityFormulaWithinDeadline = releasableCapacityFormulaWithinDeadline;
             this.windowStartDate = windowStartDate;
             this.windowEndDate = windowEndDate;
             this.effectiveWindowDays = effectiveWindowDays;
@@ -270,17 +302,26 @@ class PlanningResultMapper {
                     : runtimeView.getCurrentCapacity().max(BigDecimal.ZERO);
             BigDecimal capacityPerHour = resolveCapacityPerHour(runtimeView, baseCapacityPerHour);
             int lineCapacity = 0;
-            BigDecimal totalShiftHours = BigDecimal.ZERO;
+            int lineCapacityWithinDeadline = 0;
+            BigDecimal totalShiftHoursWithinDeadline = BigDecimal.ZERO;
             BigDecimal effectiveWindowDays = BigDecimal.ZERO;
+            BigDecimal totalShiftHoursRaw = BigDecimal.ZERO;
             LocalDate cursor = planStart;
             while (!cursor.isAfter(deadline)) {
                 BigDecimal hours = snapshot.getShiftHoursByDay().getOrDefault(cursor, BigDecimal.ZERO).max(BigDecimal.ZERO);
-                totalShiftHours = totalShiftHours.add(hours);
+                totalShiftHoursWithinDeadline = totalShiftHoursWithinDeadline.add(hours);
                 effectiveWindowDays = effectiveWindowDays.add(hours.divide(BigDecimal.valueOf(24), 4, RoundingMode.HALF_UP));
-                lineCapacity += capacityPerHour.multiply(hours).setScale(0, RoundingMode.FLOOR).intValue();
+                lineCapacityWithinDeadline += capacityPerHour.multiply(hours).setScale(0, RoundingMode.FLOOR).intValue();
                 cursor = cursor.plusDays(1);
             }
-            int netReleasableCapacity = Math.max(lineCapacity, 0);
+            for (BigDecimal hours : snapshot.getShiftHoursByDay().values()) {
+                if (hours == null) {
+                    continue;
+                }
+                totalShiftHoursRaw = totalShiftHoursRaw.add(hours.max(BigDecimal.ZERO));
+            }
+            lineCapacity = capacityPerHour.multiply(totalShiftHoursRaw).setScale(0, RoundingMode.FLOOR).intValue();
+            int netReleasableCapacity = Math.max(lineCapacityWithinDeadline, 0);
             if (netReleasableCapacity <= 0) {
                 continue;
             }
@@ -297,7 +338,21 @@ class PlanningResultMapper {
                     baseCapacityPerHour,
                     runtimeCapacityPerHour,
                     capacityPerHour,
-                    totalShiftHours,
+                    totalShiftHoursWithinDeadline,
+                    totalShiftHoursRaw,
+                    totalShiftHoursRaw.divide(BigDecimal.valueOf(24), 2, RoundingMode.HALF_UP),
+                    Math.max(lineCapacity, 0),
+                    totalShiftHoursWithinDeadline,
+                    totalShiftHoursWithinDeadline.divide(BigDecimal.valueOf(24), 2, RoundingMode.HALF_UP),
+                    netReleasableCapacity,
+                    String.format(Locale.ROOT, "floor(%s × %s) = %d",
+                            capacityPerHour.stripTrailingZeros().toPlainString(),
+                            totalShiftHoursRaw.stripTrailingZeros().toPlainString(),
+                            Math.max(lineCapacity, 0)),
+                    String.format(Locale.ROOT, "floor(%s × %s) = %d",
+                            capacityPerHour.stripTrailingZeros().toPlainString(),
+                            totalShiftHoursWithinDeadline.stripTrailingZeros().toPlainString(),
+                            netReleasableCapacity),
                     planStart,
                     deadline,
                     effectiveWindowDays.setScale(2, RoundingMode.HALF_UP)));
