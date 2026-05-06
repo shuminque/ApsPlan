@@ -99,11 +99,14 @@ class PlanningResultMapper {
             return suggestion;
         }
 
+        LocalDate insertDeadlineDate = parseInsertDeadlineDate(assessment);
+        LocalDate capacityEndExclusive = resolveCapacityEndExclusive(endExclusive, insertDeadlineDate);
+
         Set<Long> eligibleLineIds = resolveEligibleLineIds(assessment);
         Map<Long, String> lineNameById = snapshot.getProductionLines().stream()
                 .filter(line -> line.getId() != null)
                 .collect(Collectors.toMap(line -> line.getId(), line -> Optional.ofNullable(line.getLineName()).orElse(""), (a, b) -> a));
-        Map<Long, ReleasableCapacityDetail> releasableByLine = calculateReleasableCapacityByLine(snapshot, assessment, endExclusive);
+        Map<Long, ReleasableCapacityDetail> releasableByLine = calculateReleasableCapacityByLine(snapshot, assessment, capacityEndExclusive);
 
         List<PlanPreviewResponseDTO.CandidateLineDTO> candidates = new ArrayList<>();
         for (Long lineId : eligibleLineIds) {
@@ -165,6 +168,31 @@ class PlanningResultMapper {
         return suggestion;
     }
 
+
+    private LocalDate parseInsertDeadlineDate(FulfillabilityAssessment assessment) {
+        String insertDeadline = assessment == null ? null : assessment.getInsertDeadline();
+        if (insertDeadline == null || insertDeadline.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(insertDeadline.trim(), DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (Exception ex) {
+            log.warn("failed to parse insert deadline: {}", insertDeadline, ex);
+            return null;
+        }
+    }
+
+    private LocalDate resolveCapacityEndExclusive(LocalDate endExclusive, LocalDate insertDeadlineDate) {
+        if (endExclusive == null) {
+            return null;
+        }
+        if (insertDeadlineDate == null) {
+            return endExclusive;
+        }
+        LocalDate deadlineExclusive = insertDeadlineDate.plusDays(1);
+        return deadlineExclusive.isBefore(endExclusive) ? deadlineExclusive : endExclusive;
+    }
+
     private Set<Long> resolveEligibleLineIds(FulfillabilityAssessment assessment) {
         List<Long> eligibleLineIds = assessment == null ? Collections.<Long>emptyList() : assessment.getEligibleLineIds();
         if (eligibleLineIds == null || eligibleLineIds.isEmpty()) {
@@ -215,15 +243,15 @@ class PlanningResultMapper {
 
     private Map<Long, ReleasableCapacityDetail> calculateReleasableCapacityByLine(PlanningSnapshot snapshot,
                                                                  FulfillabilityAssessment assessment,
-                                                                 LocalDate endExclusive) {
-        if (snapshot == null || endExclusive == null) {
+                                                                 LocalDate capacityEndExclusive) {
+        if (snapshot == null || capacityEndExclusive == null) {
             return Collections.emptyMap();
         }
-        LocalDate planStart = snapshot.getShiftHoursByDay().keySet().stream().min(LocalDate::compareTo).orElse(endExclusive);
-        LocalDate deadline = endExclusive.minusDays(1);
-        if (deadline.isBefore(planStart)) {
+        LocalDate planStart = snapshot.getShiftHoursByDay().keySet().stream().min(LocalDate::compareTo).orElse(capacityEndExclusive);
+        if (!capacityEndExclusive.isAfter(planStart)) {
             return Collections.emptyMap();
         }
+        LocalDate deadlineInclusive = capacityEndExclusive.minusDays(1);
         String triggerModel = assessment == null ? null : assessment.getEligibleDemandModel();
         String triggerCraft = assessment == null ? null : assessment.getEligibleDemandCraft();
         if ((triggerModel == null || triggerModel.trim().isEmpty()) && (triggerCraft == null || triggerCraft.trim().isEmpty())) {
@@ -260,7 +288,7 @@ class PlanningResultMapper {
             int lineCapacity = 0;
             BigDecimal totalShiftHours = BigDecimal.ZERO;
             LocalDate cursor = planStart;
-            while (!cursor.isAfter(deadline)) {
+            while (!cursor.isAfter(deadlineInclusive)) {
                 BigDecimal hours = snapshot.getShiftHoursByDay().getOrDefault(cursor, BigDecimal.ZERO).max(BigDecimal.ZERO);
                 totalShiftHours = totalShiftHours.add(hours);
                 lineCapacity += capacityPerHour.multiply(hours).setScale(0, RoundingMode.FLOOR).intValue();
