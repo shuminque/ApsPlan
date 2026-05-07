@@ -238,7 +238,15 @@ public class PlanningEngineV1 implements PlanningEngine {
                     continue;
                 }
                 sortLineCapacities(barLines);
-                barLinesBySeries.put(entry.getKey(), barLines);
+                String seriesKey = resolveSeriesKey(demand.model(), entry.getKey());
+                if (seriesKey == null) {
+                    continue;
+                }
+                barLinesBySeries.computeIfAbsent(seriesKey, key -> new ArrayList<LineCapacity>())
+                        .addAll(barLines);
+            }
+            for (List<LineCapacity> seriesLines : barLinesBySeries.values()) {
+                sortLineCapacities(seriesLines);
             }
             result.put(demand, new DemandLineMatch(barLinesBySeries));
         }
@@ -678,6 +686,11 @@ public class PlanningEngineV1 implements PlanningEngine {
         if (demandModel == null || demandModel.trim().isEmpty() || configModel == null || configModel.trim().isEmpty()) {
             return false;
         }
+        String demandBearingSeries = extractBearingSeries(demandModel);
+        String configBearingSeries = extractBearingSeries(configModel);
+        if (!demandBearingSeries.isEmpty() && demandBearingSeries.equals(configBearingSeries)) {
+            return true;
+        }
         String normalizedDemandModel = normalizeModelForSeriesMatch(demandModel);
         String normalizedConfigModel = normalizeModelForSeriesMatch(configModel);
         if (normalizedDemandModel.isEmpty() || normalizedConfigModel.isEmpty()) {
@@ -689,6 +702,28 @@ public class PlanningEngineV1 implements PlanningEngine {
 
     private String normalizeModelForSeriesMatch(String model) {
         return model == null ? "" : model.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "");
+    }
+
+    private String resolveSeriesKey(String demandModel, String configModel) {
+        String demandBearingSeries = extractBearingSeries(demandModel);
+        String configBearingSeries = extractBearingSeries(configModel);
+        if (!demandBearingSeries.isEmpty() && demandBearingSeries.equals(configBearingSeries)) {
+            return demandBearingSeries;
+        }
+        String normalizedConfigModel = normalizeModelForSeriesMatch(configModel);
+        return normalizedConfigModel.isEmpty() ? null : normalizedConfigModel;
+    }
+
+    private String extractBearingSeries(String model) {
+        if (model == null) {
+            return "";
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\d{4,}").matcher(model.toUpperCase(Locale.ROOT));
+        if (!matcher.find()) {
+            return "";
+        }
+        String digits = matcher.group();
+        return digits.length() <= 4 ? digits : digits.substring(0, 4);
     }
 
     private void sortLineCapacities(List<LineCapacity> lineCapacities) {

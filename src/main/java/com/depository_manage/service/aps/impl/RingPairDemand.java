@@ -18,11 +18,11 @@ public class RingPairDemand implements PlannableDemand {
 
     @Override
     public int remaining() {
-        return Math.min(laDemand.remaining(), lbDemand.remaining());
+        return Math.max(laDemand.remaining(), lbDemand.remaining());
     }
 
     public Integer maxRequired() {
-        return Math.min(laDemand.required(), lbDemand.required());
+        return Math.max(laDemand.required(), lbDemand.required());
     }
 
     public int priority() {
