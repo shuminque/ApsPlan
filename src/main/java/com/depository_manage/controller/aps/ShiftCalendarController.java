@@ -58,7 +58,6 @@ public class ShiftCalendarController {
                 request.getStart(),
                 request.getEnd(),
                 request.getPlanMode(),
-                request.getInsertOrderIds(),
                 request.getLineScope(),
                 request.getLineIds(),
                 request.getFreezeHours(),
@@ -246,7 +245,6 @@ public class ShiftCalendarController {
         private String start;
         private String end;
         private String planMode;
-        private List<Long> insertOrderIds;
         private String lineScope;
         private List<Long> lineIds;
         private Integer freezeHours;
@@ -276,14 +274,6 @@ public class ShiftCalendarController {
 
         public void setPlanMode(String planMode) {
             this.planMode = planMode;
-        }
-
-        public List<Long> getInsertOrderIds() {
-            return insertOrderIds;
-        }
-
-        public void setInsertOrderIds(List<Long> insertOrderIds) {
-            this.insertOrderIds = insertOrderIds;
         }
 
         public String getLineScope() {

@@ -93,7 +93,7 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
 
     @Override
     public PlanPreviewResponseDTO generatePlanPreview(String startDate, String endDate) {
-        return generatePlanPreview(new PlanningRequest(startDate, endDate, "AUTO", Collections.emptyList(), "ALL",
+        return generatePlanPreview(new PlanningRequest(startDate, endDate, "AUTO", "ALL",
                 Collections.emptyList(), null, Collections.emptyMap(), OBJECTIVE_MIN_LINE, Collections.emptyList()));
     }
 
@@ -107,13 +107,12 @@ public class ProductionPlanningServiceImpl implements ProductionPlanningService 
     public PlanPreviewResponseDTO generatePlanPreview(String startDate,
                                                       String endDate,
                                                       String planMode,
-                                                      List<Long> insertOrderIds,
                                                       String lineScope,
                                                       List<Long> lineIds,
                                                       Integer freezeHours,
                                                       Map<Long, LocalDateTime> orderStartTimes,
                                                       String objective) {
-        return generatePlanPreview(PlanningRequest.fromLegacyParameters(startDate, endDate, planMode, insertOrderIds,
+        return generatePlanPreview(PlanningRequest.fromLegacyParameters(startDate, endDate, planMode,
                 lineScope, lineIds, freezeHours, orderStartTimes, objective));
     }
 

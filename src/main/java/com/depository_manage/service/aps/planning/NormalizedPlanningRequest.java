@@ -14,7 +14,6 @@ public class NormalizedPlanningRequest {
     private final LocalDateTime effectiveStartAt;
     private final String mode;
     private final String objective;
-    private final Set<Long> insertOrderIds;
     private final Set<Long> scopedLineIds;
     private final int freezeWindowHours;
     private final Map<Long, LocalDateTime> orderStartTimes;
@@ -27,7 +26,6 @@ public class NormalizedPlanningRequest {
                                      LocalDateTime effectiveStartAt,
                                      String mode,
                                      String objective,
-                                     Set<Long> insertOrderIds,
                                      Set<Long> scopedLineIds,
                                      int freezeWindowHours,
                                      Map<Long, LocalDateTime> orderStartTimes,
@@ -39,7 +37,6 @@ public class NormalizedPlanningRequest {
         this.effectiveStartAt = effectiveStartAt;
         this.mode = mode;
         this.objective = objective;
-        this.insertOrderIds = insertOrderIds;
         this.scopedLineIds = scopedLineIds;
         this.freezeWindowHours = freezeWindowHours;
         this.orderStartTimes = orderStartTimes;
@@ -72,10 +69,6 @@ public class NormalizedPlanningRequest {
 
     public String getObjective() {
         return objective;
-    }
-
-    public Set<Long> getInsertOrderIds() {
-        return insertOrderIds;
     }
 
     public Set<Long> getScopedLineIds() {

@@ -13,7 +13,6 @@ public class PlanningRequest {
     private final String startDate;
     private final String endDate;
     private final String planMode;
-    private final List<Long> insertOrderIds;
     private final String lineScope;
     private final List<Long> lineIds;
     private final Integer freezeHours;
@@ -24,7 +23,6 @@ public class PlanningRequest {
     public PlanningRequest(String startDate,
                            String endDate,
                            String planMode,
-                           List<Long> insertOrderIds,
                            String lineScope,
                            List<Long> lineIds,
                            Integer freezeHours,
@@ -34,7 +32,6 @@ public class PlanningRequest {
         this.startDate = startDate;
         this.endDate = endDate;
         this.planMode = planMode;
-        this.insertOrderIds = insertOrderIds;
         this.lineScope = lineScope;
         this.lineIds = lineIds;
         this.freezeHours = freezeHours;
@@ -46,7 +43,6 @@ public class PlanningRequest {
     public static PlanningRequest fromLegacyParameters(String startDate,
                                                        String endDate,
                                                        String planMode,
-                                                       List<Long> insertOrderIds,
                                                        String lineScope,
                                                        List<Long> lineIds,
                                                        Integer freezeHours,
@@ -64,7 +60,7 @@ public class PlanningRequest {
                 serializedOrderStartTimes.put(String.valueOf(entry.getKey()), DATE_TIME_FMT.format(entry.getValue()));
             }
         }
-        return new PlanningRequest(startDate, endDate, planMode, insertOrderIds, lineScope,
+        return new PlanningRequest(startDate, endDate, planMode, lineScope,
                 lineIds, freezeHours, serializedOrderStartTimes, objective, Collections.emptyList());
     }
 
@@ -78,10 +74,6 @@ public class PlanningRequest {
 
     public String getPlanMode() {
         return planMode;
-    }
-
-    public List<Long> getInsertOrderIds() {
-        return insertOrderIds;
     }
 
     public String getLineScope() {

@@ -47,7 +47,6 @@ public class PlanningEngineV1 implements PlanningEngine {
 
         String normalizedMode = normalizedRequest.getMode();
         String normalizedObjective = normalizedRequest.getObjective();
-        Set<Long> insertOrderIdSet = normalizedRequest.getInsertOrderIds();
         Map<Long, LocalDateTime> orderStartTimes = normalizedRequest.getOrderStartTimes();
         PlanningSnapshot snapshot = context.getSnapshot();
 
@@ -59,7 +58,7 @@ public class PlanningEngineV1 implements PlanningEngine {
         ZoneId zoneId = context.getZoneId();
         LocalDateTime effectiveStartAt = normalizedRequest.getEffectiveStartAt();
         List<DemandItem> demands = buildDemands(snapshot.getOrderByKey(), snapshot.getSafetyStockByKey(),
-                snapshot.getCurrentInventoryByKey(), normalizedMode, insertOrderIdSet,
+                snapshot.getCurrentInventoryByKey(), normalizedMode,
                 normalizeOrderStartTimes(orderStartTimes), effectiveStartAt, clock, zoneId);
         if (demands.isEmpty()) {
             return PlanningEngineSupport.emptyResult();
@@ -136,7 +135,6 @@ public class PlanningEngineV1 implements PlanningEngine {
                                   Map<String, SafetyStock> safetyStockByKey,
                                   Map<String, Integer> currentInventoryByKey,
                                   String planMode,
-                                  Set<Long> insertOrderIdSet,
                                   Map<Long, LocalDateTime> orderStartTimes,
                                   LocalDateTime defaultStartAt,
                                   Clock clock,

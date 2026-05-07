@@ -29,7 +29,7 @@ public class PlanningRequestNormalizer {
         if (requestStart == null || endExclusive == null) {
             return new NormalizedPlanningRequest(requestStart, requestStart, endExclusive,
                     requestStartAt, requestStartAt, normalizeMode(request.getPlanMode()),
-                    normalizeObjective(request.getObjective()), Collections.emptySet(),
+                    normalizeObjective(request.getObjective()),
                     Collections.emptySet(), 0, Collections.emptyMap(), Collections.emptySet());
         }
 
@@ -63,7 +63,6 @@ public class PlanningRequestNormalizer {
                 effectiveStartAt,
                 normalizeMode(request.getPlanMode()),
                 normalizeObjective(request.getObjective()),
-                normalizeLongSet(request.getInsertOrderIds()),
                 normalizeLineScope(request.getLineScope(), request.getLineIds()),
                 freezeWindowHours,
                 parseOrderStartTimes(request.getOrderStartTimes()),
