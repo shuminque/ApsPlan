@@ -13,11 +13,11 @@
             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
                 <div style="display: none">
                     <label>浏览开始日期</label>
-                    <input id="planStart" type="date" class="layui-input" style="width:180px;">
+                    <input id="planStart" type="datetime-local" step="3600" class="layui-input" style="width:220px;">
                 </div>
                 <div style="display: none">
                     <label>浏览结束日期</label>
-                    <input id="planEnd" type="date" class="layui-input" style="width:180px;">
+                    <input id="planEnd" type="datetime-local" step="3600" class="layui-input" style="width:220px;">
                 </div>
                 <a id="retryAutoPreviewLink"
                    href="javascript:void(0);"
@@ -42,11 +42,14 @@
     let selectedInsertLineIdsForPreview = [];
     let orderStartTimesForPreview = {};
 
-    function toDateValue(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+    function toDateTimeHourValue(date) {
+        const rounded = new Date(date);
+        rounded.setMinutes(0, 0, 0);
+        const year = rounded.getFullYear();
+        const month = String(rounded.getMonth() + 1).padStart(2, '0');
+        const day = String(rounded.getDate()).padStart(2, '0');
+        const hour = String(rounded.getHours()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hour}:00`;
     }
 
     function buildPlanOrderKey(order) {
@@ -120,7 +123,7 @@
                 <td>${item.orderCount || 0}</td>
                 <td>${item.safetyStockQuantity || 0}</td>
                 <td>${item.plannedQuantity || item.requiredQuantity || 0}</td>
-                <td><input type="date" class="layui-input plan-order-start-input" value="${escapeHtml(startValue)}"></td>
+                <td><input type="datetime-local" step="3600" class="layui-input plan-order-start-input" value="${escapeHtml(startValue)}"></td>
             </tr>
             `;
         }).join('');
@@ -679,10 +682,9 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        document.getElementById('planStart').value = toDateValue(monthStart);
-        document.getElementById('planEnd').value = toDateValue(nextMonthStart);
+        const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1, now.getHours());
+        document.getElementById('planStart').value = toDateTimeHourValue(now);
+        document.getElementById('planEnd').value = toDateTimeHourValue(nextMonthStart);
         previewAutoPlan();
     });
 </script>
