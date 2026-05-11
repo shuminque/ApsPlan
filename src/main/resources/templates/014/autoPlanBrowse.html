@@ -318,7 +318,6 @@
                     <td>${formatRangeDate(event.start)} ~ ${formatRangeDate(event.end)}</td>
                     <td>${plannedDays > 0 ? plannedDays : '-'}</td>
                     <td>${formatMetricValue(event.dailyOutput)}${diagnosticNote}</td>
-                    <td>${formatMetricValue(event.avgDailyWorkHours)}</td>
                     <td>${formatMetricValue(event.capacityPerHour)}</td>
                     <td>${event.quantity || 0}</td>
                 </tr>
@@ -352,10 +351,10 @@
                     <table class="layui-table">
                         <thead>
                             <tr>
-                                <th>产线</th><th>客户</th><th>内外圈</th><th>型号</th><th>排产时间范围</th><th>天数</th><th>日产量</th><th>日均工时</th><th>产能(件/小时)</th><th>总产量</th>
+                                <th>产线</th><th>客户</th><th>内外圈</th><th>型号</th><th>排产时间范围</th><th>天数</th><th>日产量</th><th>产能(件/小时)</th><th>总产量</th>
                             </tr>
                         </thead>
-                        <tbody>${resultRows || '<tr><td colspan="10" style="text-align:center;color:#999;">暂无排产结果</td></tr>'}</tbody>
+                        <tbody>${resultRows || '<tr><td colspan="9" style="text-align:center;color:#999;">暂无排产结果</td></tr>'}</tbody>
                     </table>
                 </div>
             `,
