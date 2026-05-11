@@ -515,7 +515,7 @@
             deadlineDate: insertDeadline,
             deadlineDaysFromToday: deadlineDaysFromToday,
             standardShiftHoursPerDay: STANDARD_SHIFT_HOURS_PER_DAY,
-            perLineHourToDayFormula: '示意天数 = ceil(totalShiftHours / 18)（仅用于展示）',
+            perLineHourToDayFormula: '示意天数 = totalShiftHours / 18（保留 1 位小数，仅用于展示）',
             perLineCapacityFormula: '总产能 = floor(effectiveCapacityPerHour × totalShiftHours)',
             perLineDailyCapacityFormula: '日产能 = floor(effectiveCapacityPerHour × 18)'
         });
@@ -553,7 +553,7 @@
             const effectiveCapacityPerHour = Number(line && line.effectiveCapacityPerHour);
             const totalShiftHours = Number(line && line.totalShiftHours);
             const dailyCapacity = Number.isFinite(effectiveCapacityPerHour) ? Math.floor(effectiveCapacityPerHour * STANDARD_SHIFT_HOURS_PER_DAY) : '-';
-            const dayCount = Number.isFinite(totalShiftHours) ? Math.ceil(totalShiftHours / STANDARD_SHIFT_HOURS_PER_DAY) : '-';
+            const dayCount = Number.isFinite(totalShiftHours) ? (totalShiftHours / STANDARD_SHIFT_HOURS_PER_DAY).toFixed(1) : '-';
             return `
                 <tr>
                     <td><input type="checkbox" class="layui-form-checkbox insert-line-checkbox" data-line-id="${escapeHtml(lineId)}" ${checked}></td>
