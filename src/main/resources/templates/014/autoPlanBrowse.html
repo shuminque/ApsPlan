@@ -546,6 +546,15 @@
         const riskLegend = Object.keys(riskTagDescriptions).map(function (tag) {
             return `<li><span style="display:inline-block;min-width:130px;color:#333;">${tag}</span>${riskTagDescriptions[tag]}</li>`;
         }).join('');
+        const lineCapacityMap = new Map();
+        candidateLines.forEach(function (line) {
+            const lineId = Number(line && line.lineId);
+            const releasableCapacity = Number(line && line.releasableCapacity);
+            if (Number.isFinite(lineId) && lineId > 0) {
+                lineCapacityMap.set(lineId, Number.isFinite(releasableCapacity) ? releasableCapacity : 0);
+            }
+        });
+
         const rows = candidateLines.map(function (line, idx) {
             const lineId = line.lineId === null || line.lineId === undefined ? '' : String(line.lineId);
             const checked = idx < defaultSelectedIndex ? 'checked' : '';
@@ -578,14 +587,15 @@
                     <div style="margin-bottom: 8px; color: #666;">
                         需至少选择 ${requiredInsertLineCount} 条产线用于插单。系统已默认勾选推荐项，可手动调整。
                     </div>
-                    <div style="margin-bottom: 8px; color: #333;">
-                        <div>缺口数量：<b>${requiredInsertQuantity}</b></div>
-                        <div>系统建议最少插单线数量：<b>${requiredInsertLineCount}</b></div>
-                        <div>对应交期：<b>${insertDeadline}</b></div>
-                        <div>候选线总产能：<b>${totalReleasableCapacity}</b></div>
-                        ${insertDelayRequired
+                    <div class="insert-line-summary" style="margin-bottom: 8px; color: #333;">
+                        <div>缺口数量：<b class="js-required-insert-quantity">${requiredInsertQuantity}</b></div>
+                        <div>系统建议最少插单线数量：<b class="js-required-line-count">${requiredInsertLineCount}</b></div>
+                        <div>对应交期：<b class="js-insert-deadline">${insertDeadline}</b></div>
+                        <div>候选线总产能：<b class="js-selected-total-capacity">${totalReleasableCapacity}</b></div>
+                        <div class="insert-shortage-hint">${insertDelayRequired
                 ? `<div style="color:#d9534f;font-weight:700;">推荐总产线仍不足，插单交货期需要延迟（数量缺口：${insertShortageQuantity}）</div>`
-                : ''}
+                : ''}</div>
+                        <div class="insert-selected-line-hint"></div>
                     </div>
 
                     <table class="layui-table">
@@ -604,15 +614,65 @@
                     </table>
                 </div>
             `,
-            yes: function(index) {
-                const checkedBoxes = Array.from(document.querySelectorAll('.insert-line-checkbox:checked'));
-                const selectedIds = checkedBoxes
-                    .map(item => Number(item.getAttribute('data-line-id')))
-                    .filter(id => Number.isFinite(id) && id > 0);
-                if (selectedIds.length < requiredInsertLineCount) {
+            success: function(layero) {
+                const summaryContainer = layero[0].querySelector('.insert-line-summary');
+                const shortageHint = layero[0].querySelector('.insert-shortage-hint');
+                const selectedLineHint = layero[0].querySelector('.insert-selected-line-hint');
+
+                const recalculateSelectionSummary = function () {
+                    const checkedBoxes = Array.from(layero[0].querySelectorAll('.insert-line-checkbox:checked'));
+                    const selectedIds = checkedBoxes
+                        .map(item => Number(item.getAttribute('data-line-id')))
+                        .filter(id => Number.isFinite(id) && id > 0);
+                    const selectedTotalCapacity = selectedIds.reduce(function (sum, id) {
+                        return sum + (lineCapacityMap.get(id) || 0);
+                    }, 0);
+                    const selectedShortageQuantity = Math.max(0, requiredInsertQuantity - selectedTotalCapacity);
+                    const selectionSatisfied = selectedIds.length >= requiredInsertLineCount;
+                    const capacitySatisfied = selectedShortageQuantity <= 0;
+
+                    if (summaryContainer) {
+                        const totalCapacityElement = summaryContainer.querySelector('.js-selected-total-capacity');
+                        if (totalCapacityElement) {
+                            totalCapacityElement.textContent = selectedTotalCapacity;
+                        }
+                    }
+                    if (shortageHint) {
+                        shortageHint.innerHTML = selectedShortageQuantity > 0
+                            ? `<div style="color:#d9534f;font-weight:700;">推荐总产线仍不足，插单交货期需要延迟（数量缺口：${selectedShortageQuantity}）</div>`
+                            : '';
+                    }
+                    if (selectedLineHint) {
+                        selectedLineHint.innerHTML = selectionSatisfied
+                            ? ''
+                            : `<div style="color:#d9534f;">当前已选 ${selectedIds.length} 条，还需至少选择 ${requiredInsertLineCount} 条。</div>`;
+                    }
+                    return {
+                        selectedIds: selectedIds,
+                        selectedShortageQuantity: selectedShortageQuantity,
+                        selectionSatisfied: selectionSatisfied,
+                        capacitySatisfied: capacitySatisfied
+                    };
+                };
+
+                layero[0].querySelectorAll('.insert-line-checkbox').forEach(function (checkbox) {
+                    checkbox.addEventListener('change', recalculateSelectionSummary);
+                });
+                recalculateSelectionSummary();
+                layero[0].__recalculateSelectionSummary = recalculateSelectionSummary;
+            },
+            yes: function(index, layero) {
+                const recalculate = layero[0].__recalculateSelectionSummary;
+                const result = typeof recalculate === 'function' ? recalculate() : null;
+                if (!result || !result.selectionSatisfied) {
                     layer.msg(`至少需要选择 ${requiredInsertLineCount} 条产线后才能写入排产`);
                     return;
                 }
+                if (!result.capacitySatisfied) {
+                    layer.msg('当前勾选产线总产能不足，请调整勾选后再继续');
+                    return;
+                }
+                const selectedIds = result.selectedIds;
                 selectedInsertLineIdsForCommit = selectedIds;
                 insertSelectionConfirmedForPreview = true;
                 selectedInsertLineIdsForPreview = selectedIds.slice();
