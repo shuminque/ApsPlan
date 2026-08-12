@@ -58,9 +58,9 @@ spring:
     # ================== apsplan 排产计划库 ==================
     apsplan:
       driver-class-name: com.mysql.cj.jdbc.Driver
-      url: jdbc:mysql://localhost:3308/apsplan?serverTimezone=Asia/Shanghai&zeroDateTimeBehavior=convertToNull&connectTimeout=10000&socketTimeout=60000
-      username: root
-      password: 123456
+      url: jdbc:mysql://localhost:3306/apsplan?serverTimezone=Asia/Shanghai&zeroDateTimeBehavior=convertToNull&connectTimeout=10000&socketTimeout=60000
+      username: ${DB_USERNAME:root}
+      password: ${DB_PASSWORD:123456}
       type: com.alibaba.druid.pool.DruidDataSource
 
       initialSize: 5
