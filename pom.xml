@@ -9,8 +9,9 @@
     <artifactId>Aps_plan</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>aps_plan</name>
-    <description>work of school</description>
-
+    <description>
+        Open manufacturing Advanced Planning and Scheduling (APS) system for production scheduling, capacity planning and urgent-order insertion.
+    </description>
     <!-- 统一版本控制 -->
     <properties>
         <java.version>1.8</java.version>
