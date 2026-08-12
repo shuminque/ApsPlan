@@ -812,12 +812,9 @@ Different factories have different production processes, constraints, equipment 
 
 # 📜 License
 
-A license should be explicitly added before the project is distributed as an open-source project.
+This project is licensed under the **Apache License 2.0**.
 
-If the project and all included source code are owned by the repository maintainer and may legally be open-sourced, a permissive license such as **Apache License 2.0** can be considered.
-
-Do not apply an open-source license to code that you do not have the legal right to redistribute or relicense.
-
+See [LICENSE](LICENSE) for details.
 ---
 
 # ⭐ Support
